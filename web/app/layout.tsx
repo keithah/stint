@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Stint",
-  description: "Self-hosted WakaTime-compatible coding activity"
+  description: "Coding activity and AI telemetry for personal engineering"
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

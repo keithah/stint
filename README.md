@@ -1,6 +1,6 @@
 # Stint
 
-Stint is a self-hosted, WakaTime-compatible coding activity tracker. The current vertical includes the ingestion pipeline, GitHub/session auth, WakaTime-format API keys, OAuth app/server flows, rate limiting, Redis/Asynq stats jobs, durations, summaries, cached stats ranges, AI metrics, status-bar data, projects, machines, insights, goals, leaderboards, external durations, custom rules, data dumps, all-time totals, and a dark dashboard shell.
+Stint is a self-hosted coding activity and AI telemetry console for personal engineering. The current vertical includes the ingestion pipeline, GitHub/session auth, editor API keys, OAuth app/server flows, rate limiting, Redis/Asynq stats jobs, durations, summaries, cached stats ranges, AI metrics, status-bar data, projects, machines, insights, goals, leaderboards, external durations, custom rules, data dumps, all-time totals, and a dark dashboard shell.
 
 ## Local Development
 
@@ -31,12 +31,12 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000/login` for local `npm run dev`, or `http://localhost:3001/login` when using Docker Compose. Choose "Create local dev key", then copy the generated WakaTime config from Settings.
-New empty dashboards show a dismissible editor setup modal with the WakaTime help link, local API URL, a copyable `~/.wakatime.cfg` block, and the expected two-minute activity refresh window after opening an editor.
+Open `http://localhost:3000/login` for local `npm run dev`, or `http://localhost:3001/login` when using Docker Compose. Choose "Create local dev key", then copy the generated editor config from Settings.
+New empty dashboards show a dismissible editor setup modal with a local API URL, a copyable editor config block, and the expected two-minute activity refresh window after opening an editor.
 Settings surfaces the signed-in GitHub account identity and sign-out action alongside profile preferences, API keys, OAuth apps, share tokens, data exports, imports, custom rules, AI costs, and account deletion.
 Settings includes server diagnostics from `/api/v1/meta`, including the configured API URL, base URL, hostname, detected client IP, and build version.
-Settings also shows the `/api/v1/editors` metadata registry so plugin setup can confirm known WakaTime-compatible editors.
-Language charts use the `/api/v1/program_languages` catalog colors so WakaTime palette-compatible languages render consistently across summaries and timelines.
+Settings also shows the `/api/v1/editors` metadata registry so plugin setup can confirm known editor clients.
+Language charts use the `/api/v1/program_languages` catalog colors so languages render consistently across summaries and timelines.
 
 Regenerate the sqlc model package after changing migrations or query files:
 
@@ -44,7 +44,7 @@ Regenerate the sqlc model package after changing migrations or query files:
 scripts/generate-sqlc.sh
 ```
 
-## WakaTime Plugin Config
+## Editor Config
 
 Use this in `~/.wakatime.cfg`:
 
@@ -81,7 +81,7 @@ That exposes the API through `http://localhost:8081` and the web app through `ht
 
 ## OAuth Apps
 
-Settings can create OAuth clients for WakaTime-compatible third-party apps. The backend exposes:
+Settings can create OAuth clients for external apps. The backend exposes:
 
 - `GET /oauth/authorize`
 - `POST /oauth/authorize`
@@ -98,7 +98,7 @@ Current-user profile responses include email only for browser sessions, first-pa
 Granular summary scopes are enforced by requested data: `/durations?slice_by=language` accepts `read_summaries.languages`, project durations accept `read_summaries.projects`, and `/summaries` only includes granted project, language, category, dependency, editor, machine, or operating-system breakdowns while always returning the daily grand total.
 Account-management routes such as profile updates, API key management, OAuth app registration, share token management, custom rule mutations, and AI cost writes require local-account access: a browser session, first-party JWT, or full-scope local API key.
 
-The backend serves an OpenAPI 3.1 document at `/api/v1/docs` with per-method route metadata, auth requirements, required path parameters, query parameters for date ranges, filters, pagination, and share `callback`, OAuth form bodies, JSON request bodies for mutation endpoints, plus reusable schemas for the core heartbeat, stats, settings, goals, sharing, imports, and maintenance payloads. `GET /api/v1/meta` returns the detected client IP, runtime hostname, configured base URL, and `/api/v1` URL for WakaTime-compatible clients.
+The backend serves an OpenAPI 3.1 document at `/api/v1/docs` with per-method route metadata, auth requirements, required path parameters, query parameters for date ranges, filters, pagination, and share `callback`, OAuth form bodies, JSON request bodies for mutation endpoints, plus reusable schemas for the core heartbeat, stats, settings, goals, sharing, imports, and maintenance payloads. `GET /api/v1/meta` returns the detected client IP, runtime hostname, configured base URL, and `/api/v1` URL for connected clients.
 
 ## Rate Limits
 
@@ -180,7 +180,7 @@ Data dumps require `STORAGE_TYPE=local` and write completed JSON snapshots under
 Supported stats ranges are `last_7_days`, `last_30_days`, `last_6_months`, `last_year`, `all_time`, calendar years like `2026`, and calendar months like `2026-06`.
 Stats endpoints return cached data. A stale cache row is served with HTTP `202 Accepted` and `is_up_to_date:false` while a refresh job is queued; missing cache rows are computed inline for local-first usability.
 
-Generated API keys use `waka_<uuid>` so editor plugins and WakaTime CLI `api_urls` fanout accept them. Bare UUID keys from older Stint builds are still accepted by the API for self-hosted migrations, but should be replaced before using `api_urls`. API keys are accepted through WakaTime-compatible Basic auth, Bearer auth, and the `api_key` query parameter. `POST /api/v1/api_keys` accepts optional `scopes`; blank scopes create the default full local key, while explicit scopes are validated against the OAuth/WakaTime scope list.
+Generated API keys use `waka_<uuid>` so existing editor plugins and `api_urls` fanout accept them. Bare UUID keys from older Stint builds are still accepted by the API for self-hosted migrations, but should be replaced before using `api_urls`. API keys are accepted through Basic auth, Bearer auth, and the `api_key` query parameter. `POST /api/v1/api_keys` accepts optional `scopes`; blank scopes create the default full local key, while explicit scopes are validated against the supported OAuth/editor scope list.
 API key and share token creation require non-empty names; the API and database reject blank names.
 Heartbeat ingestion accepts WakaTime's current `dependencies` array shape and the older string form, normalizing both for local storage and stats.
 Heartbeat ingestion also treats WakaTime's `alternate_project` as a project fallback when `project` is absent.

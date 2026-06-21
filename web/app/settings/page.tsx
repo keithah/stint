@@ -260,7 +260,7 @@ function SettingsContent() {
           <KeyRound size={14} /> Stint config
         </div>
         <h1 className="text-4xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-2 text-sm text-zinc-400">Create API keys, copy Stint config, and smoke-test local ingestion.</p>
+        <p className="mt-2 text-sm text-zinc-400">Manage profile privacy, API keys, editor setup, imports, sharing, and AI cost settings.</p>
       </header>
 
       <section className="mb-5 rounded border border-line bg-panel p-5">
@@ -481,7 +481,7 @@ function SettingsContent() {
               <Copy size={15} /> Copy
             </button>
           </div>
-          <p className="mt-2 text-sm text-zinc-400">Use this form when sending the same Codex or editor heartbeat to multiple Stint-compatible services.</p>
+          <p className="mt-2 text-sm text-zinc-400">Use this form when sending the same Codex or editor activity to multiple services.</p>
           <pre className="mt-4 overflow-x-auto rounded border border-line bg-ink p-4 text-sm leading-6 text-zinc-200">{fanoutConfigBlock}</pre>
         </div>
       </section>
@@ -490,7 +490,7 @@ function SettingsContent() {
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <div>
             <h2 className="font-medium">Server diagnostics</h2>
-            <p className="mt-1 text-sm text-zinc-400">Confirm the API origin and runtime details reported to Stint-compatible clients.</p>
+            <p className="mt-1 text-sm text-zinc-400">Confirm the public API origin and runtime details reported to connected clients.</p>
           </div>
           <code className="rounded border border-line bg-ink px-3 py-2 text-xs text-zinc-500">GET /api/v1/meta</code>
         </div>
@@ -508,7 +508,7 @@ function SettingsContent() {
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <div>
             <h2 className="font-medium">Supported editors</h2>
-            <p className="mt-1 text-sm text-zinc-400">Known Stint-compatible editor plugins exposed by the local metadata endpoint.</p>
+            <p className="mt-1 text-sm text-zinc-400">Known editor clients exposed by the local metadata endpoint.</p>
           </div>
           <code className="rounded border border-line bg-ink px-3 py-2 text-xs text-zinc-500">GET /api/v1/editors</code>
         </div>
@@ -554,7 +554,7 @@ function SettingsContent() {
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <div>
             <h2 className="font-medium">OAuth applications</h2>
-            <p className="mt-1 text-sm text-zinc-400">Register Stint-compatible clients for authorization-code and refresh-token flows.</p>
+            <p className="mt-1 text-sm text-zinc-400">Register external clients for authorization-code and refresh-token flows.</p>
           </div>
           <button
             className="inline-flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-sm font-medium text-ink disabled:opacity-60"
@@ -704,7 +704,7 @@ function SettingsContent() {
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div>
             <h2 className="font-medium">Import activity dump</h2>
-            <p className="mt-1 text-sm text-zinc-400">Upload a raw heartbeat JSON or .json.gz dump; duplicates are skipped during import.</p>
+            <p className="mt-1 text-sm text-zinc-400">Upload a raw activity JSON or .json.gz dump; duplicates are skipped during import.</p>
           </div>
           <button className="inline-flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-sm font-medium text-ink disabled:opacity-60" onClick={() => importDump.mutate()} disabled={!importFile || importDump.isPending}>
             <Save size={16} /> Import

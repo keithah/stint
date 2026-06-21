@@ -12,7 +12,7 @@ assert.match(source, /listUserAgents/);
 assert.match(source, /last_seen_at/);
 assert.match(source, /Model coverage/);
 assert.match(source, /Provider coverage/);
-assert.match(source, /Stock WakaTime clients/);
+assert.match(source, /Existing editor clients/);
 assert.match(source, /Extended AI telemetry/);
 assert.match(source, /Create integration key/);
 assert.match(source, /setLatestKey/);

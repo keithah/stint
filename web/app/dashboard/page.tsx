@@ -147,7 +147,7 @@ function DashboardContent() {
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <h2 className="font-medium">Editor setup</h2>
-            <p className="mt-1 text-sm text-zinc-400">Generate a WakaTime-compatible key and point your plugin at this server.</p>
+            <p className="mt-1 text-sm text-zinc-400">Create a Stint key, connect your editor, and start collecting live activity.</p>
           </div>
           <Link className="inline-flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-sm font-medium text-ink" href="/settings">
             Open settings <ArrowRight size={16} />
@@ -169,7 +169,7 @@ function OnboardingModal({ configBlock, onDismiss }: { configBlock: string; onDi
 							<KeyRound size={20} />
 						</div>
 						<h2 className="text-2xl font-semibold tracking-tight">Connect your editor</h2>
-						<p className="mt-2 text-sm leading-6 text-zinc-400">Create an API key in Settings, paste it into this WakaTime config, then send a heartbeat from your editor.</p>
+						<p className="mt-2 text-sm leading-6 text-zinc-400">Create a Stint API key, save the editor config, then open a project. Activity appears as soon as your editor checks in.</p>
 					</div>
 					<button className="rounded border border-line p-2 text-zinc-400 hover:bg-white/5 hover:text-zinc-100" onClick={onDismiss} aria-label="Dismiss setup">
 						<X size={18} />
@@ -177,8 +177,8 @@ function OnboardingModal({ configBlock, onDismiss }: { configBlock: string; onDi
 				</div>
 				<div className="grid gap-5 p-5 lg:grid-cols-[0.85fr_1.15fr]">
 					<div className="space-y-3">
-						<a className="flex items-center justify-between gap-3 rounded border border-line bg-ink px-4 py-3 text-sm text-zinc-200 hover:border-accent/60" href="https://wakatime.com/help" target="_blank" rel="noreferrer">
-							<span>Install wakatime-cli</span>
+						<a className="flex items-center justify-between gap-3 rounded border border-line bg-ink px-4 py-3 text-sm text-zinc-200 hover:border-accent/60" href="/integrations">
+							<span>Choose an editor client</span>
 							<ArrowRight size={16} />
 						</a>
 						<Link className="flex items-center justify-between gap-3 rounded border border-line bg-ink px-4 py-3 text-sm text-zinc-200 hover:border-accent/60" href="/settings">
@@ -196,7 +196,7 @@ function OnboardingModal({ configBlock, onDismiss }: { configBlock: string; onDi
 					</div>
 					<div className="min-w-0">
 						<div className="mb-3 flex items-center justify-between gap-3">
-							<div className="text-sm font-medium text-zinc-200">~/.wakatime.cfg</div>
+							<div className="text-sm font-medium text-zinc-200">Editor config</div>
 							<button
 								className="inline-flex items-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
 								onClick={async () => {

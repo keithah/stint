@@ -58,7 +58,7 @@ function IntegrationsContent() {
           <div>
             <h1 className="text-4xl font-semibold tracking-tight text-white">Integrations</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">
-              Connect stock WakaTime clients today, then layer Stint metadata on top for model, provider, token, and cost-aware AI coding telemetry.
+              Connect your editor and agents to Stint, then enrich activity with model, provider, token, and cost-aware AI telemetry.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -121,7 +121,7 @@ function IntegrationsContent() {
             <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
               <div>
                 <p className="text-sm leading-6 text-zinc-400">
-                  Stock WakaTime heartbeats remain valid. Stint clients can add model-aware fields so dashboards can split GPT, Claude, Gemini, Codex, and future agent sessions without guessing from User-Agent strings.
+                  Existing editor check-ins remain valid. Stint-native clients can add model-aware fields so dashboards can split GPT, Claude, Gemini, Codex, and future agent sessions without guessing from User-Agent strings.
                 </p>
                 <div className="mt-4 grid gap-2 text-sm">
                   {["ai_model or model_name", "llm_model", "ai_provider or llm_provider", "ai_agent and ai_agent_version", "ai_input_tokens and ai_output_tokens", "metadata for client-specific context"].map((item) => (
@@ -187,9 +187,9 @@ function IntegrationsContent() {
             )}
           </Panel>
 
-          <Panel title="Stock WakaTime clients" icon={ShieldCheck}>
+          <Panel title="Existing editor clients" icon={ShieldCheck}>
             <p className="mb-4 text-sm leading-6 text-zinc-400">
-              Point existing plugins at Stint with the same WakaTime API shape. Basic auth, Bearer auth, and query-string API keys are accepted for compatibility.
+              Use the clients you already have by pointing them at Stint. Basic auth, Bearer auth, and query-string API keys are accepted for compatibility.
             </p>
             <CopyableCodeBlock
               id="stock-wakatime-config"
@@ -235,8 +235,8 @@ const clients = [
   {
     name: "Stint CLI",
     status: "planned",
-    description: "A WakaTime-compatible client with first-class model, provider, and token telemetry.",
-    bullets: ["WakaTime payload parity", "Extended AI metadata", "Local agent adapters"]
+    description: "A native client with first-class model, provider, and token telemetry.",
+    bullets: ["Existing payload parity", "Extended AI metadata", "Local agent adapters"]
   },
   {
     name: "WakaTime CLI",
@@ -253,19 +253,19 @@ const clients = [
   {
     name: "VS Code",
     status: "compatible",
-    description: "Use the WakaTime extension, then point ~/.wakatime.cfg at Stint.",
+    description: "Use the existing extension, then point the shared config file at Stint.",
     bullets: ["Extension marketplace", "Project/language charts", "Machine and OS breakdowns"]
   },
   {
     name: "JetBrains",
     status: "compatible",
-    description: "JetBrains IDEs work through the WakaTime plugin and the same config file.",
+    description: "JetBrains IDEs work through the existing plugin and the same config file.",
     bullets: ["Basic and Bearer auth", "Project/language charts", "Machine and OS breakdowns"]
   },
   {
     name: "Vim/Neovim",
     status: "compatible",
-    description: "Terminal editors can send stock WakaTime heartbeats to Stint.",
+    description: "Terminal editors can send standard activity check-ins to Stint.",
     bullets: ["Shared ~/.wakatime.cfg", "Shell CLI support", "Branch and language inference"]
   }
 ] as const;
@@ -275,13 +275,13 @@ function integrationConfigs(apiURL: string, apiKey: string) {
     {
       id: "vscode-config",
       name: "VS Code",
-      description: "Install the WakaTime extension, then use this shared config.",
+      description: "Install the editor extension, then use this shared config.",
       lines: ["[settings]", `api_url = ${apiURL}`, `api_key = ${apiKey}`, "heartbeat_rate_limit_seconds = 30"]
     },
     {
       id: "jetbrains-config",
       name: "JetBrains",
-      description: "Install the WakaTime plugin from JetBrains Marketplace and reuse the same API URL.",
+      description: "Install the activity plugin from JetBrains Marketplace and reuse the same API URL.",
       lines: ["[settings]", `api_url = ${apiURL}`, `api_key = ${apiKey}`, "hide_project_names = false"]
     },
     {
@@ -306,7 +306,7 @@ function integrationConfigs(apiURL: string, apiKey: string) {
 
 const roadmap = [
   { title: "Model-aware ingestion", state: "live", description: "Heartbeats can include ai_model, llm_model, ai_provider, token counts, and structured metadata." },
-  { title: "Native Stint CLI", state: "next", description: "A forkable client can enrich stock WakaTime payloads without breaking existing plugins." },
+  { title: "Native Stint CLI", state: "next", description: "A forkable client can enrich standard editor payloads without breaking existing plugins." },
   { title: "Integration catalog", state: "next", description: "Per-editor setup cards, copyable configs, and validation checks will move here from Settings." }
 ] as const;
 

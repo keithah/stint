@@ -12,7 +12,7 @@ export default function Home() {
             </span>
             <span>
               <span className="block text-lg font-semibold tracking-wide">Stint</span>
-              <span className="block text-xs uppercase tracking-[0.16em] text-zinc-500">WakaTime-compatible</span>
+              <span className="block text-xs uppercase tracking-[0.16em] text-zinc-500">Coding telemetry</span>
             </span>
           </Link>
           <nav className="hidden items-center gap-2 text-sm text-zinc-300 md:flex" aria-label="Public navigation">
@@ -37,7 +37,7 @@ export default function Home() {
             Stint
           </h1>
           <p className="mt-5 max-w-xl text-base leading-7 text-zinc-300">
-            A private WakaTime-compatible activity console for editor heartbeats, project rankings, AI coding metrics, and model-aware cost tracking.
+            A private activity console for editor sessions, project momentum, AI coding metrics, and model-aware cost tracking.
           </p>
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
             <Link className="inline-flex items-center justify-center gap-2 rounded-md bg-accent px-5 py-3 text-sm font-semibold text-ink hover:bg-sky-300" href="/auth/github/login">
@@ -48,9 +48,9 @@ export default function Home() {
             </Link>
           </div>
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
-            <LandingMetric label="API" value="/api/v1" />
-            <LandingMetric label="Auth" value="GitHub + API keys" />
+            <LandingMetric label="Focus" value="Projects + time" />
             <LandingMetric label="AI" value="Tokens + costs" />
+            <LandingMetric label="Sharing" value="Profiles + boards" />
           </div>
         </div>
 

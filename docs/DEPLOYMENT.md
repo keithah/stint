@@ -30,7 +30,7 @@ DEV_SEED_ENABLED=false
 HEARTBEAT_RETENTION_DAYS=365
 ```
 
-`BASE_URL` is the public API origin used for GitHub OAuth callbacks and WakaTime-compatible API URLs. `WEB_BASE_URL` is the browser app origin used after login and for web CORS.
+`BASE_URL` is the public API origin used for GitHub OAuth callbacks and editor client API URLs. `WEB_BASE_URL` is the browser app origin used after login and for web CORS.
 
 For public `BASE_URL` values, startup validates `SESSION_SECRET` and rejects missing, short, or placeholder values such as `change-me-in-production`. Generate at least 32 random bytes, for example:
 
