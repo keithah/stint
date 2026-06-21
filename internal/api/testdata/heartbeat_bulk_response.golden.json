@@ -1,0 +1,14 @@
+{
+  "responses": [
+    [
+      {
+        "data": {
+          "entity": "/tmp/stint/main.go",
+          "id": "heartbeat-id",
+          "time": 1720000000.5
+        }
+      },
+      201
+    ]
+  ]
+}

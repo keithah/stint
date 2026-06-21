@@ -1,0 +1,9 @@
+.git
+.env
+web/node_modules
+web/.next
+node_modules
+tmp
+.tmp
+coverage
+*.log

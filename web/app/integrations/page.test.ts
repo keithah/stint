@@ -1,0 +1,36 @@
+import { readFileSync } from "node:fs";
+import assert from "node:assert/strict";
+
+const source = readFileSync("app/integrations/page.tsx", "utf8");
+const shell = readFileSync("components/shell.tsx", "utf8");
+const apiSource = readFileSync("lib/api.ts", "utf8");
+const packageJSON = readFileSync("package.json", "utf8");
+
+assert.match(source, /Stint integrations/);
+assert.match(source, /Connection health/);
+assert.match(source, /listUserAgents/);
+assert.match(source, /last_seen_at/);
+assert.match(source, /Model coverage/);
+assert.match(source, /Provider coverage/);
+assert.match(source, /Stock WakaTime clients/);
+assert.match(source, /Extended AI telemetry/);
+assert.match(source, /Create integration key/);
+assert.match(source, /setLatestKey/);
+assert.match(source, /copyText/);
+assert.match(source, /Copy config/);
+assert.match(source, /VS Code/);
+assert.match(source, /JetBrains/);
+assert.match(source, /Vim\/Neovim/);
+assert.match(source, /Shell CLI/);
+assert.match(source, /ai_model/);
+assert.match(source, /llm_model/);
+assert.match(source, /ai_provider/);
+assert.match(source, /https:\/\/stint\.fyi\/api\/v1/);
+assert.match(apiSource, /export type UserAgent/);
+assert.match(apiSource, /ai_model/);
+assert.match(apiSource, /ai_provider/);
+assert.match(apiSource, /listUserAgents/);
+assert.match(apiSource, /\/api\/v1\/users\/current\/user_agents/);
+assert.match(shell, /\/integrations/);
+assert.match(shell, /Integrations/);
+assert.match(packageJSON, /app\/integrations\/page\.test\.ts/);

@@ -1,0 +1,144 @@
+name: stint
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: stint
+      POSTGRES_USER: stint
+      POSTGRES_PASSWORD: stint
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stint -d stint"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  api:
+    image: stint-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      PORT: ${PORT:-8080}
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3001}
+      DATABASE_URL: ${DATABASE_URL:-postgres://stint:stint@postgres:5432/stint?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-change-me}
+      STORAGE_TYPE: ${STORAGE_TYPE:-local}
+      STORAGE_PATH: ${STORAGE_PATH:-/data/dumps}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@example.com}
+      ENABLE_PUBLIC_LEADERBOARD: ${ENABLE_PUBLIC_LEADERBOARD:-true}
+      ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-true}
+      MAX_USERS: ${MAX_USERS:-0}
+      DEV_SEED_ENABLED: ${DEV_SEED_ENABLED:-true}
+      HEARTBEAT_RETENTION_DAYS: ${HEARTBEAT_RETENTION_DAYS:-365}
+    ports:
+      - "8080:8080"
+    volumes:
+      - dumpdata:/data/dumps
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker:
+    image: stint-worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["worker"]
+    environment:
+      PORT: ${PORT:-8080}
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3001}
+      DATABASE_URL: ${DATABASE_URL:-postgres://stint:stint@postgres:5432/stint?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-change-me}
+      STORAGE_TYPE: ${STORAGE_TYPE:-local}
+      STORAGE_PATH: ${STORAGE_PATH:-/data/dumps}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@example.com}
+      ENABLE_PUBLIC_LEADERBOARD: ${ENABLE_PUBLIC_LEADERBOARD:-true}
+      ENABLE_REGISTRATION: ${ENABLE_REGISTRATION:-true}
+      MAX_USERS: ${MAX_USERS:-0}
+      DEV_SEED_ENABLED: "false"
+      HEARTBEAT_RETENTION_DAYS: ${HEARTBEAT_RETENTION_DAYS:-365}
+    volumes:
+      - dumpdata:/data/dumps
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  web:
+    image: stint-web
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        API_BASE_URL: ${API_BASE_URL:-http://api:8080}
+    environment:
+      API_BASE_URL: ${API_BASE_URL:-http://api:8080}
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
+    ports:
+      - "3001:3000"
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    profiles:
+      - proxy
+    environment:
+      STINT_API_SITE: ${STINT_API_SITE:-:8081}
+      STINT_WEB_SITE: ${STINT_WEB_SITE:-:3002}
+    ports:
+      - "${STINT_API_PROXY_PORT:-8081}:8081"
+      - "${STINT_WEB_PROXY_PORT:-3002}:3002"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - api
+      - web
+
+volumes:
+  pgdata:
+  redisdata:
+  dumpdata:
+  caddydata:
+  caddyconfig:

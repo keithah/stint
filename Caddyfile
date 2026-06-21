@@ -1,0 +1,7 @@
+{$STINT_API_SITE} {
+	reverse_proxy api:8080
+}
+
+{$STINT_WEB_SITE} {
+	reverse_proxy web:3000
+}
