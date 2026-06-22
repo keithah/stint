@@ -115,6 +115,7 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 	server := &Server{Config: cfg, Store: store, OAuth: oauthConfig, Limiter: limiter, FallbackLimiter: apimw.NewMemoryRateLimiter(), StatusCache: statusCache, LeaderboardCache: leaderboardCache, Jobs: jobClient}
 
 	e.GET("/healthz", server.health)
+	e.GET("/healthz/ingestion", server.ingestionHealth)
 	e.GET("/auth/github/login", server.githubLogin)
 	e.GET("/auth/github/callback", server.githubCallback)
 	e.POST("/auth/logout", server.logout)
@@ -219,6 +220,30 @@ func (s *Server) health(c echo.Context) error {
 		return c.JSON(http.StatusServiceUnavailable, map[string]any{"ok": false, "errors": []string{err.Error()}})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"ok": true})
+}
+
+// ingestionHealth reports global heartbeat-ingestion freshness for external
+// monitors. It is intentionally separate from /healthz: a healthy server with
+// no recent heartbeats is still live, but a monitor can alert on a stalled
+// feed by watching seconds_since_last_heartbeat during expected active hours.
+func (s *Server) ingestionHealth(c echo.Context) error {
+	ctx, cancel := context.WithTimeout(c.Request().Context(), 2*time.Second)
+	defer cancel()
+	now := time.Now()
+	stats, err := s.Store.IngestionStats(ctx, float64(now.Unix()))
+	if err != nil {
+		return c.JSON(http.StatusServiceUnavailable, map[string]any{"ok": false, "errors": []string{err.Error()}})
+	}
+	resp := map[string]any{
+		"ok":              true,
+		"count_last_hour": stats.CountLastHour,
+		"count_last_24h":  stats.CountLast24h,
+	}
+	if stats.LastHeartbeatTime > 0 {
+		resp["last_heartbeat_at"] = int64(stats.LastHeartbeatTime)
+		resp["seconds_since_last_heartbeat"] = now.Unix() - int64(stats.LastHeartbeatTime)
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 func (s *Server) meta(c echo.Context) error {
@@ -408,6 +433,7 @@ func openAPIPaths() map[string]any {
 	add("/api/v1/meta", withResponse(get("Get server metadata", "meta", false), "MetaResponse"))
 	add("/api/v1/docs", get("Get OpenAPI document", "meta", false))
 	add("/healthz", get("Get service health", "meta", false))
+	add("/healthz/ingestion", get("Get heartbeat ingestion freshness", "meta", false))
 	add("/auth/github/login", openAPIOperation{Method: http.MethodGet, Summary: "Start GitHub login", Tag: "auth", Status: http.StatusFound})
 	add("/auth/github/callback", withQueryParams(openAPIOperation{Method: http.MethodGet, Summary: "Complete GitHub login", Tag: "auth", Status: http.StatusFound}, "code", "state"))
 	add("/auth/logout", withResponse(post("Clear browser session", "auth", http.StatusOK, false), "LogoutResponse"))

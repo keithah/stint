@@ -1289,6 +1289,34 @@ func (s *Store) HeartbeatsBetween(ctx context.Context, userID uuid.UUID, start, 
 	return heartbeats, rows.Err()
 }
 
+// IngestionStats reports global heartbeat-ingestion freshness so an external
+// monitor can detect a stalled feed (e.g. a dead fanout target or a
+// misconfigured editor). It returns coarse counts only, never file or project
+// detail. now is the reference epoch second.
+type IngestionStats struct {
+	LastHeartbeatTime float64
+	CountLastHour     int
+	CountLast24h      int
+}
+
+func (s *Store) IngestionStats(ctx context.Context, now float64) (IngestionStats, error) {
+	var stats IngestionStats
+	var last *float64
+	err := s.Pool.QueryRow(ctx, `
+		SELECT
+			max(time),
+			count(*) FILTER (WHERE time >= $1 - 3600),
+			count(*) FILTER (WHERE time >= $1 - 86400)
+		FROM heartbeats`, now).Scan(&last, &stats.CountLastHour, &stats.CountLast24h)
+	if err != nil {
+		return IngestionStats{}, err
+	}
+	if last != nil {
+		stats.LastHeartbeatTime = *last
+	}
+	return stats, nil
+}
+
 func (s *Store) ListUserAgents(ctx context.Context, userID uuid.UUID) ([]UserAgent, error) {
 	rows, err := s.Pool.Query(ctx, `
 		SELECT
