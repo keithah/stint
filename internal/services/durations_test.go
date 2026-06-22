@@ -55,6 +55,33 @@ func TestComputeDurationsDoesNotDoubleCountOverlappingProjects(t *testing.T) {
 	}
 }
 
+// TestComputeDurationsMatchesWakaTimeFAQExample encodes the worked example
+// from WakaTime's own FAQ: "2 mins of coding, a 13 min break, then 1 min of
+// coding" with a 15 min keystroke timeout totals 16 mins, because the 13 min
+// break is shorter than the timeout and is filled in. A subsequent gap longer
+// than the timeout is idle and adds nothing. This pins the WakaTime-parity
+// intent so the cap-and-credit behavior cannot regress back in.
+func TestComputeDurationsMatchesWakaTimeFAQExample(t *testing.T) {
+	const base = 1_700_000_000.0
+	heartbeats := []Heartbeat{
+		{Entity: "a.go", Project: "app", Time: base},            // start of 2 min burst
+		{Entity: "a.go", Project: "app", Time: base + 120},      // ...end of 2 min burst
+		{Entity: "a.go", Project: "app", Time: base + 900},      // 13 min break (< timeout, filled)
+		{Entity: "a.go", Project: "app", Time: base + 960},      // ...end of trailing 1 min burst
+		{Entity: "a.go", Project: "app", Time: base + 960 + 1200}, // 20 min idle (> timeout): new session
+	}
+
+	total := 0
+	for _, d := range ComputeDurations(heartbeats, 15*time.Minute, "project") {
+		total += d.DurationSeconds
+	}
+
+	// 120 (burst) + 780 (break) + 60 (burst) + 0 (idle > timeout) = 960s = 16 min.
+	if total != 960 {
+		t.Fatalf("expected WakaTime FAQ total of 960s (16 min), got %d", total)
+	}
+}
+
 func TestComputeDurationsEndsSessionAtLongGap(t *testing.T) {
 	heartbeats := []Heartbeat{
 		{Entity: "a.go", Project: "api", Time: 1_700_000_000},
