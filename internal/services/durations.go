@@ -21,10 +21,12 @@ func ComputeDurations(heartbeats []Heartbeat, timeout time.Duration, sliceBy str
 		seconds := 0
 		if i+1 < len(items) {
 			gap := time.Duration((items[i+1].Time - heartbeat.Time) * float64(time.Second))
-			if gap > timeout {
-				gap = timeout
-			}
-			if gap > 0 {
+			// A gap larger than the keystroke timeout is a session boundary:
+			// the time is idle and counts as zero, and the next heartbeat begins
+			// a new duration. This matches WakaTime, which never credits time
+			// beyond the timeout. (Previously this capped the gap at the timeout
+			// and still credited it, inflating totals by ~timeout per idle gap.)
+			if gap > 0 && gap <= timeout {
 				seconds = int(gap.Seconds())
 			}
 		}

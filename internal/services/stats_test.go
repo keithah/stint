@@ -17,20 +17,23 @@ func TestComputeLast7DaysStatsAggregatesTotalsProjectsAndLanguages(t *testing.T)
 
 	got := ComputeLast7DaysStats(heartbeats, now, 15*time.Minute)
 
-	if got.TotalSeconds != 1800 {
-		t.Fatalf("expected 1800 total seconds, got %d", got.TotalSeconds)
+	// Each project's two heartbeats are 10m/5m apart (within timeout); the
+	// ~24h gap between the two days exceeds the timeout, so no idle time is
+	// credited across it. stint=600s, web=300s.
+	if got.TotalSeconds != 900 {
+		t.Fatalf("expected 900 total seconds, got %d", got.TotalSeconds)
 	}
-	if got.DailyAverageSeconds != 257 {
-		t.Fatalf("expected rounded-down daily average of 257s, got %d", got.DailyAverageSeconds)
+	if got.DailyAverageSeconds != 128 {
+		t.Fatalf("expected rounded-down daily average of 128s, got %d", got.DailyAverageSeconds)
 	}
-	if got.BestDay.Date != "2026-06-17" || got.BestDay.TotalSeconds != 1200 {
-		t.Fatalf("expected 2026-06-17 as best day with 1200s, got %#v", got.BestDay)
+	if got.BestDay.Date != "2026-06-18" || got.BestDay.TotalSeconds != 600 {
+		t.Fatalf("expected 2026-06-18 as best day with 600s, got %#v", got.BestDay)
 	}
-	if got.Projects[0].Name != "web" || got.Projects[0].TotalSeconds != 1200 {
-		t.Fatalf("expected web project with 1200s first, got %#v", got.Projects)
+	if got.Projects[0].Name != "stint" || got.Projects[0].TotalSeconds != 600 {
+		t.Fatalf("expected stint project with 600s first, got %#v", got.Projects)
 	}
-	if got.Languages[0].Name != "TypeScript" || got.Languages[0].TotalSeconds != 1200 {
-		t.Fatalf("expected TypeScript language with 1200s first, got %#v", got.Languages)
+	if got.Languages[0].Name != "Go" || got.Languages[0].TotalSeconds != 600 {
+		t.Fatalf("expected Go language with 600s first, got %#v", got.Languages)
 	}
 	if len(got.Days) != 7 {
 		t.Fatalf("expected 7 daily buckets, got %d", len(got.Days))
@@ -283,14 +286,16 @@ func TestComputeStatusBarTodayReturnsCurrentProjectAndLanguage(t *testing.T) {
 
 	got := ComputeStatusBarToday(heartbeats, now, 15*time.Minute)
 
-	if got.TotalSeconds != 1800 {
-		t.Fatalf("expected 1800 total seconds, got %d", got.TotalSeconds)
+	// api spans 5m, web spans 10m; the ~55m gap between them exceeds the
+	// timeout and is not credited. api=300s, web=600s.
+	if got.TotalSeconds != 900 {
+		t.Fatalf("expected 900 total seconds, got %d", got.TotalSeconds)
 	}
-	if got.Project != "api" || got.ProjectSeconds != 1200 {
-		t.Fatalf("expected active project api with 1200 seconds, got %#v", got)
+	if got.Project != "web" || got.ProjectSeconds != 600 {
+		t.Fatalf("expected active project web with 600 seconds, got %#v", got)
 	}
-	if got.Language != "Go" || got.LanguageSeconds != 1200 {
-		t.Fatalf("expected active language Go with 1200 seconds, got %#v", got)
+	if got.Language != "TypeScript" || got.LanguageSeconds != 600 {
+		t.Fatalf("expected active language TypeScript with 600 seconds, got %#v", got)
 	}
 }
 
@@ -616,7 +621,7 @@ func TestComputeStatsForRangeIncludesProjectAIMetrics(t *testing.T) {
 	if len(got.ProjectAI) != 2 {
 		t.Fatalf("expected two project AI rows, got %#v", got.ProjectAI)
 	}
-	if got.ProjectAI[0].Name != "api" || got.ProjectAI[0].AISeconds != 1500 || got.ProjectAI[0].AILineChanges != 90 || got.ProjectAI[0].HumanLineChanges != 30 {
+	if got.ProjectAI[0].Name != "api" || got.ProjectAI[0].AISeconds != 600 || got.ProjectAI[0].AILineChanges != 90 || got.ProjectAI[0].HumanLineChanges != 30 {
 		t.Fatalf("expected api project AI row first with duration and line totals, got %#v", got.ProjectAI)
 	}
 	if got.ProjectAI[0].AIInputTokens != 1_000_000 || got.ProjectAI[0].AIOutputTokens != 250_000 || got.ProjectAI[0].AIPromptLength != 700 {

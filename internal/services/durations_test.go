@@ -22,8 +22,8 @@ func TestComputeDurationsMergesHeartbeatsWithinTimeoutByProject(t *testing.T) {
 	if got[0].Name != "other" || got[0].DurationSeconds != 200 {
 		t.Fatalf("expected first other span to be 200s, got %#v", got[0])
 	}
-	if got[1].Name != "other" || got[1].DurationSeconds != 900 {
-		t.Fatalf("expected other span before timeout gap to be capped at 900s, got %#v", got[1])
+	if got[1].Name != "other" || got[1].DurationSeconds != 0 {
+		t.Fatalf("expected other span before the timeout gap to end the session at 0s, got %#v", got[1])
 	}
 	if got[2].Name != "stint" || got[2].DurationSeconds != 100 {
 		t.Fatalf("expected first stint span to be 100s, got %#v", got[2])
@@ -55,7 +55,7 @@ func TestComputeDurationsDoesNotDoubleCountOverlappingProjects(t *testing.T) {
 	}
 }
 
-func TestComputeDurationsCapsLongGapAtTimeout(t *testing.T) {
+func TestComputeDurationsEndsSessionAtLongGap(t *testing.T) {
 	heartbeats := []Heartbeat{
 		{Entity: "a.go", Project: "api", Time: 1_700_000_000},
 		{Entity: "b.go", Project: "api", Time: 1_700_002_000},
@@ -63,11 +63,14 @@ func TestComputeDurationsCapsLongGapAtTimeout(t *testing.T) {
 
 	got := ComputeDurations(heartbeats, 15*time.Minute, "project")
 
+	// The gap (2000s) exceeds the 15m timeout, so it is idle time: the first
+	// heartbeat ends a zero-length session and the second begins a new one.
+	// WakaTime never credits time across a gap larger than the timeout.
 	if len(got) != 2 {
 		t.Fatalf("expected 2 duration rows, got %d: %#v", len(got), got)
 	}
-	if got[0].DurationSeconds != 900 {
-		t.Fatalf("expected long gap to be capped at 900s, got %#v", got[0])
+	if got[0].DurationSeconds != 0 {
+		t.Fatalf("expected heartbeat before a long gap to contribute 0s, got %#v", got[0])
 	}
 	if got[1].DurationSeconds != 0 {
 		t.Fatalf("expected final heartbeat to contribute 0s, got %#v", got[1])

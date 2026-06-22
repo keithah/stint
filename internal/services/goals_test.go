@@ -233,10 +233,12 @@ func TestComputeAllTimeStatsIncludesEveryHeartbeat(t *testing.T) {
 
 	got := ComputeAllTimeStats(heartbeats, 15*time.Minute)
 
-	if got.TotalSeconds != 2100 {
-		t.Fatalf("expected 2100 all-time seconds, got %d", got.TotalSeconds)
+	// api and web each span 10m within timeout; the ~2y gap between them is
+	// idle and not credited. api=600s, web=600s, tie broken by name.
+	if got.TotalSeconds != 1200 {
+		t.Fatalf("expected 1200 all-time seconds, got %d", got.TotalSeconds)
 	}
-	if got.Projects[0].Name != "api" || got.Projects[0].TotalSeconds != 1500 {
+	if got.Projects[0].Name != "api" || got.Projects[0].TotalSeconds != 600 {
 		t.Fatalf("expected api project first by name tie-break, got %#v", got.Projects)
 	}
 	if got.Range != "all_time" {
