@@ -5,8 +5,9 @@ import { Copy, Download, ExternalLink, KeyRound, LogOut, Plus, RotateCcw, Save, 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { Providers } from "@/components/providers";
 import { Shell } from "@/components/shell";
-import { abortCustomRulesProgress, createDataDump, createKey, createOAuthApp, createShareToken, customRulesProgress, dataDumpDownloadURL, deleteCurrentUser, deleteCustomRule, deleteOAuthApp, deleteShareToken, importWakaTimeDump, listAICosts, listCustomRules, listDataDumps, listEditors, listKeys, listOAuthApps, listShareTokens, logout, me, replaceAICosts, replaceCustomRules, revokeKey, serverMeta, updateUser, wakatimeAPIURL, type ProfileLayout, type PublicProfileFields, type PublicProjectVisibility } from "@/lib/api";
+import { abortCustomRulesProgress, createDataDump, createKey, createOAuthApp, createShareToken, customRulesProgress, dataDumpDownloadURL, deleteCurrentUser, deleteCustomPricing, deleteCustomRule, deleteOAuthApp, deleteShareToken, importWakaTimeDump, listAICosts, listCustomPricing, listCustomRules, listDataDumps, listEditors, listKeys, listOAuthApps, listShareTokens, logout, me, replaceAICosts, replaceCustomRules, revokeKey, serverMeta, updateUser, upsertCustomPricing, wakatimeAPIURL, type ProfileLayout, type PublicProfileFields, type PublicProjectVisibility } from "@/lib/api";
 import { boundedPercent } from "@/lib/chart-percent";
+import { customPricingError } from "@/app/settings/custom-pricing-validation";
 import { dataDumpExpiryText, dataDumpIsDownloadable, hasPendingDumps } from "@/lib/data-dumps";
 
 const ruleFields = ["entity", "type", "category", "project", "branch", "language", "editor", "operating_system"];
@@ -70,6 +71,11 @@ function SettingsContent() {
   const [costAgent, setCostAgent] = useState("Codex");
   const [inputCost, setInputCost] = useState(3);
   const [outputCost, setOutputCost] = useState(12);
+  const [priceModel, setPriceModel] = useState("opencode/big-pickle");
+  const [priceInput, setPriceInput] = useState(0);
+  const [priceOutput, setPriceOutput] = useState(0);
+  const [priceCacheWrite, setPriceCacheWrite] = useState(0);
+  const [priceCacheRead, setPriceCacheRead] = useState(0);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [oauthName, setOAuthName] = useState("Local OAuth client");
   const [oauthRedirect, setOAuthRedirect] = useState("http://localhost:3000/oauth/callback");
@@ -90,6 +96,7 @@ function SettingsContent() {
   const shareTokens = useQuery({ queryKey: ["share-tokens"], queryFn: listShareTokens, retry: false });
   const aiCosts = useQuery({ queryKey: ["ai-costs"], queryFn: listAICosts, retry: false });
   const customRules = useQuery({ queryKey: ["custom-rules"], queryFn: listCustomRules, retry: false });
+  const customPricing = useQuery({ queryKey: ["custom-pricing"], queryFn: listCustomPricing, retry: false });
   const settingsDumps = useQuery({
     queryKey: ["settings-data-dumps"],
     queryFn: listDataDumps,
@@ -141,6 +148,14 @@ function SettingsContent() {
   const canCreateShareToken = shareName.trim().length > 0;
   const canSaveProfile = profile.timezone.trim().length > 0 && Number.isFinite(profile.timeout_minutes) && profile.timeout_minutes >= 0 && profile.timeout_minutes <= 120 && Number.isFinite(profile.heartbeat_retention_days) && profile.heartbeat_retention_days >= 0 && (!profile.country?.trim() || /^[A-Za-z]{2}$/.test(profile.country.trim())) && (!profile.public_username?.trim() || /^[A-Za-z0-9][A-Za-z0-9_-]{1,37}[A-Za-z0-9]$/.test(profile.public_username.trim().replace(/^@/, "")));
   const canSaveAICosts = costAgent.trim().length > 0 && Number.isFinite(inputCost) && Number.isFinite(outputCost) && inputCost >= 0 && outputCost >= 0;
+  const customPricingValidationError = customPricingError({
+    model: priceModel,
+    inputPerMillion: priceInput,
+    outputPerMillion: priceOutput,
+    cacheWritePerMillion: priceCacheWrite,
+    cacheReadPerMillion: priceCacheRead
+  });
+  const canSaveCustomPricing = customPricingValidationError === null;
   const canSaveCustomRule = ruleSourceValue.trim().length > 0 && Number.isFinite(rulePriority) && rulePriority >= 1 && (ruleAction === "delete" || ruleDestinationValue.trim().length > 0);
   const create = useMutation({
     mutationFn: (keyName: string) => createKey(keyName, keyScopes.split(/[,\s]+/).map((value) => value.trim()).filter(Boolean)),
@@ -195,6 +210,21 @@ function SettingsContent() {
   const saveCosts = useMutation({
     mutationFn: () => replaceAICosts([{ agent: costAgent.trim(), input_cost_per_million_cents: inputCost, output_cost_per_million_cents: outputCost }]),
     onSuccess: () => client.invalidateQueries({ queryKey: ["ai-costs"] })
+  });
+  const savePricing = useMutation({
+    mutationFn: () =>
+      upsertCustomPricing({
+        model: priceModel.trim(),
+        input_per_million_usd: priceInput,
+        output_per_million_usd: priceOutput,
+        cache_write_per_million_usd: priceCacheWrite,
+        cache_read_per_million_usd: priceCacheRead
+      }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["custom-pricing"] })
+  });
+  const removePricing = useMutation({
+    mutationFn: deleteCustomPricing,
+    onSuccess: () => client.invalidateQueries({ queryKey: ["custom-pricing"] })
   });
   const deleteAccount = useMutation({
     mutationFn: () => deleteCurrentUser(deleteConfirmation),
@@ -842,6 +872,73 @@ function SettingsContent() {
           {aiCosts.data?.data.length === 0 ? <div className="p-3 text-sm text-zinc-500">Default rates are active.</div> : null}
         </div>
         {saveCosts.error ? <p className="mt-3 text-sm text-red-300">{saveCosts.error.message}</p> : null}
+      </section>
+
+      <section className="mt-5 rounded border border-line bg-panel p-5">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+          <div>
+            <h2 className="font-medium">Custom AI pricing</h2>
+            <p className="mt-1 text-sm text-zinc-400">Register per-token prices for private or proxied models (e.g. opencode/big-pickle) the bundled price table does not cover. Prices are USD per million tokens and override the base table when summarizing usage.</p>
+          </div>
+          <button className="inline-flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-sm font-medium text-ink disabled:opacity-60" onClick={() => savePricing.mutate()} disabled={savePricing.isPending || !canSaveCustomPricing}>
+            <Save size={16} /> Save price
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-5">
+          <label className="block md:col-span-1">
+            <span className="text-sm text-zinc-400">Model id</span>
+            <input className="mt-2 w-full rounded border border-line bg-ink px-3 py-2 text-sm outline-none focus:border-accent" value={priceModel} onChange={(event) => setPriceModel(event.target.value)} />
+          </label>
+          <label className="block">
+            <span className="text-sm text-zinc-400">Input $ / 1M</span>
+            <input className="mt-2 w-full rounded border border-line bg-ink px-3 py-2 text-sm outline-none focus:border-accent" type="number" min={0} step="any" value={priceInput} onChange={(event) => setPriceInput(Math.max(0, Number(event.target.value)))} />
+          </label>
+          <label className="block">
+            <span className="text-sm text-zinc-400">Output $ / 1M</span>
+            <input className="mt-2 w-full rounded border border-line bg-ink px-3 py-2 text-sm outline-none focus:border-accent" type="number" min={0} step="any" value={priceOutput} onChange={(event) => setPriceOutput(Math.max(0, Number(event.target.value)))} />
+          </label>
+          <label className="block">
+            <span className="text-sm text-zinc-400">Cache write $ / 1M</span>
+            <input className="mt-2 w-full rounded border border-line bg-ink px-3 py-2 text-sm outline-none focus:border-accent" type="number" min={0} step="any" value={priceCacheWrite} onChange={(event) => setPriceCacheWrite(Math.max(0, Number(event.target.value)))} />
+          </label>
+          <label className="block">
+            <span className="text-sm text-zinc-400">Cache read $ / 1M</span>
+            <input className="mt-2 w-full rounded border border-line bg-ink px-3 py-2 text-sm outline-none focus:border-accent" type="number" min={0} step="any" value={priceCacheRead} onChange={(event) => setPriceCacheRead(Math.max(0, Number(event.target.value)))} />
+          </label>
+        </div>
+        <div className="mt-4 divide-y divide-line rounded border border-line">
+          {(customPricing.data?.data ?? []).map((price) => (
+            <div key={price.model} className="grid items-center gap-2 px-3 py-3 text-sm sm:grid-cols-[1fr_auto]">
+              <div className="grid gap-1">
+                <span className="font-medium text-zinc-100">{price.model}</span>
+                <span className="text-zinc-500">In ${price.input_per_million_usd}/1M · Out ${price.output_per_million_usd}/1M · Cache write ${price.cache_write_per_million_usd}/1M · Cache read ${price.cache_read_per_million_usd}/1M</span>
+              </div>
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:border-red-400 hover:text-red-300 disabled:opacity-60"
+                onClick={() => {
+                  setPriceModel(price.model);
+                  setPriceInput(price.input_per_million_usd);
+                  setPriceOutput(price.output_per_million_usd);
+                  setPriceCacheWrite(price.cache_write_per_million_usd);
+                  setPriceCacheRead(price.cache_read_per_million_usd);
+                }}
+              >
+                Edit
+              </button>
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:border-red-400 hover:text-red-300 disabled:opacity-60 sm:col-start-2"
+                onClick={() => removePricing.mutate(price.model)}
+                disabled={removePricing.isPending}
+              >
+                <Trash2 size={16} /> Remove
+              </button>
+            </div>
+          ))}
+          {customPricing.data?.data.length === 0 ? <div className="p-3 text-sm text-zinc-500">No custom prices yet. Add one above for a model your provider does not price.</div> : null}
+        </div>
+        {customPricingValidationError ? <p className="mt-3 text-sm text-amber-300">{customPricingValidationError}</p> : null}
+        {savePricing.error ? <p className="mt-3 text-sm text-red-300">{savePricing.error.message}</p> : null}
+        {removePricing.error ? <p className="mt-3 text-sm text-red-300">{removePricing.error.message}</p> : null}
       </section>
 
       <section className="mt-5 rounded border border-line bg-panel p-5">

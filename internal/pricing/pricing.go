@@ -87,6 +87,17 @@ func (e *Engine) SetOverrides(overrides map[string]ModelPrice) {
 	}
 }
 
+// WithOverrides returns a shallow copy of the engine that shares the base price
+// table and aliases but carries its own overrides map. Use this for per-request
+// custom pricing so the shared engine is never mutated across requests.
+func (e *Engine) WithOverrides(overrides map[string]ModelPrice) *Engine {
+	clone := &Engine{table: e.table, aliases: e.aliases, overrides: map[string]ModelPrice{}}
+	for model, price := range overrides {
+		clone.overrides[Normalize(model)] = price
+	}
+	return clone
+}
+
 var dateSuffix = regexp.MustCompile(`-20\d{6}$`)
 
 // Normalize maps a raw provider/proxy model string to a canonical id used for

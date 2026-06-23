@@ -104,10 +104,23 @@ func DefaultRegistry() Registry {
 		DefaultPaths: []string{"~/.local/share/zed/threads"},
 		Format:       "zed-sqlite",
 	}, AdapterFunc(scanZed))
+	r.register(AgentSpec{
+		ID:           "cursor",
+		DefaultPaths: []string{"~/.cursor", "~/Library/Application Support/Cursor/User/globalStorage", "~/.config/Cursor/User/globalStorage"},
+		Format:       "cursor",
+	}, AdapterFunc(scanCursor))
+	r.register(AgentSpec{
+		ID:           "copilot",
+		DefaultPaths: []string{"~/.copilot/otel"},
+		Format:       "copilot-otel",
+	}, AdapterFunc(scanCopilot))
+	r.register(AgentSpec{
+		ID:           "openclaw",
+		DefaultPaths: []string{"~/.openclaw/agents"},
+		Format:       "openclaw-jsonl",
+	}, AdapterFunc(scanOpenClaw))
 
 	stubs := []AgentSpec{
-		{ID: "cursor", DefaultPaths: []string{"~/.cursor"}, Format: "cursor"},
-		{ID: "copilot", DefaultPaths: []string{"~/.copilot/otel"}, Format: "copilot"},
 		{ID: "amp", DefaultPaths: []string{"~/.amp"}, Format: "amp"},
 		{ID: "qwen", DefaultPaths: []string{"~/.qwen"}, Format: "qwen"},
 		{ID: "kimi", DefaultPaths: []string{"~/.kimi"}, Format: "kimi"},
@@ -117,7 +130,6 @@ func DefaultRegistry() Registry {
 		{ID: "cline", DefaultPaths: []string{"~/.cline"}, Format: "cline"},
 		{ID: "hermes", DefaultPaths: []string{"~/.hermes"}, Format: "hermes"},
 		{ID: "pi-agent", DefaultPaths: []string{"~/.pi-agent"}, Format: "pi-agent"},
-		{ID: "openclaw", DefaultPaths: []string{"~/.openclaw"}, Format: "openclaw"},
 		{ID: "factory-droid", DefaultPaths: []string{"~/.factory"}, Format: "factory-droid"},
 		{ID: "crush", DefaultPaths: []string{"~/.crush"}, Format: "crush"},
 		{ID: "octofriend", DefaultPaths: []string{"~/.octofriend"}, Format: "octofriend"},

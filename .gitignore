@@ -13,6 +13,6 @@ tmp/
 .tmp/
 *.log
 
-# AI usage collector
-collect
+# AI usage collector binary
 /stint-collect
+/collect

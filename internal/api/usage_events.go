@@ -97,8 +97,32 @@ func (s *Server) usageEventsSummary(c echo.Context) error {
 		events = filtered
 	}
 
+	// Apply the user's custom pricing as per-request overrides. s.Pricing is
+	// shared across requests, so never mutate it: WithOverrides returns a shallow
+	// copy that shares the base table but carries its own overrides map.
+	engine := s.Pricing
+	if engine != nil {
+		custom, err := s.Store.ListCustomPricing(c.Request().Context(), user.ID)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
+		}
+		if len(custom) > 0 {
+			overrides := make(map[string]pricing.ModelPrice, len(custom))
+			for _, p := range custom {
+				overrides[p.Model] = pricing.ModelPrice{
+					InputPerToken:         p.InputPerMillionUSD / 1e6,
+					OutputPerToken:        p.OutputPerMillionUSD / 1e6,
+					CacheCreate5mPerToken: p.CacheWritePerMillionUSD / 1e6,
+					CacheCreate1hPerToken: p.CacheWritePerMillionUSD / 1e6,
+					CacheReadPerToken:     p.CacheReadPerMillionUSD / 1e6,
+				}
+			}
+			engine = engine.WithOverrides(overrides)
+		}
+	}
+
 	location := userLocation(user)
-	summary := summarizeUsageEvents(events, s.Pricing, mode, location)
+	summary := summarizeUsageEvents(events, engine, mode, location)
 	summary["range"] = rangeLabel
 	summary["cost_mode"] = costMode
 

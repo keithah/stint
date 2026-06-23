@@ -8,7 +8,7 @@ import { SliceDonut } from "@/components/dashboard-charts";
 import { Providers } from "@/components/providers";
 import { Shell } from "@/components/shell";
 import { StatCard } from "@/components/stat-card";
-import { me, usageSummary, type SliceTotal, type StatsRange, type UsageCostMode, type UsageSlice, type UsageSummary } from "@/lib/api";
+import { me, usageBlocks, usageSummary, type SliceTotal, type StatsRange, type UsageCostMode, type UsageCurrentBlock, type UsageSlice, type UsageSummary } from "@/lib/api";
 import { activityHeatmapClass } from "@/lib/activity-heatmap";
 import { compactNumber } from "@/lib/number-format";
 import {
@@ -63,8 +63,15 @@ function AICostsContent() {
     retry: false,
     refetchInterval: 120000
   });
+  const blocks = useQuery({
+    queryKey: ["usage-blocks", costMode],
+    queryFn: () => usageBlocks("last_30_days", costMode),
+    retry: false,
+    refetchInterval: 60000
+  });
 
   const data = summary.data?.data;
+  const currentBlock = blocks.data?.data.current ?? null;
   const activeRange = rangeOptions.find((item) => item.value === range) ?? rangeOptions[0];
   const liveToday = latestDay(live.data?.data.by_day ?? []);
 
@@ -121,12 +128,12 @@ function AICostsContent() {
         </div>
       ) : null}
 
-      {data && !isEmptySummary(data) ? <SummaryBody data={data} activeRange={activeRange} /> : null}
+      {data && !isEmptySummary(data) ? <SummaryBody data={data} activeRange={activeRange} currentBlock={currentBlock} /> : null}
     </div>
   );
 }
 
-function SummaryBody({ data, activeRange }: { data: UsageSummary; activeRange: { value: StatsRange; label: string } }) {
+function SummaryBody({ data, activeRange, currentBlock }: { data: UsageSummary; activeRange: { value: StatsRange; label: string }; currentBlock: UsageCurrentBlock | null }) {
   const total = data.total;
   const eff = useMemo(() => cacheEfficiency(total), [total]);
   const savings = useMemo(() => cacheSavingsEstimate(total), [total]);
@@ -218,9 +225,22 @@ function SummaryBody({ data, activeRange }: { data: UsageSummary; activeRange: {
           ) : (
             <p className="text-xs text-zinc-500">Not enough days to compute a burn-rate baseline yet.</p>
           )}
-          <p className="mt-2 text-xs leading-5 text-zinc-600">
-            5-hour block tracking needs per-event timestamps (not in summary) — labeled placeholder until raw export is wired in.
-          </p>
+        </InsightCard>
+
+        <InsightCard icon={<Flame size={16} />} title="Current 5-hour block">
+          {currentBlock && currentBlock.is_active ? (
+            <>
+              <Metric label="Spent this block" value={formatUSD(currentBlock.cost_usd)} />
+              <Metric label="Burn rate" value={`${formatUSD(currentBlock.burn_rate_cost_per_hour)}/hr · ${Math.round(currentBlock.burn_rate_tokens_per_min).toLocaleString()} tok/min`} />
+              <Metric label="Projected (block end)" value={formatUSD(currentBlock.projected_block_cost_usd)} />
+              <Metric label="Projected today" value={formatUSD(currentBlock.projected_day_cost_usd)} />
+              <p className="mt-2 text-xs leading-5 text-zinc-600">
+                Block ends {new Date(currentBlock.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {currentBlock.elapsed_minutes} min elapsed
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-zinc-500">No active 5-hour block — start coding to begin one.</p>
+          )}
         </InsightCard>
       </section>
 

@@ -543,6 +543,16 @@ export type AICostSetting = {
   modified_at?: string;
 };
 
+export type CustomPricing = {
+  model: string;
+  input_per_million_usd: number;
+  output_per_million_usd: number;
+  cache_write_per_million_usd: number;
+  cache_read_per_million_usd: number;
+  created_at?: string;
+  modified_at?: string;
+};
+
 export type UsageCostMode = "auto" | "calculate" | "display";
 
 export type UsageTotal = {
@@ -580,6 +590,35 @@ export type UsageSummary = {
   by_project: UsageSlice[];
   by_day: UsageDay[];
   unpriced_models: string[];
+};
+
+export type UsageBlock = {
+  start: string;
+  end: string;
+  is_active: boolean;
+  cost_usd: number;
+  tokens: number;
+  event_count: number;
+};
+
+export type UsageCurrentBlock = {
+  start: string;
+  end: string;
+  is_active: boolean;
+  elapsed_minutes: number;
+  cost_usd: number;
+  tokens: number;
+  burn_rate_cost_per_hour: number;
+  burn_rate_tokens_per_min: number;
+  projected_block_cost_usd: number;
+  projected_day_cost_usd: number;
+  projected_month_cost_usd: number;
+};
+
+export type UsageBlocks = {
+  cost_mode: UsageCostMode;
+  blocks: UsageBlock[];
+  current: UsageCurrentBlock | null;
 };
 
 export type UsageEvent = {
@@ -1020,6 +1059,11 @@ export async function usageSummary(range: StatsRange, costMode: UsageCostMode = 
   return request<{ data: UsageSummary }>(`/api/v1/users/current/usage_events/summary?${query.toString()}`);
 }
 
+export async function usageBlocks(range: StatsRange, costMode: UsageCostMode = "auto") {
+  const query = new URLSearchParams({ range, cost_mode: costMode });
+  return request<{ data: UsageBlocks }>(`/api/v1/users/current/usage_events/blocks?${query.toString()}`);
+}
+
 export async function usageExport(start: string, end: string) {
   const query = new URLSearchParams({ start, end });
   return request<{ data: UsageEvent[] }>(`/api/v1/users/current/usage_events?${query.toString()}`);
@@ -1034,4 +1078,22 @@ export async function replaceAICosts(settings: AICostSetting[]) {
     method: "PUT",
     body: JSON.stringify(settings)
   });
+}
+
+export async function listCustomPricing() {
+  return request<{ data: CustomPricing[] }>("/api/v1/users/current/custom_pricing");
+}
+
+export async function upsertCustomPricing(pricing: CustomPricing) {
+  return request<{ data: CustomPricing[] }>("/api/v1/users/current/custom_pricing", {
+    method: "PUT",
+    body: JSON.stringify(pricing)
+  });
+}
+
+export async function deleteCustomPricing(model: string) {
+  return request<void>(
+    `/api/v1/users/current/custom_pricing/${encodeURIComponent(model)}`,
+    { method: "DELETE" }
+  );
 }

@@ -76,18 +76,44 @@ func (s *Store) InsertUsageEvents(ctx context.Context, userID uuid.UUID, events 
 				r.ts, e.TZOffsetMinutes,
 			)
 		}
+		// Upsert: a re-ingested event with corrected token/cost counts (e.g. the
+		// Claude streaming-output reconciliation) must update the stored row, not
+		// be dropped. `RETURNING (xmax = 0)` is true for freshly-inserted rows and
+		// false for updated ones, so we still report inserted vs. duplicate.
 		query := `INSERT INTO usage_events (
 			user_id, event_id, message_id, request_id, agent, session_id, project, model,
 			input_tokens, output_tokens, cache_create_5m_tokens, cache_create_1h_tokens,
 			cache_read_tokens, reasoning_tokens, cost_usd_provided, billing_type, ts, tz_offset_minutes
-		) VALUES ` + strings.Join(placeholders, ",") + ` ON CONFLICT (user_id, event_id) DO NOTHING`
-		tag, err := s.Pool.Exec(ctx, query, args...)
+		) VALUES ` + strings.Join(placeholders, ",") + `
+		ON CONFLICT (user_id, event_id) DO UPDATE SET
+			message_id = EXCLUDED.message_id, request_id = EXCLUDED.request_id,
+			agent = EXCLUDED.agent, session_id = EXCLUDED.session_id, project = EXCLUDED.project,
+			model = EXCLUDED.model, input_tokens = EXCLUDED.input_tokens,
+			output_tokens = EXCLUDED.output_tokens, cache_create_5m_tokens = EXCLUDED.cache_create_5m_tokens,
+			cache_create_1h_tokens = EXCLUDED.cache_create_1h_tokens, cache_read_tokens = EXCLUDED.cache_read_tokens,
+			reasoning_tokens = EXCLUDED.reasoning_tokens, cost_usd_provided = EXCLUDED.cost_usd_provided,
+			billing_type = EXCLUDED.billing_type, ts = EXCLUDED.ts, tz_offset_minutes = EXCLUDED.tz_offset_minutes
+		RETURNING (xmax = 0)`
+		rows, err := s.Pool.Query(ctx, query, args...)
 		if err != nil {
 			return result, err
 		}
-		inserted := int(tag.RowsAffected())
-		result.Inserted += inserted
-		result.Duplicates += len(batch) - inserted
+		for rows.Next() {
+			var insertedRow bool
+			if err := rows.Scan(&insertedRow); err != nil {
+				rows.Close()
+				return result, err
+			}
+			if insertedRow {
+				result.Inserted++
+			} else {
+				result.Duplicates++
+			}
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return result, err
+		}
 	}
 	return result, nil
 }

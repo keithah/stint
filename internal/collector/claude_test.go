@@ -143,14 +143,15 @@ func TestRegistryStubs(t *testing.T) {
 	reg := DefaultRegistry()
 	// Implemented adapters: present in the registry. We do NOT call Scan here
 	// because their default paths point at real ~/ data dirs.
-	for _, id := range []string{"claude", "codex", "gemini", "opencode", "goose", "zed"} {
+	for _, id := range []string{"claude", "codex", "gemini", "opencode", "goose", "zed",
+		"cursor", "copilot", "openclaw"} {
 		if _, ok := reg[id]; !ok {
 			t.Errorf("implemented agent %q not registered", id)
 		}
 	}
 	// Remaining agents are stubs: registered, emit nothing, note "not implemented".
-	for _, id := range []string{"cursor", "copilot", "amp", "qwen", "kimi", "kiro",
-		"kilo", "roo", "cline", "hermes", "pi-agent", "openclaw", "factory-droid",
+	for _, id := range []string{"amp", "qwen", "kimi", "kiro",
+		"kilo", "roo", "cline", "hermes", "pi-agent", "factory-droid",
 		"crush", "octofriend"} {
 		e, ok := reg[id]
 		if !ok {
