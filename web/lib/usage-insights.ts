@@ -1,4 +1,4 @@
-import type { UsageDay, UsageSlice, UsageTotal } from "@/lib/api";
+import type { UsageDay, UsageSlice, UsageTotal } from "@/lib/usage-api";
 
 export type CacheEfficiency = {
   cacheHitRatio: number;

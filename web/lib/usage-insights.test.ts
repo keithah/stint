@@ -7,7 +7,7 @@ import {
   reasoningShare,
   todayVsAverage
 } from "./usage-insights";
-import type { UsageDay, UsageSlice } from "./api";
+import type { UsageDay, UsageSlice } from "./usage-api";
 
 function assertEqual<T>(name: string, got: T, want: T) {
   if (got !== want) {

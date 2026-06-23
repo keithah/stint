@@ -1,4 +1,4 @@
-import { usageExport, usageSummary } from "./api";
+import { usageExport, usageSummary } from "./usage-api";
 
 type FetchCall = {
   url: string;

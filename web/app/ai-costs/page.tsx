@@ -8,7 +8,8 @@ import { SliceDonut } from "@/components/dashboard-charts";
 import { Providers } from "@/components/providers";
 import { Shell } from "@/components/shell";
 import { StatCard } from "@/components/stat-card";
-import { me, usageBlocks, usageSummary, type SliceTotal, type StatsRange, type UsageCostMode, type UsageCurrentBlock, type UsageSlice, type UsageSummary } from "@/lib/api";
+import { me, type SliceTotal, type StatsRange } from "@/lib/api";
+import { usageBlocks, usageSummary, type UsageCostMode, type UsageCurrentBlock, type UsageSlice, type UsageSummary } from "@/lib/usage-api";
 import { activityHeatmapClass } from "@/lib/activity-heatmap";
 import { compactNumber, formatUSD } from "@/lib/number-format";
 import {
