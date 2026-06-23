@@ -117,12 +117,39 @@ func ComputeAllTimeStatsWithExternalDurationsAndAICosts(heartbeats []Heartbeat, 
 	branchDurations := append(ComputeDurations(heartbeats, timeout, "branch"), ExternalDurationsAsDurations(external, "branch")...)
 	dependencyDurations := ComputeDurations(heartbeats, timeout, "dependencies")
 	total := sumDurations(projectDurations)
+
+	start := allTimeStart(heartbeats)
+	dayCount := allTimeDays(heartbeats)
+	dayTotals := map[string]int{}
+	dayProjectDurations := map[string][]Duration{}
+	for _, duration := range projectDurations {
+		day := time.Unix(int64(duration.Time), 0).In(start.Location()).Format("2006-01-02")
+		dayTotals[day] += duration.DurationSeconds
+		dayProjectDurations[day] = append(dayProjectDurations[day], duration)
+	}
+	days := make([]DailyStat, 0, dayCount)
+	best := DailyStat{}
+	for i := 0; i < dayCount; i++ {
+		date := start.AddDate(0, 0, i).Format("2006-01-02")
+		day := DailyStat{Date: date, TotalSeconds: dayTotals[date], Text: HumanDuration(dayTotals[date]), Projects: totalsByName(dayProjectDurations[date])}
+		days = append(days, day)
+		if day.TotalSeconds > best.TotalSeconds {
+			best = day
+		}
+	}
+	dailyAverage := 0
+	if dayCount > 0 {
+		dailyAverage = total / dayCount
+	}
+
 	return Stats{
 		Range:               "all_time",
 		TotalSeconds:        total,
 		HumanReadableTotal:  HumanDuration(total),
-		DailyAverageSeconds: 0,
-		HumanReadableDaily:  "0 secs",
+		DailyAverageSeconds: dailyAverage,
+		HumanReadableDaily:  HumanDuration(dailyAverage),
+		BestDay:             best,
+		Days:                days,
 		Projects:            totalsByName(projectDurations),
 		Languages:           totalsByName(languageDurations),
 		Editors:             totalsByName(editorDurations),
