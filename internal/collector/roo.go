@@ -35,24 +35,10 @@ type rooLine struct {
 	Cost    *float64 `json:"cost"`
 	Model   string   `json:"model"`
 	Message *struct {
-		ID    string          `json:"id"`
-		Model string          `json:"model"`
-		Usage *anthropicUsage `json:"usage"`
+		ID    string               `json:"id"`
+		Model string               `json:"model"`
+		Usage *anthropicUsageBlock `json:"usage"`
 	} `json:"message"`
-}
-
-// anthropicUsage is the Anthropic-shaped token block emitted by Roo and Cline
-// (and Claude). cache_creation_input_tokens is the lumped 5m+1h write count; a
-// cache_creation sub-object carries the split when present.
-type anthropicUsage struct {
-	InputTokens         int `json:"input_tokens"`
-	OutputTokens        int `json:"output_tokens"`
-	CacheCreationTokens int `json:"cache_creation_input_tokens"`
-	CacheReadTokens     int `json:"cache_read_input_tokens"`
-	CacheCreation       *struct {
-		Ephemeral5m int `json:"ephemeral_5m_input_tokens"`
-		Ephemeral1h int `json:"ephemeral_1h_input_tokens"`
-	} `json:"cache_creation"`
 }
 
 // rooApiReqStarted is the JSON payload embedded (as a string) in the text field
@@ -143,20 +129,9 @@ func anthropicParseLine(line []byte, agent, defaultSession, project string) (usa
 
 	switch {
 	case rl.Message != nil && rl.Message.Usage != nil:
-		u := rl.Message.Usage
 		ev.MessageID = rl.Message.ID
 		ev.Model = anthropicFirstStr(rl.Message.Model, rl.Model)
-		ev.InputTokens = u.InputTokens
-		ev.OutputTokens = u.OutputTokens
-		ev.CacheReadTokens = u.CacheReadTokens
-		// Prefer the explicit 5m/1h split; otherwise lump the cache_creation
-		// write count entirely into the 5m bucket.
-		if u.CacheCreation != nil && (u.CacheCreation.Ephemeral5m != 0 || u.CacheCreation.Ephemeral1h != 0) {
-			ev.CacheCreate5mTokens = u.CacheCreation.Ephemeral5m
-			ev.CacheCreate1hTokens = u.CacheCreation.Ephemeral1h
-		} else {
-			ev.CacheCreate5mTokens = u.CacheCreationTokens
-		}
+		rl.Message.Usage.canonical().apply(&ev)
 		if rl.CostUSD != nil {
 			ev.CostUSDProvided = rl.CostUSD
 		} else if rl.Cost != nil {

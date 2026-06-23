@@ -43,29 +43,20 @@ var (
 // one JSON object per line; only lines carrying a usage block are emitted. The
 // usage block follows the Anthropic shape (input inclusive of cache-read).
 type kiroLine struct {
-	Type      string     `json:"type"`
-	Role      string     `json:"role"`
-	Timestamp string     `json:"timestamp"`
-	SessionID string     `json:"session_id"`
-	MessageID string     `json:"message_id"`
-	Model     string     `json:"model"`
-	Usage     *kiroUsage `json:"usage"`
+	Type      string               `json:"type"`
+	Role      string               `json:"role"`
+	Timestamp string               `json:"timestamp"`
+	SessionID string               `json:"session_id"`
+	MessageID string               `json:"message_id"`
+	Model     string               `json:"model"`
+	Usage     *anthropicUsageBlock `json:"usage"`
 	// Some writers nest the model/usage inside a "message" object (Anthropic
 	// SDK echo). Honored as a fallback.
 	Message *struct {
-		ID    string     `json:"id"`
-		Model string     `json:"model"`
-		Usage *kiroUsage `json:"usage"`
+		ID    string               `json:"id"`
+		Model string               `json:"model"`
+		Usage *anthropicUsageBlock `json:"usage"`
 	} `json:"message"`
-}
-
-// kiroUsage is the Anthropic-shaped token object.
-type kiroUsage struct {
-	InputTokens     int `json:"input_tokens"`
-	OutputTokens    int `json:"output_tokens"`
-	CacheCreation   int `json:"cache_creation_input_tokens"`
-	CacheReadTokens int `json:"cache_read_input_tokens"`
-	ReasoningTokens int `json:"reasoning_tokens"`
 }
 
 // scanKiro implements the Adapter signature for Kiro, scanning both the CLI
@@ -203,11 +194,13 @@ func kiroParseLine(line []byte, defaultSession string) (usage.Event, bool, error
 		return usage.Event{}, false, nil // non-usage line
 	}
 
-	// Anthropic shape: input_tokens is inclusive of cache-read; subtract so it
-	// is not counted twice.
-	input := u.InputTokens - u.CacheReadTokens
-	if input < 0 {
-		input = 0
+	// Anthropic shape: Kiro's input_tokens is inclusive of cache-read; subtract
+	// so it is not counted twice (Kiro deviates from the standard Anthropic
+	// convention that input already excludes cache).
+	tu := u.canonical()
+	tu.Input -= tu.CacheRead
+	if tu.Input < 0 {
+		tu.Input = 0
 	}
 
 	session := kl.SessionID
@@ -218,19 +211,15 @@ func kiroParseLine(line []byte, defaultSession string) (usage.Event, bool, error
 	ts, tzMin := normalizeTimestamp(kl.Timestamp)
 
 	ev := usage.Event{
-		Agent:               agentKiro,
-		MessageID:           msgID,
-		SessionID:           session,
-		Model:               model,
-		InputTokens:         input,
-		OutputTokens:        u.OutputTokens,
-		CacheReadTokens:     u.CacheReadTokens,
-		CacheCreate5mTokens: u.CacheCreation,
-		ReasoningTokens:     u.ReasoningTokens,
-		Timestamp:           ts,
-		TZOffsetMinutes:     tzMin,
-		BillingType:         usage.BillingAPI,
+		Agent:           agentKiro,
+		MessageID:       msgID,
+		SessionID:       session,
+		Model:           model,
+		Timestamp:       ts,
+		TZOffsetMinutes: tzMin,
+		BillingType:     usage.BillingAPI,
 	}
+	tu.apply(&ev)
 
 	if !ev.HasUsage() {
 		return usage.Event{}, false, nil
@@ -372,18 +361,20 @@ func kiroBuildDBEvent(inTok, outTok, cReadTok, cWriteTok, reasonTok sql.NullInt6
 	ts, tzMin := normalizeTimestamp(sqliteStr(tsRaw))
 
 	ev := usage.Event{
-		Agent:               agentKiro,
-		SessionID:           sqliteStr(sess),
-		Model:               modelName,
-		InputTokens:         input,
-		OutputTokens:        output,
-		CacheReadTokens:     cacheRead,
-		CacheCreate5mTokens: cacheWrite,
-		ReasoningTokens:     reasoning,
-		Timestamp:           ts,
-		TZOffsetMinutes:     tzMin,
-		BillingType:         usage.BillingAPI,
+		Agent:           agentKiro,
+		SessionID:       sqliteStr(sess),
+		Model:           modelName,
+		Timestamp:       ts,
+		TZOffsetMinutes: tzMin,
+		BillingType:     usage.BillingAPI,
 	}
+	tokenUsage{
+		Input:         input,
+		Output:        output,
+		CacheRead:     cacheRead,
+		CacheCreate5m: cacheWrite,
+		Reasoning:     reasoning,
+	}.apply(&ev)
 
 	if !ev.HasUsage() {
 		return usage.Event{}, false

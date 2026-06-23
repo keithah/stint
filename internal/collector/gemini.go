@@ -26,33 +26,27 @@ type geminiSession struct {
 
 // geminiMessage is one entry in a session's messages array. The tokens block is
 // optional; its absence (or all-zero counts) means the line is not a usage row.
+// geminiMessage is one entry in a session's messages array. The tokens block is
+// the Gemini CLI session shape (short input/output/cached/thoughts keys, with
+// input inclusive of cached); usageMetadata is the Google GenAI native fallback
+// when tokens is absent. Both map through geminiUsageBlock.canonical().
 type geminiMessage struct {
-	ID        string        `json:"id"`
-	Timestamp string        `json:"timestamp"`
-	Type      string        `json:"type"`
-	Model     string        `json:"model"`
-	Tokens    *geminiTokens `json:"tokens"`
+	ID        string            `json:"id"`
+	Timestamp string            `json:"timestamp"`
+	Type      string            `json:"type"`
+	Model     string            `json:"model"`
+	Tokens    *geminiUsageBlock `json:"tokens"`
 	// usageMetadata is the alternative (Google GenAI native) token shape some
-	// Gemini variants emit; it is read as a fallback when tokens is absent.
-	UsageMetadata *geminiUsageMetadata `json:"usageMetadata"`
+	// Gemini variants emit; it is read as a fallback when tokens is absent. It is
+	// decoded twice (camelCase via geminiUsageBlock, snake_case via the alias
+	// struct) because the shared block carries only the camelCase tags.
+	UsageMetadata *geminiUsageMetadataSnake `json:"usageMetadata"`
 }
 
-// geminiTokens is the Gemini CLI session token block. The CLI reports input as
-// the full prompt count *inclusive* of cached tokens (verified on real data:
-// input + output + thoughts == total, with cached <= input), so InputTokens is
-// input minus cached to avoid double-counting cache reads.
-type geminiTokens struct {
-	Input    int `json:"input"`
-	Output   int `json:"output"`
-	Cached   int `json:"cached"`
-	Thoughts int `json:"thoughts"`
-	Tool     int `json:"tool"`
-	Total    int `json:"total"`
-}
-
-// geminiUsageMetadata is the Google GenAI native usage shape (camelCase or
-// snake_case). promptTokenCount is inclusive of cachedContentTokenCount.
-type geminiUsageMetadata struct {
+// geminiUsageMetadataSnake carries the snake_case aliases of the Google GenAI
+// usageMetadata fields, which geminiUsageBlock does not tag. It also re-declares
+// the camelCase fields so a single decode picks up whichever casing is present.
+type geminiUsageMetadataSnake struct {
 	PromptTokenCount      int `json:"promptTokenCount"`
 	PromptTokenCount2     int `json:"prompt_token_count"`
 	CandidatesTokenCount  int `json:"candidatesTokenCount"`
@@ -61,6 +55,17 @@ type geminiUsageMetadata struct {
 	CachedContentCount2   int `json:"cached_content_token_count"`
 	ThoughtsTokenCount    int `json:"thoughtsTokenCount"`
 	ThoughtsTokenCount2   int `json:"thoughts_token_count"`
+}
+
+// block maps the snake/camel usageMetadata onto the shared geminiUsageBlock so
+// canonical() does the input-minus-cached and thoughts->reasoning mapping.
+func (u geminiUsageMetadataSnake) block() geminiUsageBlock {
+	return geminiUsageBlock{
+		PromptTokenCount:        geminiFirst(u.PromptTokenCount, u.PromptTokenCount2),
+		CandidatesTokenCount:    geminiFirst(u.CandidatesTokenCount, u.CandidatesTokenCount2),
+		CachedContentTokenCount: geminiFirst(u.CachedContentCount, u.CachedContentCount2),
+		ThoughtsTokenCount:      geminiFirst(u.ThoughtsTokenCount, u.ThoughtsTokenCount2),
+	}
 }
 
 // scanGemini implements the Adapter for Gemini CLI session files. It walks each
@@ -193,30 +198,22 @@ func scanGeminiFile(path string, state *State, events *[]usage.Event, report *Sc
 // parseGeminiMessage maps one session message to an event. ok=false means the
 // message carries no usage (user line, tool-only line) and is skipped.
 func parseGeminiMessage(m *geminiMessage, defaultSession, project, startTime string) (usage.Event, bool) {
-	input, output, cached, thoughts, has := geminiTokenCounts(m)
+	block, has := geminiMessageBlock(m)
 	if !has {
 		return usage.Event{}, false
 	}
 
-	// input is inclusive of cached prompt tokens; subtract so cache reads are
-	// not double-counted against input.
-	in := input - cached
-	if in < 0 {
-		in = 0
-	}
-
+	// canonical() does the input-minus-cached split (input is inclusive of cached
+	// prompt tokens) and the thoughts->reasoning mapping.
 	ev := usage.Event{
-		Agent:           agentGemini,
-		MessageID:       m.ID,
-		Model:           m.Model,
-		SessionID:       defaultSession,
-		Project:         project,
-		InputTokens:     in,
-		OutputTokens:    output,
-		CacheReadTokens: cached,
-		ReasoningTokens: thoughts,
-		BillingType:     usage.BillingAPI,
+		Agent:       agentGemini,
+		MessageID:   m.ID,
+		Model:       m.Model,
+		SessionID:   defaultSession,
+		Project:     project,
+		BillingType: usage.BillingAPI,
 	}
+	block.canonical().apply(&ev)
 
 	ts := m.Timestamp
 	if ts == "" {
@@ -234,22 +231,16 @@ func parseGeminiMessage(m *geminiMessage, defaultSession, project, startTime str
 	return ev, true
 }
 
-// geminiTokenCounts extracts (input, output, cached, thoughts) from whichever
-// token shape the message carries. has=false means no usage block at all.
-func geminiTokenCounts(m *geminiMessage) (input, output, cached, thoughts int, has bool) {
+// geminiMessageBlock returns the usage block for whichever token shape the
+// message carries. has=false means no usage block at all.
+func geminiMessageBlock(m *geminiMessage) (geminiUsageBlock, bool) {
 	if m.Tokens != nil {
-		t := m.Tokens
-		return t.Input, t.Output, t.Cached, t.Thoughts, true
+		return *m.Tokens, true
 	}
 	if m.UsageMetadata != nil {
-		u := m.UsageMetadata
-		input = geminiFirst(u.PromptTokenCount, u.PromptTokenCount2)
-		output = geminiFirst(u.CandidatesTokenCount, u.CandidatesTokenCount2)
-		cached = geminiFirst(u.CachedContentCount, u.CachedContentCount2)
-		thoughts = geminiFirst(u.ThoughtsTokenCount, u.ThoughtsTokenCount2)
-		return input, output, cached, thoughts, true
+		return m.UsageMetadata.block(), true
 	}
-	return 0, 0, 0, 0, false
+	return geminiUsageBlock{}, false
 }
 
 // geminiFirst returns a if non-zero, else b (camelCase vs snake_case fallback).

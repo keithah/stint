@@ -280,15 +280,17 @@ func cursorRowToEvent(rec []string, c cursorCols, defaultSession string) (usage.
 	}
 
 	ev := usage.Event{
-		Agent:               agentCursor,
-		SessionID:           defaultSession,
-		Model:               get(c.model),
-		InputTokens:         input,
-		OutputTokens:        output,
-		CacheReadTokens:     cacheRead,
-		CacheCreate5mTokens: cacheWrite,
-		BillingType:         usage.BillingSubscription,
+		Agent:       agentCursor,
+		SessionID:   defaultSession,
+		Model:       get(c.model),
+		BillingType: usage.BillingSubscription,
 	}
+	tokenUsage{
+		Input:         input,
+		Output:        output,
+		CacheRead:     cacheRead,
+		CacheCreate5m: cacheWrite,
+	}.apply(&ev)
 
 	if cost := get(c.cost); cost != "" {
 		if v, err := strconv.ParseFloat(strings.TrimPrefix(cost, "$"), 64); err == nil && v != 0 {
@@ -419,15 +421,17 @@ func cursorScanUsageTable(db *sql.DB, path string, state *State, events *[]usage
 		}
 		report.LinesParsed++
 		ev := usage.Event{
-			Agent:               agentCursor,
-			RequestID:           reqID,
-			Model:               model,
-			InputTokens:         int(input),
-			OutputTokens:        int(output),
-			CacheReadTokens:     int(cacheRead),
-			CacheCreate5mTokens: int(cacheWrite),
-			BillingType:         usage.BillingSubscription,
+			Agent:       agentCursor,
+			RequestID:   reqID,
+			Model:       model,
+			BillingType: usage.BillingSubscription,
 		}
+		tokenUsage{
+			Input:         int(input),
+			Output:        int(output),
+			CacheRead:     int(cacheRead),
+			CacheCreate5m: int(cacheWrite),
+		}.apply(&ev)
 		if cost.Valid && cost.Float64 != 0 {
 			v := cost.Float64
 			ev.CostUSDProvided = &v

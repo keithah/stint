@@ -74,7 +74,15 @@ cost = input          * inputPrice
   prices private/proxied/unknown models; an unknown model is flagged **unpriced**,
   never silently $0.
 - **Subscription:** subscription usage reports equivalent-API `cost_usd` and
-  `marginal_usd = 0`, so totals don't imply real out-of-pocket spend.
+  `marginal_usd = 0`. The classification per agent is user-overridable via the
+  `billing_prefs` API (Settings → AI billing): mark an agent `subscription`
+  (marginal $0) or `api` (marginal = cost) regardless of what its adapter
+  recorded.
+- **Web overrides:** the `custom_pricing` table/API (Settings) backs the override
+  layer above for `usage_events`. Note this is distinct from the legacy
+  `ai_cost_settings` (`ai_costs` API), which holds per-agent integer-cents rates
+  used only by the older heartbeat-derived AI panel — set usage-event pricing in
+  `custom_pricing`, not `ai_costs`.
 
 ## Supported source paths
 

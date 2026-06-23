@@ -44,24 +44,16 @@ type codexTurnContext struct {
 	Model string `json:"model"`
 }
 
-// codexTokens mirrors a Codex/OpenAI usage block. OpenAI reports input_tokens as
-// the TOTAL including cached tokens, so InputTokens is derived as
-// input_tokens - cached_input_tokens to avoid double-counting the cache reads.
-type codexTokens struct {
-	InputTokens        int `json:"input_tokens"`
-	CachedInputTokens  int `json:"cached_input_tokens"`
-	OutputTokens       int `json:"output_tokens"`
-	ReasoningOutputTok int `json:"reasoning_output_tokens"`
-	TotalTokens        int `json:"total_tokens"`
-}
-
 // codexTokenCount is the payload of an "event_msg" token_count line. info may be
-// null on some events (e.g. pure rate-limit pings); those carry no usage.
+// null on some events (e.g. pure rate-limit pings); those carry no usage. The
+// usage blocks follow the OpenAI shape, decoded via openAIUsageBlock. We emit
+// from last_token_usage (the per-turn delta) rather than total_token_usage (the
+// cumulative session total) so summing events does not double-count.
 type codexTokenCount struct {
 	Type string `json:"type"`
 	Info *struct {
-		LastTokenUsage  *codexTokens `json:"last_token_usage"`
-		TotalTokenUsage *codexTokens `json:"total_token_usage"`
+		LastTokenUsage  *openAIUsageBlock `json:"last_token_usage"`
+		TotalTokenUsage *openAIUsageBlock `json:"total_token_usage"`
 	} `json:"info"`
 }
 
@@ -205,25 +197,15 @@ func parseCodexLine(line []byte, defaultSession, pathProject string, cs *codexSt
 	if tc.Type != "token_count" || tc.Info == nil || tc.Info.LastTokenUsage == nil {
 		return usage.Event{}, false, nil // non-usage event_msg (rate-limit ping, etc.)
 	}
-	u := tc.Info.LastTokenUsage
-
-	// OpenAI's input_tokens is the TOTAL including cached tokens; split them so
-	// cache reads are not counted twice (InputTokens + CacheReadTokens).
-	input := u.InputTokens - u.CachedInputTokens
-	if input < 0 {
-		input = 0
-	}
-
+	// OpenAI's input_tokens is the TOTAL including cached tokens; canonical()
+	// splits them so cache reads are not counted twice.
 	ev := usage.Event{
-		Agent:           agentCodex,
-		SessionID:       defaultSession,
-		Model:           cs.model,
-		InputTokens:     input,
-		OutputTokens:    u.OutputTokens,
-		CacheReadTokens: u.CachedInputTokens,
-		ReasoningTokens: u.ReasoningOutputTok,
-		BillingType:     usage.BillingAPI,
+		Agent:       agentCodex,
+		SessionID:   defaultSession,
+		Model:       cs.model,
+		BillingType: usage.BillingAPI,
 	}
+	tc.Info.LastTokenUsage.canonical().apply(&ev)
 
 	if cs.cwd != "" {
 		ev.Project = filepath.Base(cs.cwd)

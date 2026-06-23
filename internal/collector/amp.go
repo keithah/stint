@@ -44,14 +44,12 @@ type ampMessage struct {
 
 // ampUsage mirrors the Anthropic-shaped token block Amp records on assistant
 // messages: input_tokens is the prompt count (exclusive of cache reads here),
-// with separate cache-creation and cache-read counts.
+// with separate cache-creation and cache-read counts, plus a reasoning count
+// and an optional provider-reported cost.
 type ampUsage struct {
-	InputTokens         int      `json:"input_tokens"`
-	OutputTokens        int      `json:"output_tokens"`
-	CacheCreationTokens int      `json:"cache_creation_input_tokens"`
-	CacheReadTokens     int      `json:"cache_read_input_tokens"`
-	ReasoningTokens     int      `json:"reasoning_tokens"`
-	CostUSD             *float64 `json:"cost_usd"`
+	anthropicUsageBlock
+	ReasoningTokens int      `json:"reasoning_tokens"`
+	CostUSD         *float64 `json:"cost_usd"`
 }
 
 // scanAmp implements the Amp adapter. It walks each base dir for *.json thread
@@ -171,20 +169,15 @@ func parseAmpMessage(m *ampMessage, session, project, created string) (usage.Eve
 	u := m.Usage
 
 	ev := usage.Event{
-		Agent:           agentAmp,
-		MessageID:       m.ID,
-		Model:           m.Model,
-		SessionID:       session,
-		Project:         project,
-		InputTokens:     u.InputTokens,
-		OutputTokens:    u.OutputTokens,
-		CacheReadTokens: u.CacheReadTokens,
-		ReasoningTokens: u.ReasoningTokens,
-		// Amp reports a single cache-creation count with no 5m/1h split;
-		// preserve it in the 5m bucket (matching the Claude lumping convention).
-		CacheCreate5mTokens: u.CacheCreationTokens,
-		BillingType:         usage.BillingAPI,
+		Agent:       agentAmp,
+		MessageID:   m.ID,
+		Model:       m.Model,
+		SessionID:   session,
+		Project:     project,
+		BillingType: usage.BillingAPI,
 	}
+	u.canonical().apply(&ev)
+	ev.ReasoningTokens = u.ReasoningTokens
 	if u.CostUSD != nil {
 		ev.CostUSDProvided = u.CostUSD
 	}

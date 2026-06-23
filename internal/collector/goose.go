@@ -142,30 +142,30 @@ func scanGooseDB(path string, state *State, events *[]usage.Event, report *ScanR
 	}
 	defer db.Close()
 
-	cols, err := gooseTableColumns(db, "messages")
+	cols, err := sqliteTableColumns(db, "messages")
 	if err != nil || len(cols) == 0 {
 		report.Errors++
 		return
 	}
 
 	// Resolve which spellings are present.
-	inputCol := gooseFirstPresent(cols, gooseInputCols)
-	outputCol := gooseFirstPresent(cols, gooseOutputCols)
-	cacheCol := gooseFirstPresent(cols, gooseCacheCols)
-	modelCol := gooseFirstPresent(cols, gooseModelCols)
-	sessCol := gooseFirstPresent(cols, gooseSessCols)
-	timeCol := gooseFirstPresent(cols, gooseTimeCols)
-	metaCol := gooseFirstPresent(cols, gooseMetaCols)
+	inputCol := sqliteFirstPresent(cols, gooseInputCols)
+	outputCol := sqliteFirstPresent(cols, gooseOutputCols)
+	cacheCol := sqliteFirstPresent(cols, gooseCacheCols)
+	modelCol := sqliteFirstPresent(cols, gooseModelCols)
+	sessCol := sqliteFirstPresent(cols, gooseSessCols)
+	timeCol := sqliteFirstPresent(cols, gooseTimeCols)
+	metaCol := sqliteFirstPresent(cols, gooseMetaCols)
 
 	// Build the SELECT list. rowid is always first; absent columns select NULL.
 	sel := []string{"rowid"}
-	sel = append(sel, gooseSelectExpr(inputCol))
-	sel = append(sel, gooseSelectExpr(outputCol))
-	sel = append(sel, gooseSelectExpr(cacheCol))
-	sel = append(sel, gooseSelectExpr(modelCol))
-	sel = append(sel, gooseSelectExpr(sessCol))
-	sel = append(sel, gooseSelectExpr(timeCol))
-	sel = append(sel, gooseSelectExpr(metaCol))
+	sel = append(sel, sqliteSelectExpr(inputCol))
+	sel = append(sel, sqliteSelectExpr(outputCol))
+	sel = append(sel, sqliteSelectExpr(cacheCol))
+	sel = append(sel, sqliteSelectExpr(modelCol))
+	sel = append(sel, sqliteSelectExpr(sessCol))
+	sel = append(sel, sqliteSelectExpr(timeCol))
+	sel = append(sel, sqliteSelectExpr(metaCol))
 
 	// Coarse incremental cursor: the highest rowid already emitted.
 	cursor := state.Rowid(path)
@@ -221,10 +221,10 @@ func scanGooseDB(path string, state *State, events *[]usage.Event, report *ScanR
 // gooseBuildEvent maps one scanned row to a usage.Event. ok=false means the row
 // carries no usage and should be skipped (not an error).
 func gooseBuildEvent(rowID int64, inTok, outTok, cTok sql.NullInt64, model, sess, tsRaw, meta sql.NullString) (usage.Event, bool) {
-	input := gooseInt(inTok)
-	output := gooseInt(outTok)
-	cacheRead := gooseInt(cTok)
-	modelName := gooseStr(model)
+	input := sqliteInt(inTok)
+	output := sqliteInt(outTok)
+	cacheRead := sqliteInt(cTok)
+	modelName := sqliteStr(model)
 
 	// Fold in any JSON metadata/usage blob; dedicated columns take precedence.
 	if meta.Valid && strings.TrimSpace(meta.String) != "" {
@@ -244,19 +244,17 @@ func gooseBuildEvent(rowID int64, inTok, outTok, cTok sql.NullInt64, model, sess
 		}
 	}
 
-	ts, tzMin := normalizeTimestamp(gooseStr(tsRaw))
+	ts, tzMin := normalizeTimestamp(sqliteStr(tsRaw))
 
 	ev := usage.Event{
 		Agent:           agentGoose,
-		SessionID:       gooseStr(sess),
+		SessionID:       sqliteStr(sess),
 		Model:           modelName,
-		InputTokens:     input,
-		OutputTokens:    output,
-		CacheReadTokens: cacheRead,
 		Timestamp:       ts,
 		TZOffsetMinutes: tzMin,
 		BillingType:     usage.BillingAPI,
 	}
+	tokenUsage{Input: input, Output: output, CacheRead: cacheRead}.apply(&ev)
 
 	if !ev.HasUsage() {
 		return usage.Event{}, false
@@ -273,19 +271,19 @@ func gooseParseMeta(s string) (input, output, cacheRead int, model string, ok bo
 	if err := json.Unmarshal([]byte(s), &m); err != nil {
 		return 0, 0, 0, "", false
 	}
-	input = gooseFirstPtr(m.InputTokens, m.PromptTokens)
-	output = gooseFirstPtr(m.OutputTokens, m.Completion)
-	cacheRead = gooseFirstPtr(m.CacheRead, m.CacheRead2, m.CachedTokens)
+	input = sqliteFirstPtr(m.InputTokens, m.PromptTokens)
+	output = sqliteFirstPtr(m.OutputTokens, m.Completion)
+	cacheRead = sqliteFirstPtr(m.CacheRead, m.CacheRead2, m.CachedTokens)
 	model = m.Model
 	if m.Usage != nil {
 		if input == 0 {
-			input = gooseFirstPtr(m.Usage.InputTokens, m.Usage.PromptTokens)
+			input = sqliteFirstPtr(m.Usage.InputTokens, m.Usage.PromptTokens)
 		}
 		if output == 0 {
-			output = gooseFirstPtr(m.Usage.OutputTokens, m.Usage.Completion)
+			output = sqliteFirstPtr(m.Usage.OutputTokens, m.Usage.Completion)
 		}
 		if cacheRead == 0 {
-			cacheRead = gooseFirstPtr(m.Usage.CacheRead, m.Usage.CacheRead2, m.Usage.CachedTokens)
+			cacheRead = sqliteFirstPtr(m.Usage.CacheRead, m.Usage.CacheRead2, m.Usage.CachedTokens)
 		}
 	}
 	return input, output, cacheRead, model, true
@@ -293,73 +291,3 @@ func gooseParseMeta(s string) (input, output, cacheRead int, model string, ok bo
 
 // gooseUTCNote: timestamps are normalized to RFC3339 UTC via
 // normalizeTimestamp (shared with the Claude adapter).
-
-// gooseTableColumns returns the lower-cased column names of a table via
-// PRAGMA table_info. A missing table yields an empty set (no error from the
-// PRAGMA itself), which the caller treats as "no usable table".
-func gooseTableColumns(db *sql.DB, table string) (map[string]bool, error) {
-	rows, err := db.Query("PRAGMA table_info(" + table + ")")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	cols := map[string]bool{}
-	for rows.Next() {
-		var (
-			cid     int
-			name    string
-			ctype   sql.NullString
-			notnull int
-			dflt    sql.NullString
-			pk      int
-		)
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-			return nil, err
-		}
-		cols[strings.ToLower(name)] = true
-	}
-	return cols, rows.Err()
-}
-
-// gooseFirstPresent returns the first candidate column present in cols, or "".
-func gooseFirstPresent(cols map[string]bool, candidates []string) string {
-	for _, c := range candidates {
-		if cols[strings.ToLower(c)] {
-			return c
-		}
-	}
-	return ""
-}
-
-// gooseSelectExpr returns a quoted column reference, or NULL when the column is
-// absent so the positional Scan layout stays fixed.
-func gooseSelectExpr(col string) string {
-	if col == "" {
-		return "NULL"
-	}
-	return `"` + strings.ReplaceAll(col, `"`, `""`) + `"`
-}
-
-func gooseInt(v sql.NullInt64) int {
-	if !v.Valid {
-		return 0
-	}
-	return int(v.Int64)
-}
-
-func gooseStr(v sql.NullString) string {
-	if !v.Valid {
-		return ""
-	}
-	return v.String
-}
-
-// gooseFirstPtr returns the first non-nil pointer's value, or 0.
-func gooseFirstPtr(ptrs ...*int) int {
-	for _, p := range ptrs {
-		if p != nil {
-			return *p
-		}
-	}
-	return 0
-}

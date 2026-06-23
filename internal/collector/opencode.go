@@ -188,19 +188,21 @@ func parseOpenCodeMessage(id, sessionID string, created int64, data []byte) (usa
 	tk := m.Tokens
 
 	ev := usage.Event{
-		Agent:           agentOpenCode,
-		MessageID:       id,
-		SessionID:       sessionID,
-		Model:           openCodeModel(m.ProviderID, m.ModelID),
-		InputTokens:     tk.Input,
-		OutputTokens:    tk.Output,
-		ReasoningTokens: tk.Reasoning,
-		CacheReadTokens: tk.Cache.Read,
-		// OpenCode reports a single cache-write count with no 5m/1h split;
-		// preserve it in the 5m bucket (matching the Claude lumping convention).
-		CacheCreate5mTokens: tk.Cache.Write,
-		BillingType:         usage.BillingAPI,
+		Agent:       agentOpenCode,
+		MessageID:   id,
+		SessionID:   sessionID,
+		Model:       openCodeModel(m.ProviderID, m.ModelID),
+		BillingType: usage.BillingAPI,
 	}
+	// OpenCode reports a single cache-write count with no 5m/1h split; preserve
+	// it in the 5m bucket (matching the Claude lumping convention).
+	tokenUsage{
+		Input:         tk.Input,
+		Output:        tk.Output,
+		Reasoning:     tk.Reasoning,
+		CacheRead:     tk.Cache.Read,
+		CacheCreate5m: tk.Cache.Write,
+	}.apply(&ev)
 
 	// Project: cwd basename, else root basename.
 	if m.Path.Cwd != "" {

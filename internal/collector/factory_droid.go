@@ -31,12 +31,9 @@ type factoryDroidLine struct {
 		ID    string `json:"id"`
 		Model string `json:"model"`
 		Usage *struct {
-			InputTokens         int      `json:"input_tokens"`
-			OutputTokens        int      `json:"output_tokens"`
-			CacheCreationTokens int      `json:"cache_creation_input_tokens"`
-			CacheReadTokens     int      `json:"cache_read_input_tokens"`
-			ReasoningTokens     int      `json:"reasoning_tokens"`
-			CostUSD             *float64 `json:"cost_usd"`
+			anthropicUsageBlock
+			ReasoningTokens int      `json:"reasoning_tokens"`
+			CostUSD         *float64 `json:"cost_usd"`
 		} `json:"usage"`
 	} `json:"message"`
 }
@@ -133,19 +130,14 @@ func parseFactoryDroidLine(line []byte, defaultSession, pathProject string) (usa
 	u := cl.Message.Usage
 
 	ev := usage.Event{
-		Agent:           agentFactoryDroid,
-		MessageID:       cl.Message.ID,
-		RequestID:       cl.RequestID,
-		Model:           cl.Message.Model,
-		InputTokens:     u.InputTokens,
-		OutputTokens:    u.OutputTokens,
-		CacheReadTokens: u.CacheReadTokens,
-		ReasoningTokens: u.ReasoningTokens,
-		// Single cache-creation count with no 5m/1h split; preserve it in the 5m
-		// bucket (matching the Claude lumping convention).
-		CacheCreate5mTokens: u.CacheCreationTokens,
-		BillingType:         usage.BillingAPI,
+		Agent:       agentFactoryDroid,
+		MessageID:   cl.Message.ID,
+		RequestID:   cl.RequestID,
+		Model:       cl.Message.Model,
+		BillingType: usage.BillingAPI,
 	}
+	u.canonical().apply(&ev)
+	ev.ReasoningTokens = u.ReasoningTokens
 	if u.CostUSD != nil {
 		ev.CostUSDProvided = u.CostUSD
 	}

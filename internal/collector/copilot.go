@@ -210,15 +210,17 @@ func copilotSpanToEvent(sp copilotSpan, defaultSession, pathProject string) (usa
 	model := copilotStr(attrs, "gen_ai.response.model", "gen_ai.request.model")
 
 	ev := usage.Event{
-		Agent:               agentCopilot,
-		Model:               model,
-		InputTokens:         inputTok,
-		OutputTokens:        outputTok,
-		CacheReadTokens:     cacheRead,
-		CacheCreate5mTokens: cacheCreate,
-		ReasoningTokens:     reasoning,
-		BillingType:         usage.BillingSubscription,
+		Agent:       agentCopilot,
+		Model:       model,
+		BillingType: usage.BillingSubscription,
 	}
+	tokenUsage{
+		Input:         inputTok,
+		Output:        outputTok,
+		CacheRead:     cacheRead,
+		CacheCreate5m: cacheCreate,
+		Reasoning:     reasoning,
+	}.apply(&ev)
 
 	// Identity: the OTEL span id is a stable per-request key; pair it with the
 	// response id when present so dedup collapses re-exported spans.

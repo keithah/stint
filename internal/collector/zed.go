@@ -47,29 +47,27 @@ type zedMessage struct {
 }
 
 // zedUsage mirrors the token-usage object Zed records per assistant message.
-// Field aliases tolerate the snake_case variants seen across Zed versions.
+// The core shape is Anthropic's message.usage (decoded via anthropicUsageBlock);
+// the extra fields tolerate the alternate snake_case spellings seen across Zed
+// versions, applied as a fallback when the canonical keys are absent.
 type zedUsage struct {
-	InputTokens       int `json:"input_tokens"`
-	OutputTokens      int `json:"output_tokens"`
-	CacheReadTokens   int `json:"cache_read_input_tokens"`
-	CacheCreateTokens int `json:"cache_creation_input_tokens"`
+	anthropicUsageBlock
 	// Alternate spellings.
 	CacheReadAlt   int `json:"cache_read_tokens"`
 	CacheCreateAlt int `json:"cache_creation_tokens"`
 }
 
-func (u *zedUsage) cacheRead() int {
-	if u.CacheReadTokens != 0 {
-		return u.CacheReadTokens
+// canonical applies the Anthropic conventions, then overlays Zed's alternate
+// cache spellings when the canonical fields were absent.
+func (u *zedUsage) canonical() tokenUsage {
+	t := u.anthropicUsageBlock.canonical()
+	if t.CacheRead == 0 {
+		t.CacheRead = u.CacheReadAlt
 	}
-	return u.CacheReadAlt
-}
-
-func (u *zedUsage) cacheCreate() int {
-	if u.CacheCreateTokens != 0 {
-		return u.CacheCreateTokens
+	if t.CacheCreate5m == 0 && t.CacheCreate1h == 0 {
+		t.CacheCreate5m = u.CacheCreateAlt
 	}
-	return u.CacheCreateAlt
+	return t
 }
 
 func (m *zedMessage) usage() *zedUsage {
@@ -233,18 +231,10 @@ func zedDataColumn(db *sql.DB) (col, table string, ok bool) {
 			}
 		}
 		for _, t := range tables {
-			cset := map[string]bool{}
-			cr, err := db.Query("SELECT name FROM pragma_table_info('" + t + "')")
+			cset, err := sqliteTableColumns(db, t)
 			if err != nil {
 				continue
 			}
-			for cr.Next() {
-				var cn string
-				if cr.Scan(&cn) == nil {
-					cset[cn] = true
-				}
-			}
-			cr.Close()
 			cols[t] = cset
 		}
 	}
@@ -298,17 +288,14 @@ func zedEventFromMessage(th *zedThread, m *zedMessage) (usage.Event, bool) {
 	}
 
 	ev := usage.Event{
-		Agent:               agentZed,
-		MessageID:           m.ID,
-		SessionID:           th.ID,
-		Project:             th.Summary,
-		Model:               m.model(),
-		InputTokens:         u.InputTokens,
-		OutputTokens:        u.OutputTokens,
-		CacheReadTokens:     u.cacheRead(),
-		CacheCreate5mTokens: u.cacheCreate(),
-		BillingType:         usage.BillingAPI,
+		Agent:       agentZed,
+		MessageID:   m.ID,
+		SessionID:   th.ID,
+		Project:     th.Summary,
+		Model:       m.model(),
+		BillingType: usage.BillingAPI,
 	}
+	u.canonical().apply(&ev)
 
 	ts, tzMin := normalizeTimestamp(m.timestamp())
 	ev.Timestamp = ts
