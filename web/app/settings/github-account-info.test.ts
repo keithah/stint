@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-const source = readFileSync("app/settings/page.tsx", "utf8");
+const source = readFileSync("components/settings/github-account-card.tsx", "utf8");
 
 assertIncludes("settings labels GitHub account panel", source, "GitHub account");
 assertIncludes("settings renders GitHub username", source, "github_username");

@@ -2,11 +2,10 @@ package db
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/keithah/stint/internal/usage"
 )
 
@@ -17,8 +16,6 @@ type UsageIngestResult struct {
 	Duplicates int `json:"duplicates"`
 	Invalid    int `json:"invalid"`
 }
-
-const usageInsertColumns = 18
 
 // InsertUsageEvents stores canonical usage events, deduping within the batch by
 // event id. Existing rows are upserted via ON CONFLICT DO UPDATE: re-ingesting an
@@ -53,68 +50,49 @@ func (s *Store) InsertUsageEvents(ctx context.Context, userID uuid.UUID, events 
 		rows = append(rows, row{event: event, ts: ts.UTC()})
 	}
 
-	const chunk = 100
-	for start := 0; start < len(rows); start += chunk {
-		end := start + chunk
-		if end > len(rows) {
-			end = len(rows)
-		}
-		batch := rows[start:end]
-		placeholders := make([]string, 0, len(batch))
-		args := make([]any, 0, len(batch)*usageInsertColumns)
-		for i, r := range batch {
-			base := i * usageInsertColumns
-			ph := make([]string, usageInsertColumns)
-			for j := 0; j < usageInsertColumns; j++ {
-				ph[j] = fmt.Sprintf("$%d", base+j+1)
-			}
-			placeholders = append(placeholders, "("+strings.Join(ph, ",")+")")
-			e := r.event
-			args = append(args,
-				userID, e.EventID, nullEmpty(e.MessageID), nullEmpty(e.RequestID), e.Agent,
-				e.SessionID, nullEmpty(e.Project), e.Model,
-				e.InputTokens, e.OutputTokens, e.CacheCreate5mTokens, e.CacheCreate1hTokens,
-				e.CacheReadTokens, e.ReasoningTokens, e.CostUSDProvided, nullEmpty(string(e.BillingType)),
-				r.ts, e.TZOffsetMinutes,
-			)
-		}
-		// Upsert: a re-ingested event with corrected token/cost counts (e.g. the
-		// Claude streaming-output reconciliation) must update the stored row, not
-		// be dropped. `RETURNING (xmax = 0)` is true for freshly-inserted rows and
-		// false for updated ones, so we still report inserted vs. duplicate.
-		query := `INSERT INTO usage_events (
-			user_id, event_id, message_id, request_id, agent, session_id, project, model,
-			input_tokens, output_tokens, cache_create_5m_tokens, cache_create_1h_tokens,
-			cache_read_tokens, reasoning_tokens, cost_usd_provided, billing_type, ts, tz_offset_minutes
-		) VALUES ` + strings.Join(placeholders, ",") + `
-		ON CONFLICT (user_id, event_id) DO UPDATE SET
-			message_id = EXCLUDED.message_id, request_id = EXCLUDED.request_id,
-			agent = EXCLUDED.agent, session_id = EXCLUDED.session_id, project = EXCLUDED.project,
-			model = EXCLUDED.model, input_tokens = EXCLUDED.input_tokens,
-			output_tokens = EXCLUDED.output_tokens, cache_create_5m_tokens = EXCLUDED.cache_create_5m_tokens,
-			cache_create_1h_tokens = EXCLUDED.cache_create_1h_tokens, cache_read_tokens = EXCLUDED.cache_read_tokens,
-			reasoning_tokens = EXCLUDED.reasoning_tokens, cost_usd_provided = EXCLUDED.cost_usd_provided,
-			billing_type = EXCLUDED.billing_type, ts = EXCLUDED.ts, tz_offset_minutes = EXCLUDED.tz_offset_minutes
-		RETURNING (xmax = 0)`
-		rows, err := s.Pool.Query(ctx, query, args...)
-		if err != nil {
+	// Upsert: a re-ingested event with corrected token/cost counts (e.g. the
+	// Claude streaming-output reconciliation) must update the stored row, not
+	// be dropped. `RETURNING (xmax = 0)` is true for freshly-inserted rows and
+	// false for updated ones, so we still report inserted vs. duplicate. One
+	// column list lives here, in the single INSERT statement.
+	const query = `INSERT INTO usage_events (
+		user_id, event_id, message_id, request_id, agent, session_id, project, model,
+		input_tokens, output_tokens, cache_create_5m_tokens, cache_create_1h_tokens,
+		cache_read_tokens, reasoning_tokens, cost_usd_provided, billing_type, ts, tz_offset_minutes
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+	ON CONFLICT (user_id, event_id) DO UPDATE SET
+		message_id = EXCLUDED.message_id, request_id = EXCLUDED.request_id,
+		agent = EXCLUDED.agent, session_id = EXCLUDED.session_id, project = EXCLUDED.project,
+		model = EXCLUDED.model, input_tokens = EXCLUDED.input_tokens,
+		output_tokens = EXCLUDED.output_tokens, cache_create_5m_tokens = EXCLUDED.cache_create_5m_tokens,
+		cache_create_1h_tokens = EXCLUDED.cache_create_1h_tokens, cache_read_tokens = EXCLUDED.cache_read_tokens,
+		reasoning_tokens = EXCLUDED.reasoning_tokens, cost_usd_provided = EXCLUDED.cost_usd_provided,
+		billing_type = EXCLUDED.billing_type, ts = EXCLUDED.ts, tz_offset_minutes = EXCLUDED.tz_offset_minutes
+	RETURNING (xmax = 0)`
+
+	batch := &pgx.Batch{}
+	for _, r := range rows {
+		e := r.event
+		batch.Queue(query,
+			userID, e.EventID, nullEmpty(e.MessageID), nullEmpty(e.RequestID), e.Agent,
+			e.SessionID, nullEmpty(e.Project), e.Model,
+			e.InputTokens, e.OutputTokens, e.CacheCreate5mTokens, e.CacheCreate1hTokens,
+			e.CacheReadTokens, e.ReasoningTokens, e.CostUSDProvided, nullEmpty(string(e.BillingType)),
+			r.ts, e.TZOffsetMinutes,
+		)
+	}
+
+	br := s.Pool.SendBatch(ctx, batch)
+	defer br.Close()
+	for range rows {
+		var inserted bool
+		if err := br.QueryRow().Scan(&inserted); err != nil {
 			return result, err
 		}
-		for rows.Next() {
-			var insertedRow bool
-			if err := rows.Scan(&insertedRow); err != nil {
-				rows.Close()
-				return result, err
-			}
-			if insertedRow {
-				result.Inserted++
-			} else {
-				result.Duplicates++
-			}
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return result, err
+		if inserted {
+			result.Inserted++
+		} else {
+			result.Duplicates++
 		}
 	}
 	return result, nil

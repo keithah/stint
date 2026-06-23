@@ -62,7 +62,7 @@ assert.equal(
 
 // Wiring: the settings page imports and gates on the helper, and the test is
 // registered in the package test chain.
-const source = readFileSync("app/settings/page.tsx", "utf8");
+const source = readFileSync("components/settings/custom-pricing-card.tsx", "utf8");
 const packageJSON = readFileSync("package.json", "utf8");
 assert.match(source, /customPricingError\(\{/);
 assert.match(source, /disabled=\{savePricing\.isPending \|\| !canSaveCustomPricing\}/);

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const source = readFileSync(join(process.cwd(), "app/settings/page.tsx"), "utf8");
+const source =
+  readFileSync(join(process.cwd(), "components/settings/data-export-card.tsx"), "utf8") +
+  readFileSync(join(process.cwd(), "components/settings/wakatime-import-card.tsx"), "utf8");
 const packageJSON = readFileSync(join(process.cwd(), "package.json"), "utf8");
 
 assert.match(source, /createDataDump/);

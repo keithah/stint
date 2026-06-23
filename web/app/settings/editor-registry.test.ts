@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 
-const source = readFileSync("app/settings/page.tsx", "utf8");
+const source = readFileSync("components/settings/editors-card.tsx", "utf8");
 const apiSource = readFileSync("lib/api.ts", "utf8");
 const packageJSON = readFileSync("package.json", "utf8");
 

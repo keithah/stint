@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const source = readFileSync("app/settings/page.tsx", "utf8");
+const source = readFileSync("components/settings/custom-rules-card.tsx", "utf8");
 const packageJSON = readFileSync("package.json", "utf8");
 
 assert.match(source, /const canSaveCustomRule = ruleSourceValue\.trim\(\)\.length > 0 && Number\.isFinite\(rulePriority\) && rulePriority >= 1 && \(ruleAction === "delete" \|\| ruleDestinationValue\.trim\(\)\.length > 0\);/);

@@ -6,6 +6,7 @@ import (
 
 	"github.com/keithah/stint/internal/pricing"
 	"github.com/keithah/stint/internal/usage"
+	"github.com/keithah/stint/internal/usagestats"
 )
 
 // TestCustomPricingOverridesPriceUnpricedModel proves the per-request override
@@ -49,20 +50,19 @@ func TestCustomPricingOverridesPriceUnpricedModel(t *testing.T) {
 		BillingType:  usage.BillingAPI,
 	}}
 
-	summary := summarizeUsageEvents(events, engine, pricing.ModeCalculate, time.UTC)
-	total := summary["total"].(map[string]any)
-	cost := total["cost_usd"].(float64)
+	summary := usagestats.Summarize(events, engine, pricing.ModeCalculate, time.UTC)
+	cost := summary.Total.CostUSD
 	// 1M input * $3/1M + 1M output * $15/1M = $18.
 	if cost < 17.999 || cost > 18.001 {
 		t.Fatalf("expected cost ~18.0, got %f", cost)
 	}
-	if unpriced := summary["unpriced_models"].([]string); len(unpriced) != 0 {
-		t.Fatalf("expected no unpriced models with override, got %v", unpriced)
+	if len(summary.UnpricedModels) != 0 {
+		t.Fatalf("expected no unpriced models with override, got %v", summary.UnpricedModels)
 	}
 
 	// Without the override the same model is unpriced.
-	bare := summarizeUsageEvents(events, base, pricing.ModeCalculate, time.UTC)
-	if bareUnpriced := bare["unpriced_models"].([]string); len(bareUnpriced) != 1 || bareUnpriced[0] != model {
-		t.Fatalf("expected %q unpriced without override, got %v", model, bareUnpriced)
+	bare := usagestats.Summarize(events, base, pricing.ModeCalculate, time.UTC)
+	if len(bare.UnpricedModels) != 1 || bare.UnpricedModels[0] != model {
+		t.Fatalf("expected %q unpriced without override, got %v", model, bare.UnpricedModels)
 	}
 }
