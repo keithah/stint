@@ -1,0 +1,55 @@
+import { usageExport, usageSummary } from "./api";
+
+type FetchCall = {
+  url: string;
+  init?: RequestInit;
+};
+
+const calls: FetchCall[] = [];
+const originalFetch = globalThis.fetch;
+
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  calls.push({ url: String(input), init });
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ data: {} })
+  } as Response;
+}) as typeof fetch;
+
+run().catch((error) => {
+  globalThis.fetch = originalFetch;
+  throw error;
+});
+
+async function run() {
+  await usageSummary("last_30_days");
+  await usageSummary("last_7_days", "calculate");
+  await usageExport("2026-06-01", "2026-06-22");
+  globalThis.fetch = originalFetch;
+
+  assertEqual(
+    "summary defaults cost_mode to auto",
+    calls[0]?.url,
+    "/api/v1/users/current/usage_events/summary?range=last_30_days&cost_mode=auto"
+  );
+  assertEqual("summary sends credentials", calls[0]?.init?.credentials, "include");
+  assertEqual(
+    "summary honors explicit cost mode",
+    calls[1]?.url,
+    "/api/v1/users/current/usage_events/summary?range=last_7_days&cost_mode=calculate"
+  );
+  assertEqual(
+    "export passes start and end",
+    calls[2]?.url,
+    "/api/v1/users/current/usage_events?start=2026-06-01&end=2026-06-22"
+  );
+
+  console.log("usage-api.test.ts passed");
+}
+
+function assertEqual<T>(name: string, got: T, want: T) {
+  if (got !== want) {
+    throw new Error(`${name}: expected ${String(want)}, got ${String(got)}`);
+  }
+}

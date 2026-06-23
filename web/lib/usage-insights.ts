@@ -1,0 +1,117 @@
+import type { UsageDay, UsageSlice, UsageTotal } from "@/lib/api";
+
+export type CacheEfficiency = {
+  cacheHitRatio: number;
+  cacheReadTokens: number;
+  freshInputTokens: number;
+  hasData: boolean;
+};
+
+// Cache-hit ratio = cache_read_tokens / (cache_read_tokens + input_tokens).
+// Fresh input tokens are billed at full price; cache reads are cheap, so a high
+// ratio means most context is being served from cache.
+export function cacheEfficiency(total: Pick<UsageTotal, "cache_read_tokens" | "input_tokens">): CacheEfficiency {
+  const cacheReadTokens = Math.max(0, total.cache_read_tokens);
+  const freshInputTokens = Math.max(0, total.input_tokens);
+  const denom = cacheReadTokens + freshInputTokens;
+  return {
+    cacheHitRatio: denom > 0 ? cacheReadTokens / denom : 0,
+    cacheReadTokens,
+    freshInputTokens,
+    hasData: denom > 0
+  };
+}
+
+// Estimated savings from cache reads. Anthropic-style pricing reads cache at
+// ~10% of fresh input cost, so each cached token avoids ~90% of its fresh cost.
+// We express savings as a token-weighted multiple of fresh-input value.
+export function cacheSavingsEstimate(
+  total: Pick<UsageTotal, "cache_read_tokens" | "input_tokens">,
+  cacheDiscount = 0.9
+): { savedTokenEquivalent: number; savingsRatio: number } {
+  const cacheReadTokens = Math.max(0, total.cache_read_tokens);
+  const billable = Math.max(0, total.input_tokens) + cacheReadTokens;
+  const savedTokenEquivalent = cacheReadTokens * cacheDiscount;
+  return {
+    savedTokenEquivalent,
+    savingsRatio: billable > 0 ? savedTokenEquivalent / billable : 0
+  };
+}
+
+// Most- and least-expensive priced model by cost_usd. Returns null when there
+// is nothing to compare.
+export function modelCostExtremes(byModel: UsageSlice[]): { mostExpensive: UsageSlice | null; cheapest: UsageSlice | null } {
+  const priced = byModel.filter((row) => row.cost_usd > 0);
+  if (priced.length === 0) {
+    return { mostExpensive: null, cheapest: null };
+  }
+  let mostExpensive = priced[0];
+  let cheapest = priced[0];
+  for (const row of priced) {
+    if (row.cost_usd > mostExpensive.cost_usd) {
+      mostExpensive = row;
+    }
+    if (row.cost_usd < cheapest.cost_usd) {
+      cheapest = row;
+    }
+  }
+  return { mostExpensive, cheapest };
+}
+
+// Reasoning-token share of total tokens.
+export function reasoningShare(total: Pick<UsageTotal, "reasoning_tokens" | "input_tokens" | "output_tokens" | "cache_create_tokens" | "cache_read_tokens">): number {
+  const all =
+    Math.max(0, total.input_tokens) +
+    Math.max(0, total.output_tokens) +
+    Math.max(0, total.cache_create_tokens) +
+    Math.max(0, total.cache_read_tokens) +
+    Math.max(0, total.reasoning_tokens);
+  return all > 0 ? Math.max(0, total.reasoning_tokens) / all : 0;
+}
+
+export type BurnRate = {
+  todayCost: number;
+  averageCost: number;
+  multiple: number;
+  priorDayCount: number;
+  isAnomaly: boolean;
+};
+
+// Compares the latest day's cost against the average of the preceding days in
+// the series. `multiple` is "today is Nx your average". Anomaly when today is
+// >= 1.5x the trailing average (and there is a baseline to compare against).
+export function todayVsAverage(byDay: UsageDay[], anomalyThreshold = 1.5): BurnRate | null {
+  if (byDay.length === 0) {
+    return null;
+  }
+  const sorted = [...byDay].sort((a, b) => a.date.localeCompare(b.date));
+  const today = sorted[sorted.length - 1];
+  const prior = sorted.slice(0, -1);
+  const priorTotal = prior.reduce((sum, day) => sum + Math.max(0, day.cost_usd), 0);
+  const averageCost = prior.length > 0 ? priorTotal / prior.length : 0;
+  const multiple = averageCost > 0 ? today.cost_usd / averageCost : 0;
+  return {
+    todayCost: Math.max(0, today.cost_usd),
+    averageCost,
+    multiple,
+    priorDayCount: prior.length,
+    isAnomaly: prior.length > 0 && averageCost > 0 && multiple >= anomalyThreshold
+  };
+}
+
+// Latest day in a by_day series (by date), or null when empty.
+export function latestDay(byDay: UsageDay[]): UsageDay | null {
+  if (byDay.length === 0) {
+    return null;
+  }
+  return [...byDay].sort((a, b) => a.date.localeCompare(b.date))[byDay.length - 1];
+}
+
+// Highest-cost project-day rate: total project cost divided by the number of
+// distinct days with usage, giving an approximate "$ per project per day".
+export function costPerProjectPerDay(byProject: UsageSlice[], dayCount: number): Array<{ name: string; perDay: number }> {
+  const days = Math.max(1, dayCount);
+  return byProject
+    .map((row) => ({ name: row.name, perDay: row.cost_usd / days }))
+    .sort((a, b) => b.perDay - a.perDay);
+}

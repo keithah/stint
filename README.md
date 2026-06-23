@@ -134,6 +134,9 @@ Data dumps require `STORAGE_TYPE=local` and write completed JSON snapshots under
 - `GET /api/v1/users/current/heartbeats`
 - `POST /api/v1/users/current/heartbeats.bulk`
 - `DELETE /api/v1/users/current/heartbeats.bulk`
+- `POST /api/v1/users/current/usage_events.bulk`
+- `GET /api/v1/users/current/usage_events`
+- `GET /api/v1/users/current/usage_events/summary`
 - `POST /api/v1/users/current/file_experts`
 - `GET /api/v1/users/current/durations`
 - `GET /api/v1/users/current/summaries`

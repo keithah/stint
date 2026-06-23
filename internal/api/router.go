@@ -30,6 +30,7 @@ import (
 	dumpfiles "github.com/keithah/stint/internal/dumps"
 	"github.com/keithah/stint/internal/importer"
 	"github.com/keithah/stint/internal/jobs"
+	"github.com/keithah/stint/internal/pricing"
 	"github.com/keithah/stint/internal/services"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -55,6 +56,7 @@ type Server struct {
 	StatusCache      cache.StatusCache
 	LeaderboardCache cache.LeaderboardCache
 	Jobs             jobs.Client
+	Pricing          *pricing.Engine
 }
 
 const (
@@ -112,7 +114,12 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 			jobClient = asynqClient
 		}
 	}
-	server := &Server{Config: cfg, Store: store, OAuth: oauthConfig, Limiter: limiter, FallbackLimiter: apimw.NewMemoryRateLimiter(), StatusCache: statusCache, LeaderboardCache: leaderboardCache, Jobs: jobClient}
+	pricingEngine, err := pricing.NewFromBundled()
+	if err != nil {
+		e.Logger.Errorf("usage pricing engine unavailable, AI usage will be reported as unpriced: %v", err)
+		pricingEngine = nil
+	}
+	server := &Server{Config: cfg, Store: store, OAuth: oauthConfig, Limiter: limiter, FallbackLimiter: apimw.NewMemoryRateLimiter(), StatusCache: statusCache, LeaderboardCache: leaderboardCache, Jobs: jobClient, Pricing: pricingEngine}
 
 	e.GET("/healthz", server.health)
 	e.GET("/healthz/ingestion", server.ingestionHealth)
@@ -153,6 +160,9 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 	current.POST("/heartbeats", server.createHeartbeat, requireScope(scopeWriteHeartbeats), server.rateLimitUser("heartbeats", heartbeatIngestionRateLimit, time.Minute))
 	current.POST("/heartbeats.bulk", server.createHeartbeatsBulk, requireScope(scopeWriteHeartbeats), server.rateLimitUser("heartbeats", heartbeatIngestionRateLimit, time.Minute))
 	current.DELETE("/heartbeats.bulk", server.deleteHeartbeatsBulk, requireScope(scopeWriteHeartbeats))
+	current.POST("/usage_events.bulk", server.createUsageEventsBulk, requireScope(scopeWriteHeartbeats), server.rateLimitUser("usage_events", heartbeatIngestionRateLimit, time.Minute))
+	current.GET("/usage_events", server.listUsageEvents, requireScope(scopeReadStats), readLimit)
+	current.GET("/usage_events/summary", server.usageEventsSummary, requireScope(scopeReadStats), readLimit)
 	current.POST("/file_experts", server.fileExperts, requireScope(scopeReadStats), readLimit)
 	current.GET("/durations", server.durations, requireSummarySliceScope, readLimit)
 	current.GET("/summaries", server.summaries, requireSummaryScope, readLimit)
@@ -468,6 +478,9 @@ func openAPIPaths() map[string]any {
 		withJSON(post("Create heartbeats in bulk", "heartbeats", http.StatusAccepted, true), "HeartbeatBulkRequest", "HeartbeatBulkResponse"),
 		withJSON(del("Delete heartbeats in bulk", "heartbeats", http.StatusOK, true), "HeartbeatBulkDeleteRequest", "DeletedCountResponse"),
 	)
+	add("/api/v1/users/current/usage_events.bulk", withRateLimit(post("Ingest AI usage events in bulk", "usage", http.StatusOK, true)))
+	add("/api/v1/users/current/usage_events", withQueryParams(get("Export AI usage events", "usage", true), "start", "end"))
+	add("/api/v1/users/current/usage_events/summary", withQueryParams(get("Get AI usage cost summary", "usage", true), "range", "start", "end", "cost_mode"))
 	add("/api/v1/users/current/file_experts", withJSON(post("Get file experts", "heartbeats", http.StatusOK, true), "FileExpertsRequest", "FileExpertsResponse"))
 	add("/api/v1/users/current/durations", withQueryParams(withResponse(get("Get durations for a day", "stats", true), "DurationResponse"), "date", "slice_by"))
 	add("/api/v1/users/current/summaries", withQueryParams(withResponse(get("Get summaries for a date range", "stats", true), "SummaryResponse"), "start", "end"))
@@ -2359,25 +2372,25 @@ func currentUserResponse(user db.User, authInfo authContext) db.User {
 func (s *Server) updateCurrentUser(c echo.Context) error {
 	user := userFromContext(c)
 	var payload struct {
-		Timezone                string `json:"timezone"`
-		TimeoutMinutes          int    `json:"timeout_minutes"`
-		WritesOnly              bool   `json:"writes_only"`
-		HasPublicProfile        bool   `json:"has_public_profile"`
-		Country                 string `json:"country"`
-		HeartbeatRetentionDays  int    `json:"heartbeat_retention_days"`
-		PublicUsername          string `json:"public_username"`
-		PublicDisplayName       string `json:"public_display_name"`
-		PublicGitHubLink        bool   `json:"public_github_link_enabled"`
-		PublicShowTotalTime     bool   `json:"public_show_total_time"`
-		PublicShowProjects      bool   `json:"public_show_projects"`
-		PublicProjectVisibility string `json:"public_project_visibility"`
-		PublicShowLanguages     bool   `json:"public_show_languages"`
-		PublicShowEditors       bool   `json:"public_show_editors"`
-		PublicShowMachines      bool   `json:"public_show_machines"`
-		PublicShowOS            bool   `json:"public_show_operating_systems"`
-		PublicShowCategories    bool   `json:"public_show_categories"`
-		PublicShowAI            bool   `json:"public_show_ai"`
-		PublicShowSummaries     bool   `json:"public_show_summaries"`
+		Timezone                string           `json:"timezone"`
+		TimeoutMinutes          int              `json:"timeout_minutes"`
+		WritesOnly              bool             `json:"writes_only"`
+		HasPublicProfile        bool             `json:"has_public_profile"`
+		Country                 string           `json:"country"`
+		HeartbeatRetentionDays  int              `json:"heartbeat_retention_days"`
+		PublicUsername          string           `json:"public_username"`
+		PublicDisplayName       string           `json:"public_display_name"`
+		PublicGitHubLink        bool             `json:"public_github_link_enabled"`
+		PublicShowTotalTime     bool             `json:"public_show_total_time"`
+		PublicShowProjects      bool             `json:"public_show_projects"`
+		PublicProjectVisibility string           `json:"public_project_visibility"`
+		PublicShowLanguages     bool             `json:"public_show_languages"`
+		PublicShowEditors       bool             `json:"public_show_editors"`
+		PublicShowMachines      bool             `json:"public_show_machines"`
+		PublicShowOS            bool             `json:"public_show_operating_systems"`
+		PublicShowCategories    bool             `json:"public_show_categories"`
+		PublicShowAI            bool             `json:"public_show_ai"`
+		PublicShowSummaries     bool             `json:"public_show_summaries"`
 		PublicProfile           db.PublicProfile `json:"public_profile"`
 	}
 	if err := c.Bind(&payload); err != nil {

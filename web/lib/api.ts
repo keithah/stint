@@ -543,6 +543,60 @@ export type AICostSetting = {
   modified_at?: string;
 };
 
+export type UsageCostMode = "auto" | "calculate" | "display";
+
+export type UsageTotal = {
+  cost_usd: number;
+  marginal_usd: number;
+  event_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_create_tokens: number;
+  cache_read_tokens: number;
+  reasoning_tokens: number;
+};
+
+export type UsageSlice = {
+  name: string;
+  cost_usd: number;
+  marginal_usd: number;
+  tokens: number;
+  event_count: number;
+};
+
+export type UsageDay = {
+  date: string;
+  cost_usd: number;
+  marginal_usd: number;
+  tokens: number;
+};
+
+export type UsageSummary = {
+  range: string;
+  cost_mode: UsageCostMode;
+  total: UsageTotal;
+  by_agent: UsageSlice[];
+  by_model: UsageSlice[];
+  by_project: UsageSlice[];
+  by_day: UsageDay[];
+  unpriced_models: string[];
+};
+
+export type UsageEvent = {
+  id: string;
+  timestamp: string;
+  agent?: string;
+  model?: string;
+  project?: string;
+  cost_usd: number;
+  marginal_usd: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_create_tokens: number;
+  cache_read_tokens: number;
+  reasoning_tokens: number;
+};
+
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 export function wakatimeAPIURL() {
@@ -959,6 +1013,16 @@ export async function importWakaTimeDump(file: File) {
     throw new Error(message);
   }
   return response.json() as Promise<{ data: ImportResult }>;
+}
+
+export async function usageSummary(range: StatsRange, costMode: UsageCostMode = "auto") {
+  const query = new URLSearchParams({ range, cost_mode: costMode });
+  return request<{ data: UsageSummary }>(`/api/v1/users/current/usage_events/summary?${query.toString()}`);
+}
+
+export async function usageExport(start: string, end: string) {
+  const query = new URLSearchParams({ start, end });
+  return request<{ data: UsageEvent[] }>(`/api/v1/users/current/usage_events?${query.toString()}`);
 }
 
 export async function listAICosts() {
