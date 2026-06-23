@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, KeyRound, LogOut, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Copy, Download, ExternalLink, KeyRound, LogOut, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { Providers } from "@/components/providers";
 import { Shell } from "@/components/shell";
@@ -287,13 +287,16 @@ function SettingsContent() {
       <section className="mb-5 rounded border border-line bg-panel p-5">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex min-w-0 items-center gap-4">
-            <div
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded border border-line bg-ink bg-cover bg-center text-lg font-semibold text-zinc-300"
+            <a
+              href={publicProfileURL}
+              target="_blank"
+              rel="noreferrer"
+              title="View your public profile"
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded border border-line bg-ink bg-cover bg-center text-lg font-semibold text-zinc-300 transition hover:ring-2 hover:ring-accent"
               style={user.data?.data.avatar_url ? { backgroundImage: `url(${user.data.data.avatar_url})` } : undefined}
-              aria-hidden="true"
             >
               {user.data?.data.avatar_url ? "" : (user.data?.data.github_username ?? "?").slice(0, 1).toUpperCase()}
-            </div>
+            </a>
             <div className="min-w-0">
               <h2 className="font-medium">GitHub account</h2>
               <p className="mt-1 truncate text-sm text-zinc-400">{user.data?.data.full_name || user.data?.data.github_username || "Loading account"}</p>
@@ -383,7 +386,17 @@ function SettingsContent() {
             <div>
               <h3 className="font-medium text-zinc-100">Public profile</h3>
               <p className="mt-1 text-sm text-zinc-500">Publish a clean profile URL and explicitly choose which activity sections are visible.</p>
-              <code className="mt-3 block break-all rounded border border-line bg-panel px-3 py-2 text-xs text-zinc-400">{publicProfileURL}</code>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <code className="min-w-0 flex-1 break-all rounded border border-line bg-panel px-3 py-2 text-xs text-zinc-400">{publicProfileURL}</code>
+                <a
+                  href={publicProfileURL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex shrink-0 items-center gap-2 rounded border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-accent transition hover:bg-accent/20"
+                >
+                  <ExternalLink size={15} /> Preview profile
+                </a>
+              </div>
             </div>
             <label className="flex items-center justify-between gap-4 rounded border border-line bg-panel px-3 py-2">
               <span>
