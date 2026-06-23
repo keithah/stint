@@ -46,26 +46,17 @@ var (
 // assistant lines follow the Anthropic SDK response shape: a "message" object
 // with "model" and "usage". A flat top-level "usage" is also honored.
 type kiloLine struct {
-	Type      string     `json:"type"`
-	Role      string     `json:"role"`
-	Timestamp string     `json:"timestamp"`
-	Ts        int64      `json:"ts"`
-	SessionID string     `json:"taskId"`
-	Usage     *kiloUsage `json:"usage"`
+	Type      string               `json:"type"`
+	Role      string               `json:"role"`
+	Timestamp string               `json:"timestamp"`
+	Ts        int64                `json:"ts"`
+	SessionID string               `json:"taskId"`
+	Usage     *anthropicUsageBlock `json:"usage"`
 	Message   *struct {
-		ID    string     `json:"id"`
-		Model string     `json:"model"`
-		Usage *kiloUsage `json:"usage"`
+		ID    string               `json:"id"`
+		Model string               `json:"model"`
+		Usage *anthropicUsageBlock `json:"usage"`
 	} `json:"message"`
-}
-
-// kiloUsage is the Anthropic-shaped token object.
-type kiloUsage struct {
-	InputTokens     int `json:"input_tokens"`
-	OutputTokens    int `json:"output_tokens"`
-	CacheCreation   int `json:"cache_creation_input_tokens"`
-	CacheReadTokens int `json:"cache_read_input_tokens"`
-	ReasoningTokens int `json:"reasoning_tokens"`
 }
 
 // scanKilo implements the Adapter signature for Kilo, scanning both the SQLite
@@ -202,11 +193,13 @@ func kiloParseLine(line []byte, defaultSession string) (usage.Event, bool, error
 		return usage.Event{}, false, nil // non-usage line
 	}
 
-	// Anthropic shape: input_tokens is inclusive of cache-read; subtract so it
-	// is not counted twice.
-	input := u.InputTokens - u.CacheReadTokens
-	if input < 0 {
-		input = 0
+	// Anthropic shape: Kilo's input_tokens is inclusive of cache-read; subtract
+	// so it is not counted twice (Kilo deviates from the standard Anthropic
+	// convention that input already excludes cache).
+	tu := u.canonical()
+	tu.Input -= tu.CacheRead
+	if tu.Input < 0 {
+		tu.Input = 0
 	}
 
 	session := kl.SessionID
@@ -221,19 +214,15 @@ func kiloParseLine(line []byte, defaultSession string) (usage.Event, bool, error
 	}
 
 	ev := usage.Event{
-		Agent:               agentKilo,
-		MessageID:           msgID,
-		SessionID:           session,
-		Model:               model,
-		InputTokens:         input,
-		OutputTokens:        u.OutputTokens,
-		CacheReadTokens:     u.CacheReadTokens,
-		CacheCreate5mTokens: u.CacheCreation,
-		ReasoningTokens:     u.ReasoningTokens,
-		Timestamp:           ts,
-		TZOffsetMinutes:     tzMin,
-		BillingType:         usage.BillingAPI,
+		Agent:           agentKilo,
+		MessageID:       msgID,
+		SessionID:       session,
+		Model:           model,
+		Timestamp:       ts,
+		TZOffsetMinutes: tzMin,
+		BillingType:     usage.BillingAPI,
 	}
+	tu.apply(&ev)
 
 	if !ev.HasUsage() {
 		return usage.Event{}, false, nil
@@ -375,18 +364,20 @@ func kiloBuildDBEvent(inTok, outTok, cReadTok, cWriteTok, reasonTok sql.NullInt6
 	ts, tzMin := normalizeTimestamp(sqliteStr(tsRaw))
 
 	ev := usage.Event{
-		Agent:               agentKilo,
-		SessionID:           sqliteStr(sess),
-		Model:               modelName,
-		InputTokens:         input,
-		OutputTokens:        output,
-		CacheReadTokens:     cacheRead,
-		CacheCreate5mTokens: cacheWrite,
-		ReasoningTokens:     reasoning,
-		Timestamp:           ts,
-		TZOffsetMinutes:     tzMin,
-		BillingType:         usage.BillingAPI,
+		Agent:           agentKilo,
+		SessionID:       sqliteStr(sess),
+		Model:           modelName,
+		Timestamp:       ts,
+		TZOffsetMinutes: tzMin,
+		BillingType:     usage.BillingAPI,
 	}
+	tokenUsage{
+		Input:         input,
+		Output:        output,
+		CacheRead:     cacheRead,
+		CacheCreate5m: cacheWrite,
+		Reasoning:     reasoning,
+	}.apply(&ev)
 
 	if !ev.HasUsage() {
 		return usage.Event{}, false

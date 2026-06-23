@@ -23,18 +23,9 @@ type claudeLine struct {
 	CostUSD   *float64 `json:"costUSD"`
 	CostUSD2  *float64 `json:"cost_usd"`
 	Message   struct {
-		ID    string `json:"id"`
-		Model string `json:"model"`
-		Usage *struct {
-			InputTokens         int `json:"input_tokens"`
-			OutputTokens        int `json:"output_tokens"`
-			CacheCreationTokens int `json:"cache_creation_input_tokens"`
-			CacheReadTokens     int `json:"cache_read_input_tokens"`
-			CacheCreation       *struct {
-				Ephemeral5m int `json:"ephemeral_5m_input_tokens"`
-				Ephemeral1h int `json:"ephemeral_1h_input_tokens"`
-			} `json:"cache_creation"`
-		} `json:"usage"`
+		ID    string               `json:"id"`
+		Model string               `json:"model"`
+		Usage *anthropicUsageBlock `json:"usage"`
 	} `json:"message"`
 }
 
@@ -130,27 +121,15 @@ func parseClaudeLine(line []byte, defaultSession, pathProject string) (usage.Eve
 	if cl.Message.Usage == nil {
 		return usage.Event{}, false, nil // non-usage line
 	}
-	u := cl.Message.Usage
 
 	ev := usage.Event{
-		Agent:           agentClaude,
-		MessageID:       cl.Message.ID,
-		RequestID:       cl.RequestID,
-		Model:           cl.Message.Model,
-		InputTokens:     u.InputTokens,
-		OutputTokens:    u.OutputTokens,
-		CacheReadTokens: u.CacheReadTokens,
-		BillingType:     usage.BillingSubscription,
+		Agent:       agentClaude,
+		MessageID:   cl.Message.ID,
+		RequestID:   cl.RequestID,
+		Model:       cl.Message.Model,
+		BillingType: usage.BillingSubscription,
 	}
-
-	// Cache-creation mapping: prefer the explicit 5m/1h split; otherwise put
-	// the lumped cache_creation_input_tokens entirely into the 5m bucket.
-	if u.CacheCreation != nil && (u.CacheCreation.Ephemeral5m != 0 || u.CacheCreation.Ephemeral1h != 0) {
-		ev.CacheCreate5mTokens = u.CacheCreation.Ephemeral5m
-		ev.CacheCreate1hTokens = u.CacheCreation.Ephemeral1h
-	} else {
-		ev.CacheCreate5mTokens = u.CacheCreationTokens
-	}
+	cl.Message.Usage.canonical().apply(&ev)
 
 	// Session: explicit field, else file basename.
 	ev.SessionID = cl.SessionID

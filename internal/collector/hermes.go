@@ -269,17 +269,19 @@ func hermesBuildEvent(inTok, outTok, cReadTok, cWriteTok, reasonTok sql.NullInt6
 		Agent:           agentHermes,
 		SessionID:       sqliteStr(sess),
 		Model:           modelName,
-		InputTokens:     input,
-		OutputTokens:    output,
-		CacheReadTokens: cacheRead,
-		// Single cache-creation count with no 5m/1h split; preserve in the 5m
-		// bucket (matching the Claude lumping convention).
-		CacheCreate5mTokens: cacheWrite,
-		ReasoningTokens:     reasoning,
-		Timestamp:           ts,
-		TZOffsetMinutes:     tzMin,
-		BillingType:         usage.BillingAPI,
+		Timestamp:       ts,
+		TZOffsetMinutes: tzMin,
+		BillingType:     usage.BillingAPI,
 	}
+	// Single cache-creation count with no 5m/1h split; preserve in the 5m
+	// bucket (matching the Claude lumping convention).
+	tokenUsage{
+		Input:         input,
+		Output:        output,
+		CacheRead:     cacheRead,
+		CacheCreate5m: cacheWrite,
+		Reasoning:     reasoning,
+	}.apply(&ev)
 
 	if !ev.HasUsage() {
 		return usage.Event{}, false
@@ -320,86 +322,4 @@ func hermesParseMeta(s string) (input, output, cacheRead, cacheWrite, reasoning 
 		}
 	}
 	return input, output, cacheRead, cacheWrite, reasoning, model, true
-}
-
-// --- Shared SQLite column helpers ---
-//
-// These mirror the private goose* helpers (which we may not edit) so the new
-// SQLite adapters (hermes/octofriend/kiro/kilo) share one defensive
-// column-probing implementation. They live here because hermes is the first of
-// the new SQLite adapters alphabetically.
-
-// sqliteTableColumns returns the lower-cased column names of a table via PRAGMA
-// table_info. A missing table yields an empty set (no error from the PRAGMA
-// itself), which callers treat as "no usable table".
-func sqliteTableColumns(db *sql.DB, table string) (map[string]bool, error) {
-	rows, err := db.Query("PRAGMA table_info(" + sqliteQuoteIdent(table) + ")")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	cols := map[string]bool{}
-	for rows.Next() {
-		var (
-			cid     int
-			name    string
-			ctype   sql.NullString
-			notnull int
-			dflt    sql.NullString
-			pk      int
-		)
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-			return nil, err
-		}
-		cols[strings.ToLower(name)] = true
-	}
-	return cols, rows.Err()
-}
-
-// sqliteFirstPresent returns the first candidate column present in cols, or "".
-func sqliteFirstPresent(cols map[string]bool, candidates []string) string {
-	for _, c := range candidates {
-		if cols[strings.ToLower(c)] {
-			return c
-		}
-	}
-	return ""
-}
-
-// sqliteSelectExpr returns a quoted column reference, or NULL when the column is
-// absent so the positional Scan layout stays fixed.
-func sqliteSelectExpr(col string) string {
-	if col == "" {
-		return "NULL"
-	}
-	return sqliteQuoteIdent(col)
-}
-
-// sqliteQuoteIdent double-quotes a SQLite identifier, escaping embedded quotes.
-func sqliteQuoteIdent(ident string) string {
-	return `"` + strings.ReplaceAll(ident, `"`, `""`) + `"`
-}
-
-func sqliteInt(v sql.NullInt64) int {
-	if !v.Valid {
-		return 0
-	}
-	return int(v.Int64)
-}
-
-func sqliteStr(v sql.NullString) string {
-	if !v.Valid {
-		return ""
-	}
-	return v.String
-}
-
-// sqliteFirstPtr returns the first non-nil pointer's value, or 0.
-func sqliteFirstPtr(ptrs ...*int) int {
-	for _, p := range ptrs {
-		if p != nil {
-			return *p
-		}
-	}
-	return 0
 }

@@ -37,7 +37,8 @@ type qwenLine struct {
 // qwenUsage is the flat usage block. It accepts both the OpenAI-style
 // (prompt/completion/cached/reasoning) and the input/output/cached/thoughts
 // naming. The first non-zero of each synonym pair wins. input is treated as
-// inclusive of cached, so InputTokens is stored as input-cached.
+// inclusive of cached, so it maps onto geminiUsageBlock (input-minus-cached) via
+// block() rather than the OpenAI block.
 type qwenUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	InputTokens      int `json:"input_tokens"`
@@ -47,6 +48,17 @@ type qwenUsage struct {
 	CacheReadTokens  int `json:"cache_read_tokens"`
 	ReasoningTokens  int `json:"reasoning_tokens"`
 	ThoughtsTokens   int `json:"thoughts_tokens"`
+}
+
+// block resolves the synonym pairs and maps onto the shared geminiUsageBlock so
+// canonical() does the input-minus-cached and reasoning mapping.
+func (u qwenUsage) block() geminiUsageBlock {
+	return geminiUsageBlock{
+		PromptTokenCount:        qwenFirst(u.InputTokens, u.PromptTokens),
+		CandidatesTokenCount:    qwenFirst(u.OutputTokens, u.CompletionTokens),
+		CachedContentTokenCount: qwenFirst(u.CacheReadTokens, u.CachedTokens),
+		ThoughtsTokenCount:      qwenFirst(u.ReasoningTokens, u.ThoughtsTokens),
+	}
 }
 
 // qwenUsageMetadata is the Google GenAI native usage shape (camelCase or
@@ -60,6 +72,16 @@ type qwenUsageMetadata struct {
 	CachedContentCount2   int `json:"cached_content_token_count"`
 	ThoughtsTokenCount    int `json:"thoughtsTokenCount"`
 	ThoughtsTokenCount2   int `json:"thoughts_token_count"`
+}
+
+// block maps the snake/camel usageMetadata onto the shared geminiUsageBlock.
+func (u qwenUsageMetadata) block() geminiUsageBlock {
+	return geminiUsageBlock{
+		PromptTokenCount:        qwenFirst(u.PromptTokenCount, u.PromptTokenCount2),
+		CandidatesTokenCount:    qwenFirst(u.CandidatesTokenCount, u.CandidatesTokenCount2),
+		CachedContentTokenCount: qwenFirst(u.CachedContentCount, u.CachedContentCount2),
+		ThoughtsTokenCount:      qwenFirst(u.ThoughtsTokenCount, u.ThoughtsTokenCount2),
+	}
 }
 
 // scanQwen walks each base dir for *.jsonl files (default ~/.qwen/projects/**),
@@ -157,16 +179,9 @@ func qwenParseLine(line []byte, defaultSession, pathProject string) (usage.Event
 		return usage.Event{}, false, err
 	}
 
-	input, output, cached, reasoning, has := qwenTokenCounts(&ql)
+	block, has := qwenMessageBlock(&ql)
 	if !has {
 		return usage.Event{}, false, nil // non-usage line
-	}
-
-	// input is inclusive of cached prompt tokens; subtract so cache reads are
-	// not double-counted against input.
-	in := input - cached
-	if in < 0 {
-		in = 0
 	}
 
 	model := ql.Message.Model
@@ -174,17 +189,16 @@ func qwenParseLine(line []byte, defaultSession, pathProject string) (usage.Event
 		model = ql.Model
 	}
 
+	// canonical() does the input-minus-cached split (input is inclusive of cached
+	// prompt tokens) and the reasoning mapping.
 	ev := usage.Event{
-		Agent:           agentQwen,
-		MessageID:       ql.Message.ID,
-		Model:           model,
-		SessionID:       ql.SessionID,
-		InputTokens:     in,
-		OutputTokens:    output,
-		CacheReadTokens: cached,
-		ReasoningTokens: reasoning,
-		BillingType:     usage.BillingAPI,
+		Agent:       agentQwen,
+		MessageID:   ql.Message.ID,
+		Model:       model,
+		SessionID:   ql.SessionID,
+		BillingType: usage.BillingAPI,
 	}
+	block.canonical().apply(&ev)
 	if ev.SessionID == "" {
 		ev.SessionID = defaultSession
 	}
@@ -205,26 +219,16 @@ func qwenParseLine(line []byte, defaultSession, pathProject string) (usage.Event
 	return ev, true, nil
 }
 
-// qwenTokenCounts extracts (input, output, cached, reasoning) from whichever
-// usage shape the line carries. has=false means no usage block at all.
-func qwenTokenCounts(ql *qwenLine) (input, output, cached, reasoning int, has bool) {
+// qwenMessageBlock returns the usage block for whichever shape the line carries.
+// has=false means no usage block at all.
+func qwenMessageBlock(ql *qwenLine) (geminiUsageBlock, bool) {
 	if ql.Usage != nil {
-		u := ql.Usage
-		input = qwenFirst(u.InputTokens, u.PromptTokens)
-		output = qwenFirst(u.OutputTokens, u.CompletionTokens)
-		cached = qwenFirst(u.CacheReadTokens, u.CachedTokens)
-		reasoning = qwenFirst(u.ReasoningTokens, u.ThoughtsTokens)
-		return input, output, cached, reasoning, true
+		return ql.Usage.block(), true
 	}
 	if ql.UsageMetadata != nil {
-		u := ql.UsageMetadata
-		input = qwenFirst(u.PromptTokenCount, u.PromptTokenCount2)
-		output = qwenFirst(u.CandidatesTokenCount, u.CandidatesTokenCount2)
-		cached = qwenFirst(u.CachedContentCount, u.CachedContentCount2)
-		reasoning = qwenFirst(u.ThoughtsTokenCount, u.ThoughtsTokenCount2)
-		return input, output, cached, reasoning, true
+		return ql.UsageMetadata.block(), true
 	}
-	return 0, 0, 0, 0, false
+	return geminiUsageBlock{}, false
 }
 
 // qwenFirst returns a if non-zero, else b (synonym fallback).

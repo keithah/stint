@@ -259,18 +259,22 @@ func octofriendBuildEvent(inTok, outTok, cReadTok, cWriteTok, reasonTok sql.Null
 	ts, tzMin := normalizeTimestamp(sqliteStr(tsRaw))
 
 	ev := usage.Event{
-		Agent:               agentOctofriend,
-		SessionID:           sqliteStr(sess),
-		Model:               modelName,
-		InputTokens:         input,
-		OutputTokens:        output,
-		CacheReadTokens:     cacheRead,
-		CacheCreate5mTokens: cacheWrite,
-		ReasoningTokens:     reasoning,
-		Timestamp:           ts,
-		TZOffsetMinutes:     tzMin,
-		BillingType:         usage.BillingAPI,
+		Agent:           agentOctofriend,
+		SessionID:       sqliteStr(sess),
+		Model:           modelName,
+		Timestamp:       ts,
+		TZOffsetMinutes: tzMin,
+		BillingType:     usage.BillingAPI,
 	}
+	// Single cache-creation count with no 5m/1h split; preserve in the 5m
+	// bucket (matching the Claude lumping convention).
+	tokenUsage{
+		Input:         input,
+		Output:        output,
+		CacheRead:     cacheRead,
+		CacheCreate5m: cacheWrite,
+		Reasoning:     reasoning,
+	}.apply(&ev)
 
 	if !ev.HasUsage() {
 		return usage.Event{}, false

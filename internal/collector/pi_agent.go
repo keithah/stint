@@ -33,7 +33,9 @@ type piAgentLine struct {
 
 // piAgentUsage is the per-message token block. The first non-zero of each synonym
 // pair wins. input is treated as inclusive of cache reads, so InputTokens is
-// stored as input-cacheRead.
+// stored as input-cacheRead. It also carries a cache_creation write count plus an
+// optional 5m/1h split, which no shared provider block models, so canonical()
+// assembles the tokenUsage directly.
 type piAgentUsage struct {
 	InputTokens      int `json:"input_tokens"`
 	PromptTokens     int `json:"prompt_tokens"`
@@ -46,6 +48,30 @@ type piAgentUsage struct {
 	CacheCreate1h    int `json:"cache_creation_1h_tokens"`
 	ReasoningTokens  int `json:"reasoning_tokens"`
 	ThoughtsTokens   int `json:"thoughts_tokens"`
+}
+
+// canonical resolves the synonym pairs and applies the pi-agent conventions:
+// input is inclusive of cache reads (subtract them), and the cache-creation
+// count goes to the explicit 5m/1h split when present, else lumps into 5m.
+func (u piAgentUsage) canonical() tokenUsage {
+	cacheRead := piAgentFirst(u.CacheReadTokens, u.CachedTokens)
+	input := piAgentFirst(u.InputTokens, u.PromptTokens) - cacheRead
+	if input < 0 {
+		input = 0
+	}
+	t := tokenUsage{
+		Input:     input,
+		Output:    piAgentFirst(u.OutputTokens, u.CompletionTokens),
+		CacheRead: cacheRead,
+		Reasoning: piAgentFirst(u.ReasoningTokens, u.ThoughtsTokens),
+	}
+	if u.CacheCreate5m != 0 || u.CacheCreate1h != 0 {
+		t.CacheCreate5m = u.CacheCreate5m
+		t.CacheCreate1h = u.CacheCreate1h
+	} else {
+		t.CacheCreate5m = u.CacheWriteTokens
+	}
+	return t
 }
 
 // scanPiAgent walks each base dir for *.jsonl files (default
@@ -108,38 +134,15 @@ func piAgentParseLine(line []byte, defaultSession, project string) (usage.Event,
 	if pl.Usage == nil {
 		return usage.Event{}, false, nil // non-usage line
 	}
-	u := pl.Usage
-
-	input := piAgentFirst(u.InputTokens, u.PromptTokens)
-	output := piAgentFirst(u.OutputTokens, u.CompletionTokens)
-	cacheRead := piAgentFirst(u.CacheReadTokens, u.CachedTokens)
-	reasoning := piAgentFirst(u.ReasoningTokens, u.ThoughtsTokens)
-
-	// input is inclusive of cache reads; subtract so they are not double-counted.
-	in := input - cacheRead
-	if in < 0 {
-		in = 0
-	}
 
 	ev := usage.Event{
-		Agent:           agentPiAgent,
-		MessageID:       pl.ID,
-		Model:           pl.Model,
-		SessionID:       pl.SessionID,
-		InputTokens:     in,
-		OutputTokens:    output,
-		CacheReadTokens: cacheRead,
-		ReasoningTokens: reasoning,
-		BillingType:     usage.BillingAPI,
+		Agent:       agentPiAgent,
+		MessageID:   pl.ID,
+		Model:       pl.Model,
+		SessionID:   pl.SessionID,
+		BillingType: usage.BillingAPI,
 	}
-	// Prefer the explicit 5m/1h split; otherwise lump any cache write count into
-	// the 5m bucket.
-	if u.CacheCreate5m != 0 || u.CacheCreate1h != 0 {
-		ev.CacheCreate5mTokens = u.CacheCreate5m
-		ev.CacheCreate1hTokens = u.CacheCreate1h
-	} else {
-		ev.CacheCreate5mTokens = u.CacheWriteTokens
-	}
+	pl.Usage.canonical().apply(&ev)
 	if ev.SessionID == "" {
 		ev.SessionID = defaultSession
 	}

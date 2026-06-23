@@ -104,6 +104,7 @@ func (u openAIUsageBlock) canonical() tokenUsage {
 type geminiUsageBlock struct {
 	PromptTokenCount        int `json:"promptTokenCount"`
 	PromptTokens            int `json:"prompt"`
+	InputTokens             int `json:"input"`
 	CandidatesTokenCount    int `json:"candidatesTokenCount"`
 	OutputTokens            int `json:"output"`
 	CachedContentTokenCount int `json:"cachedContentTokenCount"`
@@ -114,7 +115,7 @@ type geminiUsageBlock struct {
 
 func (u geminiUsageBlock) canonical() tokenUsage {
 	cached := firstNonZero(u.CachedContentTokenCount, u.CachedTokens)
-	input := firstNonZero(u.PromptTokenCount, u.PromptTokens) - cached
+	input := firstNonZero(u.PromptTokenCount, u.PromptTokens, u.InputTokens) - cached
 	if input < 0 {
 		input = 0
 	}

@@ -26,21 +26,13 @@ const agentKimi = "kimi"
 // completion_tokens -> OutputTokens. Lines without a usage block (user/system/
 // tool messages) are skipped.
 type kimiLine struct {
-	Type      string `json:"type"`
-	Timestamp string `json:"timestamp"`
-	SessionID string `json:"session_id"`
-	Cwd       string `json:"cwd"`
-	ID        string `json:"id"`
-	Model     string `json:"model"`
-	Usage     *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		CachedTokens     int `json:"cached_tokens"`
-		// prompt_tokens_details.cached_tokens is the alternative OpenAI nesting.
-		PromptTokensDetails *struct {
-			CachedTokens int `json:"cached_tokens"`
-		} `json:"prompt_tokens_details"`
-	} `json:"usage"`
+	Type      string            `json:"type"`
+	Timestamp string            `json:"timestamp"`
+	SessionID string            `json:"session_id"`
+	Cwd       string            `json:"cwd"`
+	ID        string            `json:"id"`
+	Model     string            `json:"model"`
+	Usage     *openAIUsageBlock `json:"usage"`
 }
 
 // kimiBaseDirs are the two default session roots Kimi/Moonshot writes to.
@@ -140,29 +132,16 @@ func parseKimiLine(line []byte, defaultSession, pathProject string) (usage.Event
 	if cl.Usage == nil {
 		return usage.Event{}, false, nil // non-usage line
 	}
-	u := cl.Usage
 
-	cached := u.CachedTokens
-	if cached == 0 && u.PromptTokensDetails != nil {
-		cached = u.PromptTokensDetails.CachedTokens
-	}
-
-	// OpenAI shape: prompt_tokens is the TOTAL including cached tokens. Subtract
-	// the cached count so cache reads are not counted twice.
-	input := u.PromptTokens - cached
-	if input < 0 {
-		input = 0
-	}
-
+	// OpenAI shape: prompt_tokens is the TOTAL including cached tokens.
+	// canonical() subtracts the cached count so cache reads are not counted twice.
 	ev := usage.Event{
-		Agent:           agentKimi,
-		MessageID:       cl.ID,
-		Model:           cl.Model,
-		InputTokens:     input,
-		OutputTokens:    u.CompletionTokens,
-		CacheReadTokens: cached,
-		BillingType:     usage.BillingAPI,
+		Agent:       agentKimi,
+		MessageID:   cl.ID,
+		Model:       cl.Model,
+		BillingType: usage.BillingAPI,
 	}
+	cl.Usage.canonical().apply(&ev)
 
 	ev.SessionID = cl.SessionID
 	if ev.SessionID == "" {

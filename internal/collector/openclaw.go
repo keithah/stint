@@ -30,11 +30,8 @@ type openClawLine struct {
 		ID    string `json:"id"`
 		Model string `json:"model"`
 		Usage *struct {
-			InputTokens         int `json:"input_tokens"`
-			OutputTokens        int `json:"output_tokens"`
-			CacheCreationTokens int `json:"cache_creation_input_tokens"`
-			CacheReadTokens     int `json:"cache_read_input_tokens"`
-			ReasoningTokens     int `json:"reasoning_tokens"`
+			anthropicUsageBlock
+			ReasoningTokens int `json:"reasoning_tokens"`
 		} `json:"usage"`
 	} `json:"message"`
 }
@@ -129,27 +126,22 @@ func parseOpenClawLine(line []byte, defaultSession, pathProject string) (usage.E
 	}
 	u := cl.Message.Usage
 
+	ev := usage.Event{
+		Agent:       agentOpenClaw,
+		MessageID:   cl.Message.ID,
+		RequestID:   cl.RequestID,
+		Model:       cl.Message.Model,
+		BillingType: usage.BillingSubscription,
+	}
+	u.canonical().apply(&ev)
+	ev.ReasoningTokens = u.ReasoningTokens
+
 	// OpenClaw mirrors Anthropic semantics: input_tokens is inclusive of cached
 	// input. Subtract the cached count from input and route it to cache_read so
 	// it is not counted twice.
-	input := u.InputTokens - u.CacheReadTokens
-	if input < 0 {
-		input = 0
-	}
-
-	ev := usage.Event{
-		Agent:           agentOpenClaw,
-		MessageID:       cl.Message.ID,
-		RequestID:       cl.RequestID,
-		Model:           cl.Message.Model,
-		InputTokens:     input,
-		OutputTokens:    u.OutputTokens,
-		CacheReadTokens: u.CacheReadTokens,
-		ReasoningTokens: u.ReasoningTokens,
-		// OpenClaw reports a single cache-creation count with no 5m/1h split;
-		// preserve it in the 5m bucket (matching the Claude lumping convention).
-		CacheCreate5mTokens: u.CacheCreationTokens,
-		BillingType:         usage.BillingSubscription,
+	ev.InputTokens -= u.CacheReadTokens
+	if ev.InputTokens < 0 {
+		ev.InputTokens = 0
 	}
 
 	// Session: explicit field, else file basename.
