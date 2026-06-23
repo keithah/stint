@@ -59,7 +59,7 @@ func routeExcludedFromSpecEndpointIndex(path string) bool {
 		return true
 	}
 	switch path {
-	case "/healthz", "/auth/github/login", "/auth/github/callback", "/auth/logout":
+	case "/healthz", "/healthz/ingestion", "/auth/github/login", "/auth/github/callback", "/auth/logout":
 		return true
 	default:
 		return false
