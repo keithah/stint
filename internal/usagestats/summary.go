@@ -63,14 +63,129 @@ type usageBucket struct {
 	eventCount  int
 }
 
+// Group is one pre-summed set of usage events that is homogeneous in every
+// field that affects pricing (model, billing type, and whether a provider cost
+// was present). Because pricing is linear per token type, pricing a group of
+// summed tokens equals summing the per-event prices, so the SQL GROUP BY +
+// per-group pricing collapses tens of thousands of events into a few hundred
+// groups while producing byte-identical numbers. Day is already bucketed into
+// the user's timezone (YYYY-MM-DD).
+type Group struct {
+	Agent       string
+	Model       string
+	Project     string
+	Day         string
+	BillingType string
+	HasProvided bool
+
+	Input         int
+	Output        int
+	CacheCreate5m int
+	CacheCreate1h int
+	CacheRead     int
+	Reasoning     int
+
+	ProvidedCostUSD float64
+	EventCount      int
+}
+
+func (g Group) tokens() int {
+	return g.Input + g.Output + g.CacheCreate5m + g.CacheCreate1h + g.CacheRead + g.Reasoning
+}
+
+// syntheticEvent rebuilds the usage.Event the pricing engine expects from a
+// group's summed tokens, so the per-group pricing call is the exact same code
+// path as the per-event one (cost/marginal/ModelResolved semantics unchanged).
+// A per-agent billingOverride wins over the group's stored billing type so the
+// user can reclassify an agent as subscription (zero marginal) or api at view
+// time without re-collecting events.
+func (g Group) syntheticEvent(billingOverride map[string]usage.BillingType) usage.Event {
+	billing := usage.BillingType(g.BillingType)
+	if override, ok := billingOverride[g.Agent]; ok {
+		billing = override
+	}
+	e := usage.Event{
+		Agent:               g.Agent,
+		Model:               g.Model,
+		Project:             g.Project,
+		BillingType:         billing,
+		InputTokens:         g.Input,
+		OutputTokens:        g.Output,
+		CacheCreate5mTokens: g.CacheCreate5m,
+		CacheCreate1hTokens: g.CacheCreate1h,
+		CacheReadTokens:     g.CacheRead,
+		ReasoningTokens:     g.Reasoning,
+	}
+	if g.HasProvided {
+		cost := g.ProvidedCostUSD
+		e.CostUSDProvided = &cost
+	}
+	return e
+}
+
 // Summarize prices and aggregates the events into a Summary. Days are bucketed
 // in loc (defaulting to UTC). A nil engine leaves costs at zero and records
-// every non-empty model as unpriced.
-func Summarize(events []usage.Event, engine *pricing.Engine, mode pricing.Mode, loc *time.Location) Summary {
+// every non-empty model as unpriced. billingOverride, keyed by agent, reclasses
+// an agent's events as subscription/api at view time (nil = use stored billing).
+// It groups events in Go (by the same key SQL uses) then defers to
+// SummarizeAggregates, so the accumulation logic lives in one place.
+func Summarize(events []usage.Event, engine *pricing.Engine, mode pricing.Mode, loc *time.Location, billingOverride map[string]usage.BillingType) Summary {
 	if loc == nil {
 		loc = time.UTC
 	}
 
+	type groupKey struct {
+		agent, model, project, day, billing string
+		hasProvided                         bool
+	}
+	order := make([]groupKey, 0)
+	groups := map[groupKey]*Group{}
+	for _, event := range events {
+		key := groupKey{
+			agent:       event.Agent,
+			model:       event.Model,
+			project:     event.Project,
+			day:         usageEventDay(event, loc),
+			billing:     string(event.BillingType),
+			hasProvided: event.CostUSDProvided != nil,
+		}
+		g := groups[key]
+		if g == nil {
+			g = &Group{
+				Agent:       key.agent,
+				Model:       key.model,
+				Project:     key.project,
+				Day:         key.day,
+				BillingType: key.billing,
+				HasProvided: key.hasProvided,
+			}
+			groups[key] = g
+			order = append(order, key)
+		}
+		g.Input += event.InputTokens
+		g.Output += event.OutputTokens
+		g.CacheCreate5m += event.CacheCreate5mTokens
+		g.CacheCreate1h += event.CacheCreate1hTokens
+		g.CacheRead += event.CacheReadTokens
+		g.Reasoning += event.ReasoningTokens
+		if event.CostUSDProvided != nil {
+			g.ProvidedCostUSD += *event.CostUSDProvided
+		}
+		g.EventCount++
+	}
+
+	out := make([]Group, 0, len(order))
+	for _, key := range order {
+		out = append(out, *groups[key])
+	}
+	return SummarizeAggregates(out, engine, mode, billingOverride)
+}
+
+// SummarizeAggregates prices each pre-summed group and accumulates the result
+// into a Summary. Days are already bucketed (g.Day). A nil engine leaves costs
+// at zero and records every non-empty model as unpriced. billingOverride, keyed
+// by agent, reclasses an agent's billing type at view time (nil = use stored).
+func SummarizeAggregates(groups []Group, engine *pricing.Engine, mode pricing.Mode, billingOverride map[string]usage.BillingType) Summary {
 	var total Totals
 	byAgent := map[string]*usageBucket{}
 	byModel := map[string]*usageBucket{}
@@ -82,7 +197,7 @@ func Summarize(events []usage.Event, engine *pricing.Engine, mode pricing.Mode, 
 	byDay := map[string]*dayBucket{}
 	unpricedSet := map[string]struct{}{}
 
-	bump := func(buckets map[string]*usageBucket, key string, cost, marginal float64, tokens int) {
+	bump := func(buckets map[string]*usageBucket, key string, cost, marginal float64, tokens, count int) {
 		b := buckets[key]
 		if b == nil {
 			b = &usageBucket{name: key}
@@ -91,42 +206,41 @@ func Summarize(events []usage.Event, engine *pricing.Engine, mode pricing.Mode, 
 		b.costUSD += cost
 		b.marginalUSD += marginal
 		b.tokens += tokens
-		b.eventCount++
+		b.eventCount += count
 	}
 
-	for _, event := range events {
-		total.EventCount++
-		total.InputTokens += event.InputTokens
-		total.OutputTokens += event.OutputTokens
-		total.CacheCreateTokens += event.CacheCreate5mTokens + event.CacheCreate1hTokens
-		total.CacheReadTokens += event.CacheReadTokens
-		total.ReasoningTokens += event.ReasoningTokens
-		tokens := event.TotalTokens()
+	for _, g := range groups {
+		total.EventCount += g.EventCount
+		total.InputTokens += g.Input
+		total.OutputTokens += g.Output
+		total.CacheCreateTokens += g.CacheCreate5m + g.CacheCreate1h
+		total.CacheReadTokens += g.CacheRead
+		total.ReasoningTokens += g.Reasoning
+		tokens := g.tokens()
 
 		var result pricing.Result
 		if engine != nil {
-			result = engine.Price(event, mode)
+			result = engine.Price(g.syntheticEvent(billingOverride), mode)
 		}
 		total.CostUSD += result.USD
 		total.MarginalUSD += result.MarginalUSD
 
 		// Price already resolved the model (result.ModelResolved); reuse it instead
-		// of a second engine.Has lookup per event on this polled hot path.
+		// of a second engine.Has lookup on this polled hot path.
 		if engine == nil || !result.ModelResolved {
-			if event.Model != "" {
-				unpricedSet[event.Model] = struct{}{}
+			if g.Model != "" {
+				unpricedSet[g.Model] = struct{}{}
 			}
 		}
 
-		bump(byAgent, event.Agent, result.USD, result.MarginalUSD, tokens)
-		bump(byModel, event.Model, result.USD, result.MarginalUSD, tokens)
-		bump(byProject, event.Project, result.USD, result.MarginalUSD, tokens)
+		bump(byAgent, g.Agent, result.USD, result.MarginalUSD, tokens, g.EventCount)
+		bump(byModel, g.Model, result.USD, result.MarginalUSD, tokens, g.EventCount)
+		bump(byProject, g.Project, result.USD, result.MarginalUSD, tokens, g.EventCount)
 
-		day := usageEventDay(event, loc)
-		d := byDay[day]
+		d := byDay[g.Day]
 		if d == nil {
 			d = &dayBucket{}
-			byDay[day] = d
+			byDay[g.Day] = d
 		}
 		d.cost += result.USD
 		d.marginal += result.MarginalUSD

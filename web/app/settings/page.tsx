@@ -7,6 +7,7 @@ import { AICostsCard } from "@/components/settings/ai-costs-card";
 import { AccountCard } from "@/components/settings/account-card";
 import { ApiKeysCard } from "@/components/settings/api-keys-card";
 import { ApiKeysListCard } from "@/components/settings/api-keys-list-card";
+import { BillingPrefsCard } from "@/components/settings/billing-prefs-card";
 import { CustomPricingCard } from "@/components/settings/custom-pricing-card";
 import { CustomRulesCard } from "@/components/settings/custom-rules-card";
 import { DataExportCard } from "@/components/settings/data-export-card";
@@ -51,6 +52,7 @@ function SettingsContent() {
       <WakaTimeImportCard />
       <AICostsCard />
       <CustomPricingCard />
+      <BillingPrefsCard />
       <CustomRulesCard />
       <AccountCard />
     </div>

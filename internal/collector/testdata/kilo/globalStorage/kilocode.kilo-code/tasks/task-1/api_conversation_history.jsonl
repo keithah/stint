@@ -1,0 +1,4 @@
+{"type":"say","role":"user","ts":1750582800000,"taskId":"task-1"}
+{"type":"api","role":"assistant","ts":1750582801000,"taskId":"task-1","message":{"id":"kilo-msg-1","model":"claude-3-5-sonnet","usage":{"input_tokens":300,"output_tokens":120,"cache_creation_input_tokens":40,"cache_read_input_tokens":100}}}
+{"type":"api","role":"assistant","ts":1750582801000,"taskId":"task-1","message":{"id":"kilo-msg-1","model":"claude-3-5-sonnet","usage":{"input_tokens":300,"output_tokens":120,"cache_creation_input_tokens":40,"cache_read_input_tokens":100}}}
+{"type":"api","role":"assistant","ts":1750582860000,"taskId":"task-1","message":{"id":"kilo-msg-2","model":"gpt-4o","usage":{"input_tokens":90,"output_tokens":30}}}

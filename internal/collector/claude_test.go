@@ -139,34 +139,23 @@ func TestClaudeScanDeterministic(t *testing.T) {
 	}
 }
 
-func TestRegistryStubs(t *testing.T) {
+func TestRegistryAllAgentsRegistered(t *testing.T) {
 	reg := DefaultRegistry()
-	// Implemented adapters: present in the registry. We do NOT call Scan here
-	// because their default paths point at real ~/ data dirs.
-	for _, id := range []string{"claude", "codex", "gemini", "opencode", "goose", "zed",
-		"cursor", "copilot", "openclaw"} {
-		if _, ok := reg[id]; !ok {
-			t.Errorf("implemented agent %q not registered", id)
-		}
-	}
-	// Remaining agents are stubs: registered, emit nothing, note "not implemented".
-	for _, id := range []string{"amp", "qwen", "kimi", "kiro",
-		"kilo", "roo", "cline", "hermes", "pi-agent", "factory-droid",
-		"crush", "octofriend"} {
-		e, ok := reg[id]
+	// Every supported agent now has a real adapter (no stubs). We don't call
+	// Scan here because default paths point at real ~/ data dirs; per-adapter
+	// tests cover parsing against fixtures.
+	for _, id := range []string{
+		"claude", "codex", "gemini", "opencode", "goose", "zed", "cursor", "copilot", "openclaw",
+		"amp", "qwen", "kimi", "kiro", "kilo", "roo", "cline", "hermes", "pi-agent", "factory-droid",
+		"crush", "octofriend",
+	} {
+		entry, ok := reg[id]
 		if !ok {
-			t.Errorf("missing stub agent %q", id)
+			t.Errorf("agent %q not registered", id)
 			continue
 		}
-		ev, rep, err := e.Adapter.Scan(nil, NewState())
-		if err != nil {
-			t.Errorf("stub %s returned error: %v", id, err)
-		}
-		if len(ev) != 0 {
-			t.Errorf("stub %s emitted %d events", id, len(ev))
-		}
-		if rep.Note != "not implemented" {
-			t.Errorf("stub %s note = %q", id, rep.Note)
+		if len(entry.Spec.DefaultPaths) == 0 {
+			t.Errorf("agent %q has no default paths", id)
 		}
 	}
 }

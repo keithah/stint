@@ -1,0 +1,5 @@
+{"type":"user","timestamp":"2026-06-22T09:00:00.000Z","sessionId":"pi-1","cwd":"/home/u/myproj","content":"hello"}
+{"type":"assistant","timestamp":"2026-06-22T09:00:03.000Z","sessionId":"pi-1","cwd":"/home/u/myproj","id":"pmsg_001","model":"pi-1.0","usage":{"input_tokens":600,"output_tokens":150,"cache_read_tokens":200,"cache_creation_tokens":400,"reasoning_tokens":75}}
+{"type":"assistant","timestamp":"2026-06-22T09:00:03.000Z","sessionId":"pi-1","cwd":"/home/u/myproj","id":"pmsg_001","model":"pi-1.0","usage":{"input_tokens":600,"output_tokens":150,"cache_read_tokens":200,"cache_creation_tokens":400,"reasoning_tokens":75}}
+{"type":"assistant","timestamp":"2026-06-22T09:01:00.000Z","sessionId":"pi-1","cwd":"/home/u/myproj","id":"pmsg_002","model":"pi-1.0","usage":{"prompt_tokens":300,"completion_tokens":90,"cached_tokens":50,"thoughts_tokens":20}}
+{"type":"assistant","timestamp":"2026-06-22T09:02:00.000Z","sessionId":"pi-1","id":"pmsg_003","usage":{"input_tokens":10

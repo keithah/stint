@@ -167,6 +167,9 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 	current.GET("/custom_pricing", server.listCustomPricing, requireScope(scopeReadStats), readLimit)
 	current.PUT("/custom_pricing", server.upsertCustomPricing, requireLocalAccountAccess)
 	current.DELETE("/custom_pricing/:model", server.deleteCustomPricing, requireLocalAccountAccess)
+	current.GET("/billing_prefs", server.listBillingPrefs, requireScope(scopeReadStats), readLimit)
+	current.PUT("/billing_prefs", server.upsertBillingPref, requireLocalAccountAccess)
+	current.DELETE("/billing_prefs/:agent", server.deleteBillingPref, requireLocalAccountAccess)
 	current.POST("/file_experts", server.fileExperts, requireScope(scopeReadStats), readLimit)
 	current.GET("/durations", server.durations, requireSummarySliceScope, readLimit)
 	current.GET("/summaries", server.summaries, requireSummaryScope, readLimit)
@@ -491,6 +494,11 @@ func openAPIPaths() map[string]any {
 		put("Upsert a custom AI pricing override", "ai", true),
 	)
 	add("/api/v1/users/current/custom_pricing/{model}", del("Delete a custom AI pricing override", "ai", http.StatusOK, true))
+	add("/api/v1/users/current/billing_prefs",
+		get("List per-agent billing-mode overrides", "ai", true),
+		put("Upsert a per-agent billing-mode override", "ai", true),
+	)
+	add("/api/v1/users/current/billing_prefs/{agent}", del("Delete a per-agent billing-mode override", "ai", http.StatusOK, true))
 	add("/api/v1/users/current/file_experts", withJSON(post("Get file experts", "heartbeats", http.StatusOK, true), "FileExpertsRequest", "FileExpertsResponse"))
 	add("/api/v1/users/current/durations", withQueryParams(withResponse(get("Get durations for a day", "stats", true), "DurationResponse"), "date", "slice_by"))
 	add("/api/v1/users/current/summaries", withQueryParams(withResponse(get("Get summaries for a date range", "stats", true), "SummaryResponse"), "start", "end"))

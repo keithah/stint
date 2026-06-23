@@ -98,6 +98,75 @@ func (s *Store) InsertUsageEvents(ctx context.Context, userID uuid.UUID, events 
 	return result, nil
 }
 
+// UsageAggregate is one pre-summed group of usage events. Tokens are summed in
+// SQL (GROUP BY) so a window of tens of thousands of events collapses to a few
+// hundred groups before the pricing engine runs in Go. The group key is
+// everything that affects per-event pricing — model, billing_type, and whether
+// the event carried a provider cost — so pricing the summed group equals
+// summing per-event prices (pricing is linear per token type). Day is the
+// calendar day in the user's IANA timezone.
+type UsageAggregate struct {
+	Agent       string
+	Model       string
+	Project     string
+	Day         string
+	BillingType string
+	HasProvided bool
+
+	InputTokens         int64
+	OutputTokens        int64
+	CacheCreate5mTokens int64
+	CacheCreate1hTokens int64
+	CacheReadTokens     int64
+	ReasoningTokens     int64
+	ProvidedCostUSD     float64
+	EventCount          int
+}
+
+// UsageAggregatesBetween returns usage events in [start, end) summed into
+// homogeneous pricing groups. The day is bucketed with (ts AT TIME ZONE $tz)::date
+// in the user's IANA timezone (tz). When agent != "" the filter is applied in
+// SQL so it uses the (user_id, agent, ts) index rather than loading and
+// discarding rows in Go.
+func (s *Store) UsageAggregatesBetween(ctx context.Context, userID uuid.UUID, start, end time.Time, agent, tz string) ([]UsageAggregate, error) {
+	if tz == "" {
+		tz = "UTC"
+	}
+	query := `
+		SELECT agent, model, coalesce(project, ''),
+			to_char((ts AT TIME ZONE $4)::date, 'YYYY-MM-DD') AS day,
+			coalesce(billing_type, ''),
+			(cost_usd_provided IS NOT NULL) AS has_provided,
+			sum(input_tokens), sum(output_tokens), sum(cache_create_5m_tokens),
+			sum(cache_create_1h_tokens), sum(cache_read_tokens), sum(reasoning_tokens),
+			coalesce(sum(cost_usd_provided), 0), count(*)
+		FROM usage_events
+		WHERE user_id = $1 AND ts >= $2 AND ts < $3`
+	args := []any{userID, start, end, tz}
+	if agent != "" {
+		query += ` AND agent = $5`
+		args = append(args, agent)
+	}
+	query += ` GROUP BY 1, 2, 3, 4, 5, 6`
+
+	rows, err := s.Pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var aggs []UsageAggregate
+	for rows.Next() {
+		var a UsageAggregate
+		if err := rows.Scan(&a.Agent, &a.Model, &a.Project, &a.Day, &a.BillingType, &a.HasProvided,
+			&a.InputTokens, &a.OutputTokens, &a.CacheCreate5mTokens, &a.CacheCreate1hTokens,
+			&a.CacheReadTokens, &a.ReasoningTokens, &a.ProvidedCostUSD, &a.EventCount); err != nil {
+			return nil, err
+		}
+		aggs = append(aggs, a)
+	}
+	return aggs, rows.Err()
+}
+
 // UsageEventsBetween returns stored events in [start, end) ordered by time.
 func (s *Store) UsageEventsBetween(ctx context.Context, userID uuid.UUID, start, end time.Time) ([]usage.Event, error) {
 	rows, err := s.Pool.Query(ctx, `

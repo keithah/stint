@@ -37,7 +37,12 @@ func (s *Server) usageEventsBlocks(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
 
-	blocks, current := usagestats.Blocks(events, now, mode, engine, userLocation(user))
+	billingOverride, err := s.billingOverridesForUser(c.Request().Context(), user.ID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
+	}
+
+	blocks, current := usagestats.Blocks(events, now, mode, engine, userLocation(user), billingOverride)
 
 	blocksOut := make([]map[string]any, 0, len(blocks))
 	for _, b := range blocks {

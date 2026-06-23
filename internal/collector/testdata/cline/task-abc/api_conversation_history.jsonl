@@ -1,0 +1,5 @@
+{"type":"say","say":"text","ts":1718970400000,"text":"working"}
+{"type":"assistant","ts":1718970401000,"message":{"id":"cmsg_001","model":"claude-3-7-sonnet","usage":{"input_tokens":120,"output_tokens":90,"cache_creation_input_tokens":800,"cache_read_input_tokens":3000}}}
+{"type":"assistant","ts":1718970401000,"message":{"id":"cmsg_001","model":"claude-3-7-sonnet","usage":{"input_tokens":120,"output_tokens":90,"cache_creation_input_tokens":800,"cache_read_input_tokens":3000}}}
+{"type":"say","say":"api_req_started","ts":1718970500000,"model":"claude-3-7-sonnet","text":"{\"tokensIn\":70,\"tokensOut\":30,\"cacheWrites\":200,\"cacheReads\":1500,\"cost\":0.0045}"}
+{"type":"assistant","ts":1718970600000,"message":{"id":"cmsg_002","model":"claude-3-7

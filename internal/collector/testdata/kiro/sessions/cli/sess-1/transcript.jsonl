@@ -1,0 +1,4 @@
+{"type":"user","role":"user","timestamp":"2026-06-22T09:00:00Z","session_id":"sess-1","message_id":"u1"}
+{"type":"assistant","role":"assistant","timestamp":"2026-06-22T09:00:01Z","session_id":"sess-1","message_id":"k-msg-1","model":"claude-3-5-sonnet","usage":{"input_tokens":150,"output_tokens":60,"cache_creation_input_tokens":20,"cache_read_input_tokens":50}}
+{"type":"assistant","role":"assistant","timestamp":"2026-06-22T09:00:01Z","session_id":"sess-1","message_id":"k-msg-1","model":"claude-3-5-sonnet","usage":{"input_tokens":150,"output_tokens":60,"cache_creation_input_tokens":20,"cache_read_input_tokens":50}}
+{"type":"assistant","role":"assistant","timestamp":"2026-06-22T09:01:00Z","session_id":"sess-1","message":{"id":"k-msg-2","model":"gpt-4o","usage":{"input_tokens":80,"output_tokens":40}}}

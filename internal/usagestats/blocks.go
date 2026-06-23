@@ -55,13 +55,16 @@ type CurrentBlock struct {
 //
 // It returns all blocks in chronological order plus the stats for the active
 // block (or nil when none is active / no events). loc defaults to UTC and is
-// used to bucket the end-of-day/month projections.
-func Blocks(events []usage.Event, now time.Time, mode pricing.Mode, engine *pricing.Engine, loc *time.Location) ([]Block, *CurrentBlock) {
+// used to bucket the end-of-day/month projections. billingOverride, keyed by
+// agent, reclasses an agent's billing type at view time before pricing so a
+// subscription-classified agent contributes zero marginal cost (nil = use the
+// stored billing type on each event).
+func Blocks(events []usage.Event, now time.Time, mode pricing.Mode, engine *pricing.Engine, loc *time.Location, billingOverride map[string]usage.BillingType) ([]Block, *CurrentBlock) {
 	if loc == nil {
 		loc = time.UTC
 	}
 
-	blocks, active := buildUsageBlocks(events, now, mode, engine)
+	blocks, active := buildUsageBlocks(events, now, mode, engine, billingOverride)
 	if active == nil {
 		return blocks, nil
 	}
@@ -71,7 +74,7 @@ func Blocks(events []usage.Event, now time.Time, mode pricing.Mode, engine *pric
 
 // buildUsageBlocks is the pure block-building core, separated so the assignment
 // logic can be tested independently of projection math.
-func buildUsageBlocks(events []usage.Event, now time.Time, mode pricing.Mode, engine *pricing.Engine) ([]Block, *Block) {
+func buildUsageBlocks(events []usage.Event, now time.Time, mode pricing.Mode, engine *pricing.Engine, billingOverride map[string]usage.BillingType) ([]Block, *Block) {
 	type timed struct {
 		ts    time.Time
 		event usage.Event
@@ -93,6 +96,9 @@ func buildUsageBlocks(events []usage.Event, now time.Time, mode pricing.Mode, en
 	cur := -1
 
 	priceTokens := func(e usage.Event) (float64, int) {
+		if override, ok := billingOverride[e.Agent]; ok {
+			e.BillingType = override
+		}
 		var cost float64
 		if engine != nil {
 			cost = engine.Price(e, mode).USD

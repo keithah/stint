@@ -140,6 +140,8 @@ Data dumps require `STORAGE_TYPE=local` and write completed JSON snapshots under
 - `GET /api/v1/users/current/usage_events/blocks`
 - `GET/PUT /api/v1/users/current/custom_pricing`
 - `DELETE /api/v1/users/current/custom_pricing/:model`
+- `GET/PUT /api/v1/users/current/billing_prefs`
+- `DELETE /api/v1/users/current/billing_prefs/:agent`
 - `POST /api/v1/users/current/file_experts`
 - `GET /api/v1/users/current/durations`
 - `GET /api/v1/users/current/summaries`

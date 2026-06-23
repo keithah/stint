@@ -1,0 +1,6 @@
+{"type":"user","timestamp":"2026-06-22T08:00:00Z","session_id":"k-sess-1","cwd":"/home/dev/proj-a"}
+{"type":"assistant","timestamp":"2026-06-22T08:00:01Z","session_id":"k-sess-1","cwd":"/home/dev/proj-a","id":"kmsg-1","model":"kimi-k2","usage":{"prompt_tokens":1000,"completion_tokens":250,"cached_tokens":400}}
+{"type":"assistant","timestamp":"2026-06-22T08:00:01Z","session_id":"k-sess-1","cwd":"/home/dev/proj-a","id":"kmsg-1","model":"kimi-k2","usage":{"prompt_tokens":1000,"completion_tokens":250,"cached_tokens":400}}
+{"type":"assistant","timestamp":"2026-06-22T08:01:00Z","session_id":"k-sess-1","cwd":"/home/dev/proj-a","id":"kmsg-2","model":"kimi-k2","usage":{"prompt_tokens":500,"completion_tokens":120,"cached_tokens":0}}
+{"type":"system","timestamp":"2026-06-22T08:02:00Z","session_id":"k-sess-1"}
+{not valid json at all

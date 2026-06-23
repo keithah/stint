@@ -1,0 +1,5 @@
+{"type":"say","say":"text","ts":1718960400000,"text":"thinking..."}
+{"type":"assistant","ts":1718960401000,"message":{"id":"rmsg_001","model":"claude-sonnet-4-5","usage":{"input_tokens":200,"output_tokens":80,"cache_creation_input_tokens":1000,"cache_read_input_tokens":5000,"cache_creation":{"ephemeral_5m_input_tokens":700,"ephemeral_1h_input_tokens":300}}}}
+{"type":"assistant","ts":1718960401000,"message":{"id":"rmsg_001","model":"claude-sonnet-4-5","usage":{"input_tokens":200,"output_tokens":80,"cache_creation_input_tokens":1000,"cache_read_input_tokens":5000,"cache_creation":{"ephemeral_5m_input_tokens":700,"ephemeral_1h_input_tokens":300}}}}
+{"type":"say","say":"api_req_started","ts":1718960500000,"model":"claude-sonnet-4-5","text":"{\"request\":\"...\",\"tokensIn\":150,\"tokensOut\":60,\"cacheWrites\":400,\"cacheReads\":2000,\"cost\":0.0123}"}
+{"type":"assistant","ts":1718960600000,"message":{"id":"rmsg_002","model":"claude-sonnet-4-5","usage":{"input_tokens":40
