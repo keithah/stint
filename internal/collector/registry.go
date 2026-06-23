@@ -59,19 +59,11 @@ type Entry struct {
 // Registry maps agent id -> entry.
 type Registry map[string]Entry
 
-// stub returns an adapter that emits nothing and reports "not implemented". It
-// keeps unimplemented agents discoverable without special-casing them in the
-// runner.
-func stub() Adapter {
-	return AdapterFunc(func(_ []string, _ *State) ([]usage.Event, ScanReport, error) {
-		return nil, ScanReport{Note: "not implemented"}, nil
-	})
-}
-
-// DefaultRegistry returns the built-in registry. Nine agents have real adapters
-// (claude, codex, gemini, opencode, goose, zed, cursor, copilot, openclaw); the
-// remaining entries are stubs whose specs already describe their default
-// locations, so implementing one is just swapping stub() for a parser.
+// DefaultRegistry returns the built-in registry. Every supported agent has a
+// real adapter; each AgentSpec describes its default data locations (overridable
+// per-agent via STINT_COLLECT_<AGENT>_DIR). Adapters whose formats have not yet
+// been verified against real on-disk data are marked "schema-only" in their
+// source.
 func DefaultRegistry() Registry {
 	r := Registry{}
 
@@ -121,23 +113,29 @@ func DefaultRegistry() Registry {
 		Format:       "openclaw-jsonl",
 	}, AdapterFunc(scanOpenClaw))
 
-	stubs := []AgentSpec{
-		{ID: "amp", DefaultPaths: []string{"~/.amp"}, Format: "amp"},
-		{ID: "qwen", DefaultPaths: []string{"~/.qwen"}, Format: "qwen"},
-		{ID: "kimi", DefaultPaths: []string{"~/.kimi"}, Format: "kimi"},
-		{ID: "kiro", DefaultPaths: []string{"~/.kiro"}, Format: "kiro"},
-		{ID: "kilo", DefaultPaths: []string{"~/.kilo"}, Format: "kilo"},
-		{ID: "roo", DefaultPaths: []string{"~/.roo"}, Format: "roo"},
-		{ID: "cline", DefaultPaths: []string{"~/.cline"}, Format: "cline"},
-		{ID: "hermes", DefaultPaths: []string{"~/.hermes"}, Format: "hermes"},
-		{ID: "pi-agent", DefaultPaths: []string{"~/.pi-agent"}, Format: "pi-agent"},
-		{ID: "factory-droid", DefaultPaths: []string{"~/.factory"}, Format: "factory-droid"},
-		{ID: "crush", DefaultPaths: []string{"~/.crush"}, Format: "crush"},
-		{ID: "octofriend", DefaultPaths: []string{"~/.octofriend"}, Format: "octofriend"},
+	// VS Code globalStorage roots (local + remote + macOS) for editor-extension
+	// agents; the adapter appends its extension's tasks/ subdir.
+	codeGlobalStorage := func(ext string) []string {
+		return []string{
+			"~/.config/Code/User/globalStorage/" + ext,
+			"~/.vscode-server/data/User/globalStorage/" + ext,
+			"~/Library/Application Support/Code/User/globalStorage/" + ext,
+		}
 	}
-	for _, s := range stubs {
-		r.register(s, stub())
-	}
+
+	r.register(AgentSpec{ID: "qwen", DefaultPaths: []string{"~/.qwen/projects"}, Format: "qwen-jsonl"}, AdapterFunc(scanQwen))
+	r.register(AgentSpec{ID: "roo", DefaultPaths: codeGlobalStorage("rooveterinaryinc.roo-cline/tasks"), Format: "roo-jsonl"}, AdapterFunc(scanRoo))
+	r.register(AgentSpec{ID: "cline", DefaultPaths: codeGlobalStorage("saoudrizwan.claude-dev/tasks"), Format: "cline-jsonl"}, AdapterFunc(scanCline))
+	r.register(AgentSpec{ID: "pi-agent", DefaultPaths: []string{"~/.pi/agent/sessions"}, Format: "pi-agent-jsonl"}, AdapterFunc(scanPiAgent))
+	r.register(AgentSpec{ID: "amp", DefaultPaths: []string{"~/.local/share/amp/threads"}, Format: "amp-json"}, AdapterFunc(scanAmp))
+	r.register(AgentSpec{ID: "crush", DefaultPaths: []string{"~/.local/share/crush"}, Format: "crush-json"}, AdapterFunc(scanCrush))
+	r.register(AgentSpec{ID: "kimi", DefaultPaths: []string{"~/.kimi/sessions", "~/.kimi-code/sessions"}, Format: "kimi-jsonl"}, AdapterFunc(scanKimi))
+	r.register(AgentSpec{ID: "factory-droid", DefaultPaths: []string{"~/.factory/sessions"}, Format: "factory-droid-jsonl"}, AdapterFunc(scanFactoryDroid))
+	r.register(AgentSpec{ID: "hermes", DefaultPaths: []string{"~/.hermes"}, Format: "hermes-sqlite"}, AdapterFunc(scanHermes))
+	r.register(AgentSpec{ID: "octofriend", DefaultPaths: []string{"~/.local/share/octofriend"}, Format: "octofriend-sqlite"}, AdapterFunc(scanOctofriend))
+	r.register(AgentSpec{ID: "kiro", DefaultPaths: []string{"~/.kiro/sessions/cli", "~/.local/share/kiro-cli"}, Format: "kiro-mixed"}, AdapterFunc(scanKiro))
+	r.register(AgentSpec{ID: "kilo", DefaultPaths: append([]string{"~/.local/share/kilo"}, codeGlobalStorage("kilocode.kilo-code/tasks")...), Format: "kilo-mixed"}, AdapterFunc(scanKilo))
+
 	return r
 }
 

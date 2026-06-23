@@ -1,0 +1,51 @@
+{
+  "id": "thread-abc",
+  "cwd": "/home/dev/widget",
+  "createdAt": "2026-06-20T10:00:00Z",
+  "messages": [
+    {
+      "id": "u-1",
+      "role": "user",
+      "timestamp": "2026-06-20T10:00:01Z"
+    },
+    {
+      "id": "amsg-1",
+      "role": "assistant",
+      "model": "claude-sonnet-4-5",
+      "timestamp": "2026-06-20T10:00:02Z",
+      "usage": {
+        "input_tokens": 120,
+        "output_tokens": 300,
+        "cache_creation_input_tokens": 500,
+        "cache_read_input_tokens": 2000,
+        "reasoning_tokens": 40
+      }
+    },
+    {
+      "id": "amsg-1",
+      "role": "assistant",
+      "model": "claude-sonnet-4-5",
+      "timestamp": "2026-06-20T10:00:02Z",
+      "usage": {
+        "input_tokens": 120,
+        "output_tokens": 300,
+        "cache_creation_input_tokens": 500,
+        "cache_read_input_tokens": 2000,
+        "reasoning_tokens": 40
+      }
+    },
+    {
+      "id": "amsg-2",
+      "role": "assistant",
+      "model": "claude-opus-4",
+      "timestamp": "2026-06-20T10:01:00Z",
+      "usage": {
+        "input_tokens": 80,
+        "output_tokens": 150,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 1000,
+        "reasoning_tokens": 0
+      }
+    }
+  ]
+}

@@ -53,11 +53,15 @@ func (s *Server) listUsageEvents(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"data": events})
 }
 
-// usageEventsSummary loads events for the window, prices each one, and returns
-// aggregated cost/token totals plus breakdowns by agent, model, project, and
-// day. Days are bucketed in the user's profile timezone. The aggregation itself
-// lives in internal/usagestats; the handler only resolves params, loads events,
-// and serializes the result (adding range/cost_mode).
+// usageEventsSummary sums token counts per pricing group in SQL (GROUP BY),
+// prices each group in Go, and returns aggregated cost/token totals plus
+// breakdowns by agent, model, project, and day. Summing in SQL collapses a
+// window of tens of thousands of events into a few hundred groups; pricing is
+// linear per token type, so the result is byte-identical to pricing each event.
+// Days are bucketed in the user's profile timezone (in SQL). The agent filter
+// runs in SQL so it uses the (user_id, agent, ts) index. The aggregation itself
+// lives in internal/usagestats; the handler resolves params, maps db rows to
+// usagestats.Group, and serializes the result (adding range/cost_mode).
 func (s *Server) usageEventsSummary(c echo.Context) error {
 	user := userFromContext(c)
 	now := time.Now()
@@ -68,18 +72,37 @@ func (s *Server) usageEventsSummary(c echo.Context) error {
 	}
 	mode := usageCostMode(c)
 
-	events, err := s.Store.UsageEventsBetween(c.Request().Context(), user.ID, start, end)
+	aggs, err := s.Store.UsageAggregatesBetween(c.Request().Context(), user.ID, start, end, c.QueryParam("agent"), userLocation(user).String())
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
-	events = filterEventsByAgent(events, c.QueryParam("agent"))
 
 	engine, err := s.pricingEngineForUser(c.Request().Context(), user.ID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
 
-	summary := usagestats.Summarize(events, engine, mode, userLocation(user))
+	groups := make([]usagestats.Group, 0, len(aggs))
+	for _, a := range aggs {
+		groups = append(groups, usagestats.Group{
+			Agent:           a.Agent,
+			Model:           a.Model,
+			Project:         a.Project,
+			Day:             a.Day,
+			BillingType:     a.BillingType,
+			HasProvided:     a.HasProvided,
+			Input:           int(a.InputTokens),
+			Output:          int(a.OutputTokens),
+			CacheCreate5m:   int(a.CacheCreate5mTokens),
+			CacheCreate1h:   int(a.CacheCreate1hTokens),
+			CacheRead:       int(a.CacheReadTokens),
+			Reasoning:       int(a.ReasoningTokens),
+			ProvidedCostUSD: a.ProvidedCostUSD,
+			EventCount:      a.EventCount,
+		})
+	}
+
+	summary := usagestats.SummarizeAggregates(groups, engine, mode)
 
 	return c.JSON(http.StatusOK, map[string]any{"data": struct {
 		usagestats.Summary

@@ -1,0 +1,52 @@
+{
+  "id": "sess-crush-1",
+  "title": "fix bug",
+  "cwd": "/home/dev/gadget",
+  "createdAt": "2026-06-21T09:00:00Z",
+  "messages": [
+    {
+      "id": "cu-1",
+      "role": "user",
+      "timestamp": "2026-06-21T09:00:01Z"
+    },
+    {
+      "id": "cm-1",
+      "role": "assistant",
+      "model": "gpt-5",
+      "timestamp": "2026-06-21T09:00:02Z",
+      "tokens": {
+        "input": 200,
+        "output": 400,
+        "cacheCreation": 600,
+        "cacheRead": 1500,
+        "reasoning": 50
+      }
+    },
+    {
+      "id": "cm-1",
+      "role": "assistant",
+      "model": "gpt-5",
+      "timestamp": "2026-06-21T09:00:02Z",
+      "tokens": {
+        "input": 200,
+        "output": 400,
+        "cacheCreation": 600,
+        "cacheRead": 1500,
+        "reasoning": 50
+      }
+    },
+    {
+      "id": "cm-2",
+      "role": "assistant",
+      "model": "gpt-5-mini",
+      "timestamp": "2026-06-21T09:01:00Z",
+      "tokens": {
+        "input": 90,
+        "output": 110,
+        "cacheCreation": 0,
+        "cacheRead": 300,
+        "reasoning": 0
+      }
+    }
+  ]
+}

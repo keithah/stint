@@ -1,0 +1,5 @@
+{"type":"user","timestamp":"2026-06-21T10:00:00.000Z","sessionId":"qsess-1","cwd":"/home/u/myproj","message":{"content":"hi"}}
+{"type":"assistant","timestamp":"2026-06-21T10:00:02.000Z","sessionId":"qsess-1","cwd":"/home/u/myproj","message":{"id":"qmsg_001","model":"qwen3-coder"},"usageMetadata":{"promptTokenCount":1000,"candidatesTokenCount":200,"cachedContentTokenCount":300,"thoughtsTokenCount":50}}
+{"type":"assistant","timestamp":"2026-06-21T10:00:02.000Z","sessionId":"qsess-1","cwd":"/home/u/myproj","message":{"id":"qmsg_001","model":"qwen3-coder"},"usageMetadata":{"promptTokenCount":1000,"candidatesTokenCount":200,"cachedContentTokenCount":300,"thoughtsTokenCount":50}}
+{"type":"assistant","timestamp":"2026-06-21T10:01:00.000Z","sessionId":"qsess-1","cwd":"/home/u/myproj","message":{"id":"qmsg_002","model":"qwen3-coder"},"usage":{"prompt_tokens":500,"completion_tokens":120,"cached_tokens":100,"reasoning_tokens":40}}
+{"type":"assistant","timestamp":"2026-06-21T10:02:00.000Z","sessionId":"qsess-1","message":{"id":"qmsg_003"
