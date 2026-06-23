@@ -62,7 +62,49 @@ func scanClaude(baseDirs []string, state *State) ([]usage.Event, ScanReport, err
 			scanClaudeFile(path, base, state, &events, &report)
 		}
 	}
-	return usage.Dedup(events), report, nil
+	return usage.Dedup(reconcileClaudeStreaming(events)), report, nil
+}
+
+// reconcileClaudeStreaming collapses duplicate usage rows that Claude Code
+// writes for the same logical request. A single assistant message+request can
+// appear several times in a transcript as streaming/partial updates: the early
+// rows carry a small (still-growing) output_tokens while input and cache fields
+// are already final and identical, and only the LAST row carries the complete
+// output_tokens. usage.Dedup keeps the FIRST occurrence, which would lock in a
+// partial (smaller) output and under-report total output tokens.
+//
+// To match Anthropic's intended per-request total (and ccusage), we pick, for
+// each dedup key, the row with the MAX OutputTokens before handing off to
+// usage.Dedup. Input/cache fields are identical across the partials for a given
+// request, so only output is affected; events without both provider ids (no
+// stable key) are passed through untouched. This is Claude-specific and does
+// not alter usage.Dedup semantics used by other agents.
+func reconcileClaudeStreaming(events []usage.Event) []usage.Event {
+	// best maps a dedup key to the index (in out) of the kept event so far.
+	best := make(map[string]int, len(events))
+	out := make([]usage.Event, 0, len(events))
+	for _, ev := range events {
+		// Only reconcile rows with a stable provider key (message+request id).
+		// Anything else keeps its original position and is left for usage.Dedup.
+		if ev.MessageID == "" || ev.RequestID == "" {
+			out = append(out, ev)
+			continue
+		}
+		key := ev.EventID
+		if key == "" {
+			ev.EnsureID()
+			key = ev.EventID
+		}
+		if idx, ok := best[key]; ok {
+			if ev.OutputTokens > out[idx].OutputTokens {
+				out[idx] = ev
+			}
+			continue
+		}
+		best[key] = len(out)
+		out = append(out, ev)
+	}
+	return out
 }
 
 // claudeFiles returns all *.jsonl files under base (recursively). A missing

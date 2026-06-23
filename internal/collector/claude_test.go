@@ -14,7 +14,9 @@ func TestClaudeScan(t *testing.T) {
 		t.Fatalf("scanClaude: %v", err)
 	}
 
-	// Fixture has 6 lines: 1 user, 2 identical assistant/usage (dup),
+	// Fixture has 6 lines: 1 user, 2 assistant/usage rows for the SAME
+	// message+request (a streaming partial with output_tokens=45 followed by
+	// the final row with output_tokens=450 — input/cache identical),
 	// 1 distinct assistant/usage, 1 system, 1 malformed.
 	if report.FilesScanned != 1 {
 		t.Errorf("FilesScanned = %d, want 1", report.FilesScanned)
@@ -35,7 +37,7 @@ func TestClaudeScan(t *testing.T) {
 		t.Errorf("LinesSkipped = %d, want 3", report.LinesSkipped)
 	}
 
-	// After dedup the two identical msg_001 lines collapse to one.
+	// After dedup the two msg_001 streaming rows collapse to one.
 	if len(events) != 2 {
 		t.Fatalf("deduped events = %d, want 2", len(events))
 	}
@@ -53,7 +55,9 @@ func TestClaudeScan(t *testing.T) {
 	if e1.CacheCreate5mTokens != 1500 || e1.CacheCreate1hTokens != 500 {
 		t.Errorf("msg_001 cache split = (%d,%d), want (1500,500)", e1.CacheCreate5mTokens, e1.CacheCreate1hTokens)
 	}
-	if e1.InputTokens != 123 || e1.OutputTokens != 45 || e1.CacheReadTokens != 10000 {
+	// The streaming partial (output=45) and final (output=450) rows collapse to
+	// one; the MAX output (the final, complete row) must win, not the first.
+	if e1.InputTokens != 123 || e1.OutputTokens != 450 || e1.CacheReadTokens != 10000 {
 		t.Errorf("msg_001 tokens wrong: %+v", e1)
 	}
 	if e1.RequestID != "req_001" {
@@ -93,8 +97,8 @@ func TestClaudeScan(t *testing.T) {
 	if sumIn != 203 { // 123 + 80
 		t.Errorf("sum input = %d, want 203", sumIn)
 	}
-	if sumOut != 345 { // 45 + 300
-		t.Errorf("sum output = %d, want 345", sumOut)
+	if sumOut != 750 { // 450 (final msg_001 row, not the 45 partial) + 300
+		t.Errorf("sum output = %d, want 750", sumOut)
 	}
 	if sum5m != 2250 { // 1500 + 750
 		t.Errorf("sum 5m = %d, want 2250", sum5m)
@@ -137,12 +141,17 @@ func TestClaudeScanDeterministic(t *testing.T) {
 
 func TestRegistryStubs(t *testing.T) {
 	reg := DefaultRegistry()
-	if _, ok := reg["claude"]; !ok {
-		t.Fatal("claude not registered")
+	// Implemented adapters: present in the registry. We do NOT call Scan here
+	// because their default paths point at real ~/ data dirs.
+	for _, id := range []string{"claude", "codex", "gemini", "opencode", "goose", "zed"} {
+		if _, ok := reg[id]; !ok {
+			t.Errorf("implemented agent %q not registered", id)
+		}
 	}
-	for _, id := range []string{"codex", "cursor", "copilot", "gemini", "opencode",
-		"goose", "zed", "amp", "qwen", "kimi", "kiro", "kilo", "roo", "cline",
-		"hermes", "pi-agent", "openclaw", "factory-droid", "crush", "octofriend"} {
+	// Remaining agents are stubs: registered, emit nothing, note "not implemented".
+	for _, id := range []string{"cursor", "copilot", "amp", "qwen", "kimi", "kiro",
+		"kilo", "roo", "cline", "hermes", "pi-agent", "openclaw", "factory-droid",
+		"crush", "octofriend"} {
 		e, ok := reg[id]
 		if !ok {
 			t.Errorf("missing stub agent %q", id)

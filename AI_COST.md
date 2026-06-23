@@ -72,20 +72,34 @@ cost = input          * inputPrice
 
 ## Supported source paths
 
-Implemented: **Claude Code**. Registered/stubbed (parser pending): codex, cursor,
-copilot, gemini, opencode, goose, zed, amp, qwen, kimi, kiro, kilo, roo, cline,
-hermes, pi-agent, openclaw, factory-droid, crush, octofriend.
+Implemented: **Claude Code, Codex, Gemini, OpenCode, Goose, Zed**.
+Registered/stubbed (parser pending): cursor, copilot, amp, qwen, kimi, kiro,
+kilo, roo, cline, hermes, pi-agent, openclaw, factory-droid, crush, octofriend.
 
-| Agent | Path | Format |
-|---|---|---|
-| Claude Code | `~/.claude/projects/**/*.jsonl` | JSONL |
-| Codex | `~/.codex/sessions/` | JSONL |
-| Cursor | `~/.cursor` usage export | CSV/SQLite |
-| Copilot | `~/.copilot/otel/` | OTEL |
-| Gemini | `~/.gemini/tmp/` | JSONL |
-| OpenCode | `~/.local/share/opencode/opencode.db` | SQLite |
-| Goose | `~/.local/share/goose/sessions/sessions.db` | SQLite |
-| Zed | `~/.local/share/zed/threads/threads.db` | SQLite |
+| Agent | Path | Format | Status |
+|---|---|---|---|
+| Claude Code | `~/.claude/projects/**/*.jsonl` | JSONL | ✅ verified |
+| Codex | `~/.codex/sessions/**/rollout-*.jsonl` | JSONL | ✅ verified |
+| Gemini | `~/.gemini/tmp/**/chats/session-*.json` | JSON | ✅ verified |
+| OpenCode | `~/.local/share/opencode/opencode.db` | SQLite | ✅ verified |
+| Goose | `~/.local/share/goose/sessions/sessions.db` | SQLite | schema-only |
+| Zed | `~/.local/share/zed/threads/threads.db` | SQLite | schema-only |
+| Cursor | `~/.cursor` usage export | CSV/SQLite | stub |
+| Copilot | `~/.copilot/otel/` | OTEL | stub |
+
+Per-agent token quirks the adapters handle: Claude writes the same message
+multiple times while streaming (growing `output_tokens`) — the adapter keeps the
+**max-output** row per `messageId+requestId` before dedup, matching ccusage.
+Codex reports cumulative `total_token_usage` plus per-turn `last_token_usage`;
+the adapter emits the **per-turn delta** to avoid double-counting. Codex and
+Gemini report input **inclusive** of cached tokens, so the adapter stores
+`input − cached` and routes cached to `cache_read`, and reasoning/thoughts to
+`reasoning_tokens`. OpenCode is read from the authoritative SQLite `message`
+table (not the JSON files). All SQLite DBs are opened read-only.
+
+"verified" = cross-checked against real data on a dev host (Claude additionally
+against `ccusage --mode calculate`, all token types within ~0.7%). "schema-only"
+= implemented to the documented schema with fixture tests, pending real data.
 
 Every base path is overridable via `STINT_COLLECT_<AGENT>_DIR` (e.g.
 `STINT_COLLECT_CLAUDE_DIR`). VS Code remote installs (`~/.vscode-server`,

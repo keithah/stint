@@ -86,6 +86,17 @@ func (s *Server) usageEventsSummary(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
 
+	// Optional single-agent filter (per-agent drill-down + ccusage cross-check).
+	if agent := c.QueryParam("agent"); agent != "" {
+		filtered := events[:0:0]
+		for _, e := range events {
+			if e.Agent == agent {
+				filtered = append(filtered, e)
+			}
+		}
+		events = filtered
+	}
+
 	location := userLocation(user)
 	summary := summarizeUsageEvents(events, s.Pricing, mode, location)
 	summary["range"] = rangeLabel

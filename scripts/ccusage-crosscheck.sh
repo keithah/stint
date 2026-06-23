@@ -23,9 +23,10 @@ trap 'rm -rf "$tmp"' EXIT
 echo "Running ccusage (calculate mode)..."
 npx --yes ccusage@latest daily --mode calculate --json > "$tmp/ccusage.json"
 
-echo "Fetching Stint summary (range=$range, mode=calculate)..."
+echo "Fetching Stint summary (range=$range, mode=calculate, agent=claude)..."
+# Scope to Claude so the comparison matches ccusage's Claude-only figures.
 curl -fsS -H "Authorization: Bearer $api_key" \
-  "$api_url/users/current/usage_events/summary?range=$range&cost_mode=calculate" > "$tmp/stint.json"
+  "$api_url/users/current/usage_events/summary?range=$range&cost_mode=calculate&agent=claude" > "$tmp/stint.json"
 
 python3 - "$tmp/ccusage.json" "$tmp/stint.json" <<'PY'
 import json, sys

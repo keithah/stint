@@ -79,15 +79,35 @@ func DefaultRegistry() Registry {
 		DefaultPaths: []string{"~/.claude/projects"},
 		Format:       "claude-jsonl",
 	}, AdapterFunc(scanClaude))
+	r.register(AgentSpec{
+		ID:           "codex",
+		DefaultPaths: []string{"~/.codex/sessions"},
+		Format:       "codex-jsonl",
+	}, AdapterFunc(scanCodex))
+	r.register(AgentSpec{
+		ID:           "gemini",
+		DefaultPaths: []string{"~/.gemini/tmp", "~/.gemini/antigravity-cli/conversations"},
+		Format:       "gemini",
+	}, AdapterFunc(scanGemini))
+	r.register(AgentSpec{
+		ID:           "opencode",
+		DefaultPaths: []string{"~/.local/share/opencode"},
+		Format:       "opencode-sqlite",
+	}, AdapterFunc(scanOpenCode))
+	r.register(AgentSpec{
+		ID:           "goose",
+		DefaultPaths: []string{"~/.local/share/goose/sessions"},
+		Format:       "goose-sqlite",
+	}, AdapterFunc(scanGoose))
+	r.register(AgentSpec{
+		ID:           "zed",
+		DefaultPaths: []string{"~/.local/share/zed/threads"},
+		Format:       "zed-sqlite",
+	}, AdapterFunc(scanZed))
 
 	stubs := []AgentSpec{
-		{ID: "codex", DefaultPaths: []string{"~/.codex/sessions"}, Format: "codex-jsonl"},
 		{ID: "cursor", DefaultPaths: []string{"~/.cursor"}, Format: "cursor"},
-		{ID: "copilot", DefaultPaths: []string{"~/.config/github-copilot"}, Format: "copilot"},
-		{ID: "gemini", DefaultPaths: []string{"~/.gemini/tmp"}, Format: "gemini"},
-		{ID: "opencode", DefaultPaths: []string{"~/.local/share/opencode"}, Format: "opencode"},
-		{ID: "goose", DefaultPaths: []string{"~/.local/share/goose/sessions"}, Format: "goose"},
-		{ID: "zed", DefaultPaths: []string{"~/.local/share/zed/conversations"}, Format: "zed"},
+		{ID: "copilot", DefaultPaths: []string{"~/.copilot/otel"}, Format: "copilot"},
 		{ID: "amp", DefaultPaths: []string{"~/.amp"}, Format: "amp"},
 		{ID: "qwen", DefaultPaths: []string{"~/.qwen"}, Format: "qwen"},
 		{ID: "kimi", DefaultPaths: []string{"~/.kimi"}, Format: "kimi"},
