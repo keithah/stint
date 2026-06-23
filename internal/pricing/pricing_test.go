@@ -80,6 +80,34 @@ func TestSubscriptionMarginalIsZero(t *testing.T) {
 	}
 }
 
+func TestOpenRouterFallbackPricesModelsLiteLLMLacks(t *testing.T) {
+	e := engine(t)
+	// A model only present in the OpenRouter catalog (a :free model) should
+	// resolve via the fallback layer rather than reading as unpriced.
+	if !e.Has("cohere/north-mini-code:free") {
+		t.Skip("bundled OpenRouter snapshot does not contain the sample free model; snapshot may have rotated")
+	}
+	r := e.Price(usage.Event{Model: "cohere/north-mini-code:free", InputTokens: 1000, OutputTokens: 1000}, ModeCalculate)
+	if !r.Priced {
+		t.Fatal("a free OpenRouter model must resolve (priced, at $0) not read as unpriced")
+	}
+}
+
+func TestLiteLLMWinsOverOpenRouterForCacheAccuracy(t *testing.T) {
+	e := engine(t)
+	// claude-sonnet-4-5 is in both tables; the LiteLLM entry (with the explicit
+	// 1h cache rate) must take precedence over the OpenRouter fallback.
+	event := usage.Event{Model: "claude-sonnet-4-5", CacheCreate1hTokens: 1000}
+	got, ok := e.Calculate(event)
+	if !ok {
+		t.Fatal("expected sonnet priced")
+	}
+	// LiteLLM 1h rate is 6e-6 (input*2); a wrong fallback would use the 5m write rate.
+	if !approx(got, 1000*6e-6) {
+		t.Fatalf("expected LiteLLM 1h cache rate, got %.9f", got)
+	}
+}
+
 func TestUnknownModelUnpricedUnlessOverridden(t *testing.T) {
 	e := engine(t)
 	event := usage.Event{Model: "my-private-proxy-model", InputTokens: 1000, OutputTokens: 1000}

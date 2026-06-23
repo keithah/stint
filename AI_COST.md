@@ -60,6 +60,12 @@ cost = input          * inputPrice
 
 - **Source of truth:** LiteLLM `model_prices_and_context_window.json`, bundled at
   `internal/pricing/data/litellm_prices.json` for fully-offline operation.
+- **Lookup priority:** user override → LiteLLM (cache-accurate, ccusage parity) →
+  **OpenRouter fallback** (`internal/pricing/data/openrouter_prices.json`, from
+  `GET https://openrouter.ai/api/v1/models` — broad coverage of proxy/free/new
+  models LiteLLM lacks; refreshable via `Engine.SetFallbackFromOpenRouter`) →
+  unpriced. OpenRouter has no 5m/1h cache split, so LiteLLM is consulted first to
+  keep Anthropic cache costs exact; no API key is needed (the catalog is public).
 - **Cost modes:** `auto` (provider cost if present, else calculate), `calculate`
   (always recompute — consistent cross-period), `display` (provider cost only).
 - **Model normalization:** region/proxy prefixes stripped (`us.anthropic.`,

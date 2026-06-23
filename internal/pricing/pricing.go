@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/keithah/stint/internal/usage"
@@ -17,6 +18,9 @@ import (
 
 //go:embed data/litellm_prices.json
 var bundledPrices []byte
+
+//go:embed data/openrouter_prices.json
+var bundledOpenRouterPrices []byte
 
 // Mode selects how cost is derived (mirrors ccusage).
 type Mode string
@@ -52,20 +56,41 @@ type Result struct {
 	Source string
 }
 
-// Engine prices events against a model table with optional overrides.
+// Engine prices events against a model table with optional overrides. Lookups
+// resolve in priority order: user overrides → LiteLLM table (cache-accurate,
+// ccusage parity) → OpenRouter fallback (broad coverage of proxy/free/new
+// models) → unpriced.
 type Engine struct {
 	table     map[string]ModelPrice
+	fallback  map[string]ModelPrice
 	overrides map[string]ModelPrice
 	aliases   map[string]string
 }
 
-// NewFromBundled builds an engine from the embedded offline snapshot.
+// NewFromBundled builds an engine from the embedded offline snapshots: LiteLLM
+// as the primary table and OpenRouter as the fallback layer.
 func NewFromBundled() (*Engine, error) {
 	table, err := parseLiteLLM(bundledPrices)
 	if err != nil {
 		return nil, err
 	}
-	return &Engine{table: table, overrides: map[string]ModelPrice{}, aliases: defaultAliases()}, nil
+	fallback, err := parseOpenRouter(bundledOpenRouterPrices)
+	if err != nil {
+		fallback = map[string]ModelPrice{} // fallback is best-effort; never fatal
+	}
+	return &Engine{table: table, fallback: fallback, overrides: map[string]ModelPrice{}, aliases: defaultAliases()}, nil
+}
+
+// SetFallbackFromOpenRouter replaces the OpenRouter fallback table from a fresh
+// `GET /api/v1/models` response body (for a scheduled refresh). A parse failure
+// leaves the current fallback intact.
+func (e *Engine) SetFallbackFromOpenRouter(data []byte) error {
+	fallback, err := parseOpenRouter(data)
+	if err != nil {
+		return err
+	}
+	e.fallback = fallback
+	return nil
 }
 
 // New builds an engine from a caller-provided LiteLLM JSON snapshot (e.g. a
@@ -91,7 +116,7 @@ func (e *Engine) SetOverrides(overrides map[string]ModelPrice) {
 // table and aliases but carries its own overrides map. Use this for per-request
 // custom pricing so the shared engine is never mutated across requests.
 func (e *Engine) WithOverrides(overrides map[string]ModelPrice) *Engine {
-	clone := &Engine{table: e.table, aliases: e.aliases, overrides: map[string]ModelPrice{}}
+	clone := &Engine{table: e.table, fallback: e.fallback, aliases: e.aliases, overrides: map[string]ModelPrice{}}
 	for model, price := range overrides {
 		clone.overrides[Normalize(model)] = price
 	}
@@ -155,6 +180,11 @@ func (e *Engine) lookup(model string) (ModelPrice, bool) {
 			}
 		}
 	}
+	// OpenRouter fallback: broad coverage (proxy/free/new models) that LiteLLM
+	// may lack. Consulted only after LiteLLM so cache-accurate prices win.
+	if price, ok := e.fallback[norm]; ok {
+		return price, true
+	}
 	return ModelPrice{}, false
 }
 
@@ -214,6 +244,51 @@ func (e *Engine) Price(event usage.Event, mode Mode) Result {
 func (e *Engine) Has(model string) bool {
 	_, ok := e.lookup(model)
 	return ok
+}
+
+// parseOpenRouter decodes OpenRouter's GET /api/v1/models response into a price
+// table keyed by normalized model id. Prices are strings in USD per token.
+// Free models (price "0") are kept so they price at $0 rather than reading as
+// unpriced. OpenRouter has no 5m/1h cache split, so a single cache-write rate
+// fills both — acceptable for a fallback layer.
+func parseOpenRouter(data []byte) (map[string]ModelPrice, error) {
+	var doc struct {
+		Data []struct {
+			ID      string `json:"id"`
+			Pricing struct {
+				Prompt          string `json:"prompt"`
+				Completion      string `json:"completion"`
+				InputCacheRead  string `json:"input_cache_read"`
+				InputCacheWrite string `json:"input_cache_write"`
+			} `json:"pricing"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parse openrouter prices: %w", err)
+	}
+	atof := func(s string) float64 {
+		v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+		if err != nil {
+			return 0
+		}
+		return v
+	}
+	table := make(map[string]ModelPrice, len(doc.Data))
+	for _, m := range doc.Data {
+		if m.ID == "" || (m.Pricing.Prompt == "" && m.Pricing.Completion == "") {
+			continue
+		}
+		cacheWrite := atof(m.Pricing.InputCacheWrite)
+		table[Normalize(m.ID)] = ModelPrice{
+			InputPerToken:         atof(m.Pricing.Prompt),
+			OutputPerToken:        atof(m.Pricing.Completion),
+			CacheReadPerToken:     atof(m.Pricing.InputCacheRead),
+			CacheCreate5mPerToken: cacheWrite,
+			CacheCreate1hPerToken: cacheWrite,
+			Provider:              "openrouter",
+		}
+	}
+	return table, nil
 }
 
 // parseLiteLLM decodes the model_prices_and_context_window.json shape, skipping
