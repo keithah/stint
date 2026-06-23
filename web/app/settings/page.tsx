@@ -1,11 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, KeyRound, LogOut, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Copy, Download, ExternalLink, KeyRound, LogOut, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { Providers } from "@/components/providers";
 import { Shell } from "@/components/shell";
-import { abortCustomRulesProgress, createDataDump, createKey, createOAuthApp, createShareToken, customRulesProgress, dataDumpDownloadURL, deleteCurrentUser, deleteCustomRule, deleteOAuthApp, deleteShareToken, importWakaTimeDump, listAICosts, listCustomRules, listDataDumps, listEditors, listKeys, listOAuthApps, listShareTokens, logout, me, replaceAICosts, replaceCustomRules, revokeKey, serverMeta, updateUser, wakatimeAPIURL, type PublicProjectVisibility } from "@/lib/api";
+import { abortCustomRulesProgress, createDataDump, createKey, createOAuthApp, createShareToken, customRulesProgress, dataDumpDownloadURL, deleteCurrentUser, deleteCustomRule, deleteOAuthApp, deleteShareToken, importWakaTimeDump, listAICosts, listCustomRules, listDataDumps, listEditors, listKeys, listOAuthApps, listShareTokens, logout, me, replaceAICosts, replaceCustomRules, revokeKey, serverMeta, updateUser, wakatimeAPIURL, type ProfileLayout, type PublicProfileFields, type PublicProjectVisibility } from "@/lib/api";
 import { boundedPercent } from "@/lib/chart-percent";
 import { dataDumpExpiryText, dataDumpIsDownloadable, hasPendingDumps } from "@/lib/data-dumps";
 
@@ -38,7 +38,14 @@ type PublicProfileDraft = {
   public_show_categories: boolean;
   public_show_ai: boolean;
   public_show_summaries: boolean;
+  public_profile: PublicProfileFields;
 };
+
+const PROFILE_THEMES: Array<{ value: ProfileLayout; title: string; detail: string; preview: string }> = [
+  { value: "terminal", title: "Terminal dossier", detail: "Dense, monospace, dev-native.", preview: "› keithah\n  US · open\n  ▦▦▧▩▦▩▦▩" },
+  { value: "spotlight", title: "Spotlight", detail: "Gradient hero, one big number.", preview: "░░░░░░░░\n   ◯\n 72h 31m" },
+  { value: "rail", title: "Split rail", detail: "Sticky identity + activity.", preview: "│ ◯ │ ▁▃▅█▆\n│ KH│ ▦▦▧▩▦\n│ US│ Go·TS" }
+];
 
 export default function SettingsPage() {
   return (
@@ -110,7 +117,20 @@ function SettingsContent() {
     public_show_operating_systems: user.data?.data.public_show_operating_systems ?? false,
     public_show_categories: user.data?.data.public_show_categories ?? false,
     public_show_ai: user.data?.data.public_show_ai ?? false,
-    public_show_summaries: user.data?.data.public_show_summaries ?? true
+    public_show_summaries: user.data?.data.public_show_summaries ?? true,
+    public_profile: user.data?.data.public_profile ?? { layout: "terminal" }
+  };
+  const pp = profile.public_profile ?? { layout: "terminal" };
+  const setPP = (patch: Partial<PublicProfileFields>) => setProfileDraft({ ...profile, public_profile: { ...pp, ...patch } });
+  const profileFieldPublic = (key: string) => (pp.visibility?.[key] ?? "public") === "public";
+  const setProfileFieldPublic = (key: string, isPublic: boolean) => {
+    const visibility = { ...(pp.visibility ?? {}) };
+    if (isPublic) {
+      delete visibility[key];
+    } else {
+      visibility[key] = "private";
+    }
+    setPP({ visibility });
   };
   const publicOrigin = typeof window === "undefined" ? "" : window.location.origin;
   const publicHandle = (profile.public_username?.trim() || user.data?.data.github_username || "username").replace(/^@/, "");
@@ -208,7 +228,8 @@ function SettingsContent() {
         public_show_operating_systems: profile.public_show_operating_systems,
         public_show_categories: profile.public_show_categories,
         public_show_ai: profile.public_show_ai,
-        public_show_summaries: profile.public_show_summaries
+        public_show_summaries: profile.public_show_summaries,
+        public_profile: profile.public_profile
       }),
     onSuccess: () => {
       setProfileDraft(null);
@@ -266,13 +287,16 @@ function SettingsContent() {
       <section className="mb-5 rounded border border-line bg-panel p-5">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex min-w-0 items-center gap-4">
-            <div
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded border border-line bg-ink bg-cover bg-center text-lg font-semibold text-zinc-300"
+            <a
+              href={publicProfileURL}
+              target="_blank"
+              rel="noreferrer"
+              title="View your public profile"
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded border border-line bg-ink bg-cover bg-center text-lg font-semibold text-zinc-300 transition hover:ring-2 hover:ring-accent"
               style={user.data?.data.avatar_url ? { backgroundImage: `url(${user.data.data.avatar_url})` } : undefined}
-              aria-hidden="true"
             >
               {user.data?.data.avatar_url ? "" : (user.data?.data.github_username ?? "?").slice(0, 1).toUpperCase()}
-            </div>
+            </a>
             <div className="min-w-0">
               <h2 className="font-medium">GitHub account</h2>
               <p className="mt-1 truncate text-sm text-zinc-400">{user.data?.data.full_name || user.data?.data.github_username || "Loading account"}</p>
@@ -362,7 +386,17 @@ function SettingsContent() {
             <div>
               <h3 className="font-medium text-zinc-100">Public profile</h3>
               <p className="mt-1 text-sm text-zinc-500">Publish a clean profile URL and explicitly choose which activity sections are visible.</p>
-              <code className="mt-3 block break-all rounded border border-line bg-panel px-3 py-2 text-xs text-zinc-400">{publicProfileURL}</code>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <code className="min-w-0 flex-1 break-all rounded border border-line bg-panel px-3 py-2 text-xs text-zinc-400">{publicProfileURL}</code>
+                <a
+                  href={publicProfileURL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex shrink-0 items-center gap-2 rounded border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-accent transition hover:bg-accent/20"
+                >
+                  <ExternalLink size={15} /> Preview profile
+                </a>
+              </div>
             </div>
             <label className="flex items-center justify-between gap-4 rounded border border-line bg-panel px-3 py-2">
               <span>
@@ -409,7 +443,52 @@ function SettingsContent() {
             </label>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-5">
+            <h4 className="text-sm font-medium text-zinc-300">Profile theme</h4>
+            <p className="mt-1 text-xs text-zinc-500">Visitors to /@{publicHandle} see this layout. Change it anytime.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              {PROFILE_THEMES.map((theme) => {
+                const active = (pp.layout ?? "terminal") === theme.value;
+                return (
+                  <button
+                    key={theme.value}
+                    type="button"
+                    onClick={() => setPP({ layout: theme.value })}
+                    className={`rounded border p-3 text-left transition ${active ? "border-accent bg-accent/10" : "border-line bg-panel hover:bg-white/5"}`}
+                  >
+                    <span className="block text-sm font-medium text-zinc-100">{theme.title}</span>
+                    <span className="mt-1 block text-xs text-zinc-500">{theme.detail}</span>
+                    <span className="mt-3 block whitespace-pre font-mono text-[10px] leading-tight text-zinc-600">{theme.preview}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-5">
+            <h4 className="text-sm font-medium text-zinc-300">Personal info</h4>
+            <p className="mt-1 text-xs text-zinc-500">Everything here is public by default. Toggle any field to private to hide it.</p>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <ProfileField label="Bio" textarea placeholder="A sentence or two about you." value={pp.bio ?? ""} onChange={(value) => setPP({ bio: value })} isPublic={profileFieldPublic("bio")} onVisibility={(isPublic) => setProfileFieldPublic("bio", isPublic)} />
+              </div>
+              <ProfileField label="Location" placeholder="San Francisco, CA" value={pp.location ?? ""} onChange={(value) => setPP({ location: value })} isPublic={profileFieldPublic("location")} onVisibility={(isPublic) => setProfileFieldPublic("location", isPublic)} />
+              <ProfileField label="Pronouns" placeholder="they/them" value={pp.pronouns ?? ""} onChange={(value) => setPP({ pronouns: value })} isPublic={profileFieldPublic("pronouns")} onVisibility={(isPublic) => setProfileFieldPublic("pronouns", isPublic)} />
+              <ProfileField label="Company" placeholder="Acme, Inc." value={pp.company ?? ""} onChange={(value) => setPP({ company: value })} isPublic={profileFieldPublic("company")} onVisibility={(isPublic) => setProfileFieldPublic("company", isPublic)} />
+              <ProfileField label="Role / title" placeholder="Staff Engineer" value={pp.role ?? ""} onChange={(value) => setPP({ role: value })} isPublic={profileFieldPublic("role")} onVisibility={(isPublic) => setProfileFieldPublic("role", isPublic)} />
+              <ProfileField label="Website" placeholder="https://example.com" value={pp.website_url ?? ""} onChange={(value) => setPP({ website_url: value })} isPublic={profileFieldPublic("website")} onVisibility={(isPublic) => setProfileFieldPublic("website", isPublic)} />
+              <ProfileField label="Twitter / X" placeholder="handle" prefix="@" value={pp.twitter_username ?? ""} onChange={(value) => setPP({ twitter_username: value })} isPublic={profileFieldPublic("twitter")} onVisibility={(isPublic) => setProfileFieldPublic("twitter", isPublic)} />
+              <ProfileField label="LinkedIn" placeholder="https://linkedin.com/in/you" value={pp.linkedin_url ?? ""} onChange={(value) => setPP({ linkedin_url: value })} isPublic={profileFieldPublic("linkedin")} onVisibility={(isPublic) => setProfileFieldPublic("linkedin", isPublic)} />
+              <ProfileField label="Mastodon" placeholder="https://mastodon.social/@you" value={pp.mastodon_url ?? ""} onChange={(value) => setPP({ mastodon_url: value })} isPublic={profileFieldPublic("mastodon")} onVisibility={(isPublic) => setProfileFieldPublic("mastodon", isPublic)} />
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <PrivacyToggle label="Available for hire" detail="Show an 'open to work' badge." checked={pp.available_for_hire ?? false} onChange={(checked) => setPP({ available_for_hire: checked })} />
+              <PrivacyToggle label="Show email" detail={`Display ${user.data?.data.email || "your account email"} publicly.`} checked={pp.email_public ?? false} onChange={(checked) => setPP({ email_public: checked })} />
+            </div>
+          </div>
+
+          <h4 className="mt-5 text-sm font-medium text-zinc-300">Visible sections</h4>
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <PrivacyToggle label="GitHub link" detail="Show your GitHub username, avatar, and profile link." checked={profile.public_github_link_enabled} onChange={(checked) => setProfileDraft({ ...profile, public_github_link_enabled: checked })} />
             <PrivacyToggle label="Total time" detail="Show totals, best day, averages, and activity bars." checked={profile.public_show_total_time} onChange={(checked) => setProfileDraft({ ...profile, public_show_total_time: checked })} />
             <PrivacyToggle label="Projects" detail="Show project totals according to project visibility." checked={profile.public_show_projects} onChange={(checked) => setProfileDraft({ ...profile, public_show_projects: checked })} />
@@ -920,6 +999,60 @@ function PrivacyToggle({ label, detail, checked, onChange }: { label: string; de
         <span className="mt-1 block text-xs leading-5 text-zinc-500">{detail}</span>
       </span>
       <input className="mt-1 h-5 w-5 shrink-0 accent-accent" type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+    </label>
+  );
+}
+
+function ProfileField({
+  label,
+  placeholder,
+  prefix,
+  value,
+  onChange,
+  isPublic,
+  onVisibility,
+  textarea
+}: {
+  label: string;
+  placeholder?: string;
+  prefix?: string;
+  value: string;
+  onChange: (value: string) => void;
+  isPublic: boolean;
+  onVisibility: (isPublic: boolean) => void;
+  textarea?: boolean;
+}) {
+  return (
+    <label className="block">
+      <span className="flex items-center justify-between gap-2 text-sm text-zinc-400">
+        {label}
+        <button
+          type="button"
+          onClick={() => onVisibility(!isPublic)}
+          className={`rounded px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] transition ${isPublic ? "bg-accent/15 text-accent" : "bg-white/5 text-zinc-500"}`}
+        >
+          {isPublic ? "Public" : "Private"}
+        </button>
+      </span>
+      {textarea ? (
+        <textarea
+          className="mt-2 w-full rounded border border-line bg-panel px-3 py-2 text-sm outline-none focus:border-accent"
+          rows={3}
+          placeholder={placeholder}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      ) : (
+        <div className="mt-2 flex rounded border border-line bg-panel focus-within:border-accent">
+          {prefix ? <span className="border-r border-line px-3 py-2 text-sm text-zinc-500">{prefix}</span> : null}
+          <input
+            className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none"
+            placeholder={placeholder}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        </div>
+      )}
     </label>
   );
 }

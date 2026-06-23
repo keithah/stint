@@ -12,8 +12,8 @@ func TestUserScanDestinationsIncludesCountryAndRetention(t *testing.T) {
 
 	destinations := userScanDestinations(&user)
 
-	if len(destinations) != 26 {
-		t.Fatalf("expected 26 user scan destinations including privacy fields, got %d", len(destinations))
+	if len(destinations) != 27 {
+		t.Fatalf("expected 27 user scan destinations including privacy fields, got %d", len(destinations))
 	}
 	user.Country = "US"
 	if user.Country != "US" {

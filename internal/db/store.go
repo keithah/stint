@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql/driver"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
@@ -40,13 +41,13 @@ const userColumns = `id, github_id, github_username, coalesce(email, ''), coales
 	coalesce(avatar_url, ''), timezone, timeout_minutes, writes_only, is_hireable, has_public_profile, coalesce(country, ''), heartbeat_retention_days,
 	coalesce(public_username, ''), coalesce(public_display_name, ''), public_github_link_enabled, public_show_total_time, public_show_projects,
 	public_project_visibility, public_show_languages, public_show_editors, public_show_machines, public_show_operating_systems,
-	public_show_categories, public_show_ai, public_show_summaries`
+	public_show_categories, public_show_ai, public_show_summaries, coalesce(public_profile, '{}'::jsonb)`
 
 const userColumnsU = `u.id, u.github_id, u.github_username, coalesce(u.email, ''), coalesce(u.full_name, ''),
 	coalesce(u.avatar_url, ''), u.timezone, u.timeout_minutes, u.writes_only, u.is_hireable, u.has_public_profile, coalesce(u.country, ''), u.heartbeat_retention_days,
 	coalesce(u.public_username, ''), coalesce(u.public_display_name, ''), u.public_github_link_enabled, u.public_show_total_time, u.public_show_projects,
 	u.public_project_visibility, u.public_show_languages, u.public_show_editors, u.public_show_machines, u.public_show_operating_systems,
-	u.public_show_categories, u.public_show_ai, u.public_show_summaries`
+	u.public_show_categories, u.public_show_ai, u.public_show_summaries, coalesce(u.public_profile, '{}'::jsonb)`
 
 type User struct {
 	ID                      uuid.UUID `json:"id"`
@@ -75,6 +76,53 @@ type User struct {
 	PublicShowCategories    bool      `json:"public_show_categories"`
 	PublicShowAI            bool      `json:"public_show_ai"`
 	PublicShowSummaries     bool      `json:"public_show_summaries"`
+	PublicProfile           PublicProfile `json:"public_profile"`
+}
+
+// PublicProfile holds optional personal-info fields and the owner-selected
+// public-page layout. It is persisted as a single jsonb column so new fields
+// and an evolving per-field visibility model extend without a migration.
+// Visibility maps a field key to "public" or "private"; an absent key means
+// public. The value set is intentionally open so org/team scopes can be added
+// later without breaking stored data.
+type PublicProfile struct {
+	Bio             string            `json:"bio,omitempty"`
+	Location        string            `json:"location,omitempty"`
+	WebsiteURL      string            `json:"website_url,omitempty"`
+	TwitterUsername string            `json:"twitter_username,omitempty"`
+	LinkedInURL     string            `json:"linkedin_url,omitempty"`
+	MastodonURL     string            `json:"mastodon_url,omitempty"`
+	Pronouns        string            `json:"pronouns,omitempty"`
+	Company         string            `json:"company,omitempty"`
+	Role             string            `json:"role,omitempty"`
+	Layout           string            `json:"layout,omitempty"`
+	AvailableForHire bool              `json:"available_for_hire,omitempty"`
+	EmailPublic      bool              `json:"email_public,omitempty"`
+	Visibility       map[string]string `json:"visibility,omitempty"`
+}
+
+func (p PublicProfile) Value() (driver.Value, error) {
+	return json.Marshal(p)
+}
+
+func (p *PublicProfile) Scan(src any) error {
+	*p = PublicProfile{}
+	if src == nil {
+		return nil
+	}
+	var data []byte
+	switch v := src.(type) {
+	case []byte:
+		data = v
+	case string:
+		data = []byte(v)
+	default:
+		return fmt.Errorf("unsupported public_profile source type %T", src)
+	}
+	if len(data) == 0 {
+		return nil
+	}
+	return json.Unmarshal(data, p)
 }
 
 type UserSettingsInput struct {
@@ -97,6 +145,7 @@ type UserSettingsInput struct {
 	PublicShowCategories    bool
 	PublicShowAI            bool
 	PublicShowSummaries     bool
+	PublicProfile           PublicProfile
 }
 
 type APIKey struct {
@@ -447,13 +496,13 @@ func (s *Store) UpdateUser(ctx context.Context, id uuid.UUID, input UserSettings
 			heartbeat_retention_days = $7, public_username = $8, public_display_name = $9, public_github_link_enabled = $10,
 			public_show_total_time = $11, public_show_projects = $12, public_project_visibility = $13, public_show_languages = $14,
 			public_show_editors = $15, public_show_machines = $16, public_show_operating_systems = $17, public_show_categories = $18,
-			public_show_ai = $19, public_show_summaries = $20, modified_at = now()
+			public_show_ai = $19, public_show_summaries = $20, public_profile = $21, modified_at = now()
 		WHERE id = $1
 		RETURNING %s`, userColumns),
 		id, input.Timezone, input.TimeoutMinutes, input.WritesOnly, input.HasPublicProfile, nullEmpty(input.Country), input.HeartbeatRetentionDays,
 		nullEmpty(input.PublicUsername), nullEmpty(input.PublicDisplayName), input.PublicGitHubLink, input.PublicShowTotalTime, input.PublicShowProjects,
 		input.PublicProjectVisibility, input.PublicShowLanguages, input.PublicShowEditors, input.PublicShowMachines, input.PublicShowOS,
-		input.PublicShowCategories, input.PublicShowAI, input.PublicShowSummaries)
+		input.PublicShowCategories, input.PublicShowAI, input.PublicShowSummaries, input.PublicProfile)
 	user, err := scanUser(row)
 	if err != nil {
 		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.ConstraintName == "users_public_username_lower_idx" {
@@ -2511,7 +2560,7 @@ func scanUser(row pgx.Row) (User, error) {
 }
 
 func userScanDestinations(user *User) []any {
-	return []any{&user.ID, &user.GitHubID, &user.GitHubUsername, &user.Email, &user.FullName, &user.AvatarURL, &user.Timezone, &user.TimeoutMinutes, &user.WritesOnly, &user.IsHireable, &user.HasPublicProfile, &user.Country, &user.HeartbeatRetentionDays, &user.PublicUsername, &user.PublicDisplayName, &user.PublicGitHubLink, &user.PublicShowTotalTime, &user.PublicShowProjects, &user.PublicProjectVisibility, &user.PublicShowLanguages, &user.PublicShowEditors, &user.PublicShowMachines, &user.PublicShowOS, &user.PublicShowCategories, &user.PublicShowAI, &user.PublicShowSummaries}
+	return []any{&user.ID, &user.GitHubID, &user.GitHubUsername, &user.Email, &user.FullName, &user.AvatarURL, &user.Timezone, &user.TimeoutMinutes, &user.WritesOnly, &user.IsHireable, &user.HasPublicProfile, &user.Country, &user.HeartbeatRetentionDays, &user.PublicUsername, &user.PublicDisplayName, &user.PublicGitHubLink, &user.PublicShowTotalTime, &user.PublicShowProjects, &user.PublicProjectVisibility, &user.PublicShowLanguages, &user.PublicShowEditors, &user.PublicShowMachines, &user.PublicShowOS, &user.PublicShowCategories, &user.PublicShowAI, &user.PublicShowSummaries, &user.PublicProfile}
 }
 
 type apiKeyScanner interface {
@@ -2734,7 +2783,61 @@ func NormalizeUserSettings(input UserSettingsInput) UserSettingsInput {
 	if input.PublicProjectVisibility == "" {
 		input.PublicProjectVisibility = "public_repos"
 	}
+	input.PublicProfile = NormalizePublicProfile(input.PublicProfile)
 	return input
+}
+
+// ProfileLayouts are the public-page themes a user can choose from.
+var ProfileLayouts = []string{"terminal", "spotlight", "rail"}
+
+// ProfileVisibilityFields are the per-field privacy keys. The accepted values
+// are "public" and "private" today; the set is open so org/team scopes can be
+// added later without a migration.
+var ProfileVisibilityFields = []string{"bio", "location", "website", "twitter", "linkedin", "mastodon", "pronouns", "company", "role", "hireable", "email"}
+
+func NormalizePublicProfile(profile PublicProfile) PublicProfile {
+	profile.Bio = strings.TrimSpace(profile.Bio)
+	profile.Location = strings.TrimSpace(profile.Location)
+	profile.WebsiteURL = strings.TrimSpace(profile.WebsiteURL)
+	profile.TwitterUsername = strings.TrimPrefix(strings.TrimSpace(profile.TwitterUsername), "@")
+	profile.LinkedInURL = strings.TrimSpace(profile.LinkedInURL)
+	profile.MastodonURL = strings.TrimSpace(profile.MastodonURL)
+	profile.Pronouns = strings.TrimSpace(profile.Pronouns)
+	profile.Company = strings.TrimSpace(profile.Company)
+	profile.Role = strings.TrimSpace(profile.Role)
+	profile.Layout = strings.ToLower(strings.TrimSpace(profile.Layout))
+	if !containsString(ProfileLayouts, profile.Layout) {
+		profile.Layout = "terminal"
+	}
+	if len(profile.Visibility) == 0 {
+		profile.Visibility = nil
+	} else {
+		cleaned := map[string]string{}
+		for key, value := range profile.Visibility {
+			key = strings.TrimSpace(key)
+			value = strings.ToLower(strings.TrimSpace(value))
+			// Drop "public" entries: absent means public, so we only persist
+			// explicit overrides and keep the blob small.
+			if key == "" || value == "" || value == "public" {
+				continue
+			}
+			cleaned[key] = value
+		}
+		if len(cleaned) == 0 {
+			cleaned = nil
+		}
+		profile.Visibility = cleaned
+	}
+	return profile
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func ValidateUserSettings(input UserSettingsInput) error {
@@ -2757,7 +2860,55 @@ func ValidateUserSettings(input UserSettingsInput) error {
 	if input.PublicProjectVisibility != "none" && input.PublicProjectVisibility != "public_repos" && input.PublicProjectVisibility != "all" {
 		return fmt.Errorf("public_project_visibility must be none, public_repos, or all")
 	}
+	if err := ValidatePublicProfile(input.PublicProfile); err != nil {
+		return err
+	}
 	return nil
+}
+
+func ValidatePublicProfile(profile PublicProfile) error {
+	profile = NormalizePublicProfile(profile)
+	if len(profile.Bio) > 1000 {
+		return fmt.Errorf("bio must be at most 1000 characters")
+	}
+	for label, value := range map[string]string{"location": profile.Location, "pronouns": profile.Pronouns, "company": profile.Company, "role": profile.Role} {
+		if len(value) > 200 {
+			return fmt.Errorf("%s must be at most 200 characters", label)
+		}
+	}
+	for label, value := range map[string]string{"website_url": profile.WebsiteURL, "linkedin_url": profile.LinkedInURL, "mastodon_url": profile.MastodonURL} {
+		if value == "" {
+			continue
+		}
+		parsed, err := url.Parse(value)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+			return fmt.Errorf("%s must be an absolute http or https URL", label)
+		}
+	}
+	if profile.TwitterUsername != "" && !validTwitterUsername(profile.TwitterUsername) {
+		return fmt.Errorf("twitter_username must be 1-15 letters, numbers, or underscores")
+	}
+	if !containsString(ProfileLayouts, profile.Layout) {
+		return fmt.Errorf("layout must be one of terminal, spotlight, rail")
+	}
+	for key, value := range profile.Visibility {
+		if value != "private" {
+			return fmt.Errorf("visibility for %q must be public or private", key)
+		}
+	}
+	return nil
+}
+
+func validTwitterUsername(value string) bool {
+	if len(value) < 1 || len(value) > 15 {
+		return false
+	}
+	for _, r := range value {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func validPublicUsername(value string) bool {
