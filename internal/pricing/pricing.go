@@ -197,7 +197,11 @@ func (e *Engine) Calculate(event usage.Event) (float64, bool) {
 		return 0, false
 	}
 	cache1h := price.CacheCreate1hPerToken
-	if cache1h == 0 {
+	// Only infer the 1h-cache rate (Anthropic's input*2 convention) for models
+	// that actually have a 5m cache-create rate. A model with no cache-create
+	// pricing at all (e.g. an OpenRouter fallback entry with cache-write 0) must
+	// not be charged a fabricated input*2 for 1h-cache tokens.
+	if cache1h == 0 && price.CacheCreate5mPerToken > 0 {
 		cache1h = price.InputPerToken * 2
 	}
 	cost := float64(event.InputTokens)*price.InputPerToken +

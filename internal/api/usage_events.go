@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"sort"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/keithah/stint/internal/pricing"
 	"github.com/keithah/stint/internal/services"
 	"github.com/keithah/stint/internal/usage"
@@ -57,76 +59,99 @@ func (s *Server) usageEventsSummary(c echo.Context) error {
 	user := userFromContext(c)
 	now := time.Now()
 
-	rangeName := c.QueryParam("range")
-	var start, end time.Time
-	var rangeLabel string
-	if rangeName != "" {
-		window, err := services.WindowForRange(now, rangeName)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, errorBody(err.Error()))
-		}
-		start, end, rangeLabel = window.Start, window.End, window.Range
-	} else {
-		var err error
-		start, end, err = usageEventWindow(c.QueryParam("start"), c.QueryParam("end"), now)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, errorBody(err.Error()))
-		}
-		rangeLabel = start.Format("2006-01-02") + " to " + end.Format("2006-01-02")
+	start, end, rangeLabel, err := resolveUsageWindow(c, now)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorBody(err.Error()))
 	}
-
-	costMode := c.QueryParam("cost_mode")
-	if costMode == "" {
-		costMode = string(pricing.ModeAuto)
-	}
-	mode := pricing.Mode(costMode)
+	mode := usageCostMode(c)
 
 	events, err := s.Store.UsageEventsBetween(c.Request().Context(), user.ID, start, end)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
+	events = filterEventsByAgent(events, c.QueryParam("agent"))
 
-	// Optional single-agent filter (per-agent drill-down + ccusage cross-check).
-	if agent := c.QueryParam("agent"); agent != "" {
-		filtered := events[:0:0]
-		for _, e := range events {
-			if e.Agent == agent {
-				filtered = append(filtered, e)
-			}
-		}
-		events = filtered
+	engine, err := s.pricingEngineForUser(c.Request().Context(), user.ID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
 
-	// Apply the user's custom pricing as per-request overrides. s.Pricing is
-	// shared across requests, so never mutate it: WithOverrides returns a shallow
-	// copy that shares the base table but carries its own overrides map.
-	engine := s.Pricing
-	if engine != nil {
-		custom, err := s.Store.ListCustomPricing(c.Request().Context(), user.ID)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
-		}
-		if len(custom) > 0 {
-			overrides := make(map[string]pricing.ModelPrice, len(custom))
-			for _, p := range custom {
-				overrides[p.Model] = pricing.ModelPrice{
-					InputPerToken:         p.InputPerMillionUSD / 1e6,
-					OutputPerToken:        p.OutputPerMillionUSD / 1e6,
-					CacheCreate5mPerToken: p.CacheWritePerMillionUSD / 1e6,
-					CacheCreate1hPerToken: p.CacheWritePerMillionUSD / 1e6,
-					CacheReadPerToken:     p.CacheReadPerMillionUSD / 1e6,
-				}
-			}
-			engine = engine.WithOverrides(overrides)
-		}
-	}
-
-	location := userLocation(user)
-	summary := summarizeUsageEvents(events, engine, mode, location)
+	summary := summarizeUsageEvents(events, engine, mode, userLocation(user))
 	summary["range"] = rangeLabel
-	summary["cost_mode"] = costMode
+	summary["cost_mode"] = string(mode)
 
 	return c.JSON(http.StatusOK, map[string]any{"data": summary})
+}
+
+// resolveUsageWindow resolves the time window for a usage request from either a
+// named `range` (the supported stats ranges) or `start`/`end` params, returning
+// a human-readable range label. Shared by the summary and blocks endpoints so
+// they always cover the same window for the same query.
+func resolveUsageWindow(c echo.Context, now time.Time) (time.Time, time.Time, string, error) {
+	if rangeName := c.QueryParam("range"); rangeName != "" {
+		window, err := services.WindowForRange(now, rangeName)
+		if err != nil {
+			return time.Time{}, time.Time{}, "", err
+		}
+		return window.Start, window.End, window.Range, nil
+	}
+	start, end, err := usageEventWindow(c.QueryParam("start"), c.QueryParam("end"), now)
+	if err != nil {
+		return time.Time{}, time.Time{}, "", err
+	}
+	return start, end, start.Format("2006-01-02") + " to " + end.Format("2006-01-02"), nil
+}
+
+func usageCostMode(c echo.Context) pricing.Mode {
+	mode := c.QueryParam("cost_mode")
+	if mode == "" {
+		mode = string(pricing.ModeAuto)
+	}
+	return pricing.Mode(mode)
+}
+
+// filterEventsByAgent narrows events to a single agent in place. Empty agent is
+// a no-op. Shared so per-agent drill-down behaves identically across endpoints.
+func filterEventsByAgent(events []usage.Event, agent string) []usage.Event {
+	if agent == "" {
+		return events
+	}
+	filtered := events[:0:0]
+	for _, e := range events {
+		if e.Agent == agent {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
+}
+
+// pricingEngineForUser returns a pricing engine with the user's custom pricing
+// applied as per-request overrides. s.Pricing is shared across requests and is
+// never mutated: WithOverrides returns a shallow copy that shares the base table
+// but carries its own overrides map. Returns the shared engine unchanged when
+// the user has no overrides.
+func (s *Server) pricingEngineForUser(ctx context.Context, userID uuid.UUID) (*pricing.Engine, error) {
+	if s.Pricing == nil {
+		return nil, nil
+	}
+	custom, err := s.Store.ListCustomPricing(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(custom) == 0 {
+		return s.Pricing, nil
+	}
+	overrides := make(map[string]pricing.ModelPrice, len(custom))
+	for _, p := range custom {
+		overrides[p.Model] = pricing.ModelPrice{
+			InputPerToken:         p.InputPerMillionUSD / 1e6,
+			OutputPerToken:        p.OutputPerMillionUSD / 1e6,
+			CacheCreate5mPerToken: p.CacheWritePerMillionUSD / 1e6,
+			CacheCreate1hPerToken: p.CacheWritePerMillionUSD / 1e6,
+			CacheReadPerToken:     p.CacheReadPerMillionUSD / 1e6,
+		}
+	}
+	return s.Pricing.WithOverrides(overrides), nil
 }
 
 // usageEventWindow parses start/end query params (RFC3339 or YYYY-MM-DD),

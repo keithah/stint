@@ -90,6 +90,7 @@ func ComputeEventID(e Event) string {
 		fmt.Sprint(e.CacheCreate5mTokens),
 		fmt.Sprint(e.CacheCreate1hTokens),
 		fmt.Sprint(e.CacheReadTokens),
+		fmt.Sprint(e.ReasoningTokens),
 	)
 }
 
@@ -105,20 +106,27 @@ func hashParts(parts ...string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
-// Dedup removes events sharing an EventID, keeping the first occurrence and
-// preserving order. Adapters and the ingest path both call this; feeding the
-// same data twice must not change totals.
+// Dedup collapses events sharing an EventID, preserving first-occurrence order.
+// When duplicates collide it keeps the one with the largest OutputTokens: any
+// id-keyed agent (Claude, OpenClaw, Copilot, …) can write the same request
+// multiple times as streaming usage grows, and the final row has the complete
+// output. (Events that lack provider ids hash output into the EventID, so rows
+// with different output never collide here.) Feeding the same data twice must
+// not change totals.
 func Dedup(events []Event) []Event {
-	seen := make(map[string]struct{}, len(events))
+	index := make(map[string]int, len(events))
 	out := events[:0:0]
 	for _, event := range events {
 		if event.EventID == "" {
 			event.EnsureID()
 		}
-		if _, ok := seen[event.EventID]; ok {
+		if i, ok := index[event.EventID]; ok {
+			if event.OutputTokens > out[i].OutputTokens {
+				out[i] = event
+			}
 			continue
 		}
-		seen[event.EventID] = struct{}{}
+		index[event.EventID] = len(out)
 		out = append(out, event)
 	}
 	return out

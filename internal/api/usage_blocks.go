@@ -33,35 +33,27 @@ func (s *Server) usageEventsBlocks(c echo.Context) error {
 	user := userFromContext(c)
 	now := time.Now()
 
-	start, end, err := usageEventWindow(c.QueryParam("start"), c.QueryParam("end"), now)
+	start, end, _, err := resolveUsageWindow(c, now)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, errorBody(err.Error()))
 	}
-
-	costMode := c.QueryParam("cost_mode")
-	if costMode == "" {
-		costMode = string(pricing.ModeAuto)
-	}
-	mode := pricing.Mode(costMode)
+	mode := usageCostMode(c)
 
 	events, err := s.Store.UsageEventsBetween(c.Request().Context(), user.ID, start, end)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
+	events = filterEventsByAgent(events, c.QueryParam("agent"))
 
-	// Optional single-agent filter, mirroring the summary handler.
-	if agent := c.QueryParam("agent"); agent != "" {
-		filtered := events[:0:0]
-		for _, e := range events {
-			if e.Agent == agent {
-				filtered = append(filtered, e)
-			}
-		}
-		events = filtered
+	// Use the same custom-pricing-aware engine as the summary so the burn-rate
+	// panel and the summary card never disagree on a custom-priced model.
+	engine, err := s.pricingEngineForUser(c.Request().Context(), user.ID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
 
 	location := userLocation(user)
-	blocks, current := buildUsageBlocks(events, now, mode, s.Pricing, location)
+	blocks, current := buildUsageBlocks(events, now, mode, engine, location)
 
 	blocksOut := make([]map[string]any, 0, len(blocks))
 	for _, b := range blocks {
@@ -76,7 +68,7 @@ func (s *Server) usageEventsBlocks(c echo.Context) error {
 	}
 
 	data := map[string]any{
-		"cost_mode": costMode,
+		"cost_mode": string(mode),
 		"blocks":    blocksOut,
 		"current":   nil,
 	}
