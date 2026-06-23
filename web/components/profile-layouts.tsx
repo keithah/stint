@@ -3,8 +3,7 @@
 import { Briefcase, Github, Globe, Linkedin, Mail, MapPin, Twitter } from "lucide-react";
 import type { ReactNode } from "react";
 import { AIPanel } from "@/components/ai-panel";
-import { ActivityBars, SliceDonut } from "@/components/dashboard-charts";
-import { StatCard } from "@/components/stat-card";
+import { SliceDonut } from "@/components/dashboard-charts";
 import { activityHeatmapClass, activityHeatmapTitle } from "@/lib/activity-heatmap";
 import type { DailyStat, PublicProfilePermissions, PublicUser, SliceTotal, Stats, StatsRange } from "@/lib/api";
 
@@ -41,16 +40,6 @@ function displayName(user: PublicUser, username: string) {
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).slice(0, 2);
   return parts.map((part) => part[0]?.toUpperCase() ?? "").join("") || "·";
-}
-
-function formatDuration(seconds: number) {
-  const safe = Math.max(0, Math.round(seconds));
-  const hours = Math.floor(safe / 3600);
-  const minutes = Math.floor((safe % 3600) / 60);
-  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
-  if (hours > 0) return `${hours}h`;
-  if (minutes > 0) return `${minutes}m`;
-  return `${safe}s`;
 }
 
 function Avatar({ user, username, size = 64, square = false }: { user: PublicUser; username: string; size?: number; square?: boolean }) {
@@ -109,7 +98,7 @@ function SocialLinks({ user, className = "" }: { user: PublicUser; className?: s
   );
 }
 
-function MetaChips({ user }: { user: PublicUser }) {
+function MetaChips({ user, className = "text-zinc-400" }: { user: PublicUser; className?: string }) {
   const chips: ReactNode[] = [];
   const place = user.location || user.country;
   if (place) chips.push(<span key="loc" className="inline-flex items-center gap-1"><MapPin size={13} /> {place}</span>);
@@ -118,7 +107,7 @@ function MetaChips({ user }: { user: PublicUser }) {
   if (work) chips.push(<span key="work" className="inline-flex items-center gap-1"><Briefcase size={13} /> {work}</span>);
   if (chips.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-400">
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-sm ${className}`}>
       {chips.map((chip, index) => (
         <span key={index} className="inline-flex items-center">{chip}</span>
       ))}
@@ -135,18 +124,59 @@ function HireBadge({ user }: { user: PublicUser }) {
   );
 }
 
-function Heatmap({ days }: { days: DailyStat[] }) {
+const WEEKDAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// ContributionGraph renders the daily activity as a GitHub-style calendar:
+// one column per week, seven weekday rows, intensity by coding time.
+function ContributionGraph({ days }: { days: DailyStat[] }) {
   if (days.length === 0) return null;
   const max = days.reduce((acc, day) => Math.max(acc, day.total_seconds), 0);
+  const lead = new Date(days[0].date).getUTCDay();
+  const cells: Array<DailyStat | null> = [...Array.from({ length: lead }, () => null), ...days];
+  while (cells.length % 7 !== 0) cells.push(null);
+  const weeks: Array<Array<DailyStat | null>> = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  const monthLabels = weeks.map((week) => {
+    const firstReal = week.find((cell): cell is DailyStat => Boolean(cell));
+    if (!firstReal) return "";
+    const date = new Date(firstReal.date);
+    return date.getUTCDate() <= 7 ? MONTH_LABELS[date.getUTCMonth()] : "";
+  });
   return (
-    <div className="flex flex-wrap gap-1">
-      {days.map((day) => (
-        <span
-          key={day.date}
-          title={activityHeatmapTitle(day)}
-          className={`h-3.5 w-3.5 rounded-[3px] border ${activityHeatmapClass(day, max)}`}
-        />
-      ))}
+    <div className="overflow-x-auto">
+      <div className="inline-flex flex-col gap-1">
+        <div className="flex gap-[3px] pl-[30px] text-[10px] text-zinc-600">
+          {weeks.map((_, index) => (
+            <span key={index} className="w-3 shrink-0">{monthLabels[index]}</span>
+          ))}
+        </div>
+        <div className="flex gap-[3px]">
+          <div className="flex w-[27px] flex-col gap-[3px] text-[9px] leading-3 text-zinc-600">
+            {WEEKDAY_LABELS.map((label, index) => (
+              <span key={index} className="h-3">{label}</span>
+            ))}
+          </div>
+          {weeks.map((week, weekIndex) => (
+            <div key={weekIndex} className="flex flex-col gap-[3px]">
+              {week.map((cell, dayIndex) =>
+                cell ? (
+                  <span key={dayIndex} title={activityHeatmapTitle(cell)} className={`h-3 w-3 rounded-[2px] border ${activityHeatmapClass(cell, max)}`} />
+                ) : (
+                  <span key={dayIndex} className="h-3 w-3" />
+                )
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-end gap-1 pt-1 text-[10px] text-zinc-600">
+          <span>Less</span>
+          {[0, 1, 2, 3, 4].map((level) => (
+            <span key={level} className={`h-3 w-3 rounded-[2px] border ${activityHeatmapClass({ total_seconds: level === 0 ? 0 : (max * level) / 4 }, max)}`} />
+          ))}
+          <span>More</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -224,7 +254,7 @@ function TerminalLayout({ user, username, stats, permissions, languageColors, ra
         {permissions.total_time && (stats?.days.length ?? 0) > 0 ? (
           <section className="mt-4 rounded-lg border border-line bg-panel p-5">
             <div className="mb-3 text-xs uppercase tracking-[0.16em] text-zinc-500">activity · {range.replace(/_/g, " ")}</div>
-            <Heatmap days={stats?.days ?? []} />
+            <ContributionGraph days={stats?.days ?? []} />
           </section>
         ) : null}
 
@@ -272,48 +302,59 @@ function SpotlightLayout({ user, username, stats, permissions, languageColors, r
   const name = displayName(user, username);
   return (
     <main className="min-h-screen">
-      <div className="relative h-44 bg-gradient-to-br from-accent/30 via-indigo-500/20 to-fuchsia-500/20 sm:h-56">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_120%,rgba(0,180,216,0.35),transparent_60%)]" />
+      <div className="relative h-24 bg-gradient-to-r from-accent/30 via-indigo-500/20 to-fuchsia-500/20 sm:h-28">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_120%,rgba(0,180,216,0.4),transparent_55%)]" />
       </div>
-      <div className="mx-auto -mt-16 max-w-4xl px-5 sm:px-8">
-        <div className="flex flex-col items-center text-center">
+      <div className="mx-auto max-w-3xl px-5">
+        <div className="-mt-10 flex items-end gap-4">
           <div className="rounded-full ring-4 ring-ink">
-            <Avatar user={user} username={username} size={112} />
+            <Avatar user={user} username={username} size={84} />
           </div>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight">{name}</h1>
-          <p className="mt-1 text-sm text-accent">@{username}</p>
-          <div className="mt-3"><MetaChips user={user} /></div>
-          <div className="mt-3"><HireBadge user={user} /></div>
-          {user.bio ? <p className="mt-4 max-w-xl text-sm leading-6 text-zinc-400">{user.bio}</p> : null}
-          <SocialLinks user={user} className="mt-4 justify-center" />
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pb-1">
+            <h1 className="text-2xl font-semibold tracking-tight">{name}</h1>
+            <span className="text-sm text-accent">@{username}</span>
+            <HireBadge user={user} />
+          </div>
         </div>
+        <div className="mt-3"><MetaChips user={user} /></div>
+        {user.bio ? <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">{user.bio}</p> : null}
+        <SocialLinks user={user} className="mt-3" />
 
         {permissions.total_time ? (
-          <section className="mt-8 rounded-2xl border border-line bg-panel/60 p-8 text-center backdrop-blur">
-            <div className="text-5xl font-semibold tracking-tight text-zinc-50 sm:text-6xl">{stats?.human_readable_total ?? "0 secs"}</div>
-            <div className="mt-2 text-sm text-zinc-500">coding time</div>
-            <div className="mt-5 flex justify-center"><RangeTabs range={range} setRange={setRange} ranges={ranges} /></div>
-            <div className="mt-6 grid grid-cols-2 gap-3 text-left sm:grid-cols-2">
-              <StatCard label="Daily average" value={stats?.human_readable_daily_average ?? "0 secs"} detail={`${stats?.days.length ?? 0} days`} />
-              <StatCard label="Best day" value={stats?.best_day.text ?? "0 secs"} detail={stats?.best_day.date ?? "—"} />
+          <section className="mt-5 flex flex-col gap-4 rounded-xl border border-line bg-panel p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-4xl font-semibold tracking-tight text-zinc-50">{stats?.human_readable_total ?? "0 secs"}</div>
+              <div className="mt-1 text-xs text-zinc-500">coding time</div>
+            </div>
+            <div className="flex items-center gap-6 sm:border-l sm:border-line sm:pl-6">
+              <div>
+                <div className="text-lg font-semibold text-zinc-100">{stats?.human_readable_daily_average ?? "0 secs"}</div>
+                <div className="text-xs text-zinc-500">daily avg</div>
+              </div>
+              <div>
+                <div className="text-lg font-semibold text-zinc-100">{stats?.best_day.text ?? "0 secs"}</div>
+                <div className="text-xs text-zinc-500">best day</div>
+              </div>
             </div>
           </section>
         ) : null}
 
-        {permissions.total_time ? (
-          <section className="mt-5">
-            <ActivityBars days={stats?.days ?? []} title="Activity" />
+        <div className="mt-3 flex justify-end"><RangeTabs range={range} setRange={setRange} ranges={ranges} /></div>
+
+        {permissions.total_time && (stats?.days.length ?? 0) > 0 ? (
+          <section className="mt-2 rounded-xl border border-line bg-panel p-5">
+            <ContributionGraph days={stats?.days ?? []} />
           </section>
         ) : null}
 
-        <div className="mt-5 grid gap-5 md:grid-cols-2">
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
           {permissions.languages ? <SliceDonut title="Languages" rows={stats?.languages ?? []} colors={languageColors} /> : null}
           {permissions.projects ? <SliceDonut title="Projects" rows={stats?.projects ?? []} /> : null}
           {permissions.editors ? <SliceDonut title="Editors" rows={stats?.editors ?? []} /> : null}
           {permissions.categories ? <SliceDonut title="Categories" rows={stats?.categories ?? []} /> : null}
         </div>
 
-        {permissions.ai ? <div className="mt-5"><AIPanel metrics={stats?.ai} /></div> : null}
+        {permissions.ai ? <div className="mt-4"><AIPanel metrics={stats?.ai} /></div> : null}
         <StintFooter />
       </div>
     </main>
@@ -357,10 +398,9 @@ function RailLayout({ user, username, stats, permissions, languageColors, range,
           </div>
           {permissions.total_time && (stats?.days.length ?? 0) > 0 ? (
             <section className="rounded-2xl border border-line bg-panel p-5">
-              <Heatmap days={stats?.days ?? []} />
+              <ContributionGraph days={stats?.days ?? []} />
             </section>
           ) : null}
-          {permissions.total_time ? <div className="mt-5"><ActivityBars days={stats?.days ?? []} title="Daily activity" /></div> : null}
           <div className="mt-5 grid gap-5 xl:grid-cols-2">
             {permissions.languages ? (
               <section className="rounded-2xl border border-line bg-panel p-5">
