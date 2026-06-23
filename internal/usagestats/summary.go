@@ -96,12 +96,19 @@ func (g Group) tokens() int {
 // syntheticEvent rebuilds the usage.Event the pricing engine expects from a
 // group's summed tokens, so the per-group pricing call is the exact same code
 // path as the per-event one (cost/marginal/ModelResolved semantics unchanged).
-func (g Group) syntheticEvent() usage.Event {
+// A per-agent billingOverride wins over the group's stored billing type so the
+// user can reclassify an agent as subscription (zero marginal) or api at view
+// time without re-collecting events.
+func (g Group) syntheticEvent(billingOverride map[string]usage.BillingType) usage.Event {
+	billing := usage.BillingType(g.BillingType)
+	if override, ok := billingOverride[g.Agent]; ok {
+		billing = override
+	}
 	e := usage.Event{
 		Agent:               g.Agent,
 		Model:               g.Model,
 		Project:             g.Project,
-		BillingType:         usage.BillingType(g.BillingType),
+		BillingType:         billing,
 		InputTokens:         g.Input,
 		OutputTokens:        g.Output,
 		CacheCreate5mTokens: g.CacheCreate5m,
@@ -118,10 +125,11 @@ func (g Group) syntheticEvent() usage.Event {
 
 // Summarize prices and aggregates the events into a Summary. Days are bucketed
 // in loc (defaulting to UTC). A nil engine leaves costs at zero and records
-// every non-empty model as unpriced. It groups events in Go (by the same key
-// SQL uses) then defers to SummarizeAggregates, so the accumulation logic lives
-// in one place.
-func Summarize(events []usage.Event, engine *pricing.Engine, mode pricing.Mode, loc *time.Location) Summary {
+// every non-empty model as unpriced. billingOverride, keyed by agent, reclasses
+// an agent's events as subscription/api at view time (nil = use stored billing).
+// It groups events in Go (by the same key SQL uses) then defers to
+// SummarizeAggregates, so the accumulation logic lives in one place.
+func Summarize(events []usage.Event, engine *pricing.Engine, mode pricing.Mode, loc *time.Location, billingOverride map[string]usage.BillingType) Summary {
 	if loc == nil {
 		loc = time.UTC
 	}
@@ -170,13 +178,14 @@ func Summarize(events []usage.Event, engine *pricing.Engine, mode pricing.Mode, 
 	for _, key := range order {
 		out = append(out, *groups[key])
 	}
-	return SummarizeAggregates(out, engine, mode)
+	return SummarizeAggregates(out, engine, mode, billingOverride)
 }
 
 // SummarizeAggregates prices each pre-summed group and accumulates the result
 // into a Summary. Days are already bucketed (g.Day). A nil engine leaves costs
-// at zero and records every non-empty model as unpriced.
-func SummarizeAggregates(groups []Group, engine *pricing.Engine, mode pricing.Mode) Summary {
+// at zero and records every non-empty model as unpriced. billingOverride, keyed
+// by agent, reclasses an agent's billing type at view time (nil = use stored).
+func SummarizeAggregates(groups []Group, engine *pricing.Engine, mode pricing.Mode, billingOverride map[string]usage.BillingType) Summary {
 	var total Totals
 	byAgent := map[string]*usageBucket{}
 	byModel := map[string]*usageBucket{}
@@ -211,7 +220,7 @@ func SummarizeAggregates(groups []Group, engine *pricing.Engine, mode pricing.Mo
 
 		var result pricing.Result
 		if engine != nil {
-			result = engine.Price(g.syntheticEvent(), mode)
+			result = engine.Price(g.syntheticEvent(billingOverride), mode)
 		}
 		total.CostUSD += result.USD
 		total.MarginalUSD += result.MarginalUSD

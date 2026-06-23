@@ -44,7 +44,7 @@ func TestBlocksWithinFiveHoursIsOneBlock(t *testing.T) {
 		ev("2026-06-23T14:00:00Z", 300, 3.0), // within 5h of floored start 10:00
 	}
 	now := time.Date(2026, 6, 23, 14, 30, 0, 0, time.UTC)
-	blocks, current := Blocks(events, now, pricing.ModeAuto, engine, time.UTC)
+	blocks, current := Blocks(events, now, pricing.ModeAuto, engine, time.UTC, nil)
 
 	if len(blocks) != 1 {
 		t.Fatalf("expected 1 block, got %d", len(blocks))
@@ -72,7 +72,7 @@ func TestBlocksGapStartsNewBlock(t *testing.T) {
 		ev("2026-06-23T16:00:00Z", 100, 1.0),
 	}
 	now := time.Date(2026, 6, 23, 16, 30, 0, 0, time.UTC)
-	blocks, _ := Blocks(events, now, pricing.ModeAuto, engine, time.UTC)
+	blocks, _ := Blocks(events, now, pricing.ModeAuto, engine, time.UTC, nil)
 	if len(blocks) != 2 {
 		t.Fatalf("expected 2 blocks across a >5h gap, got %d", len(blocks))
 	}
@@ -91,7 +91,7 @@ func TestBlocksWindowOverflowStartsNewBlock(t *testing.T) {
 		ev("2026-06-23T15:30:00Z", 100, 1.0), // within 5h of prev, but past window end 15:00
 	}
 	now := time.Date(2026, 6, 23, 16, 0, 0, 0, time.UTC)
-	blocks, _ := Blocks(events, now, pricing.ModeAuto, engine, time.UTC)
+	blocks, _ := Blocks(events, now, pricing.ModeAuto, engine, time.UTC, nil)
 	if len(blocks) != 2 {
 		t.Fatalf("expected window overflow to start a new block, got %d blocks", len(blocks))
 	}
@@ -99,7 +99,7 @@ func TestBlocksWindowOverflowStartsNewBlock(t *testing.T) {
 
 func TestBlocksEmptyHasNoCurrent(t *testing.T) {
 	engine := newEngine(t)
-	blocks, current := Blocks(nil, time.Now(), pricing.ModeAuto, engine, time.UTC)
+	blocks, current := Blocks(nil, time.Now(), pricing.ModeAuto, engine, time.UTC, nil)
 	if len(blocks) != 0 {
 		t.Fatalf("expected no blocks, got %d", len(blocks))
 	}
@@ -113,7 +113,7 @@ func TestBlocksStaleBlockNotActive(t *testing.T) {
 	events := []usage.Event{ev("2026-06-23T10:00:00Z", 100, 1.0)}
 	// now is past the window end (10:00-15:00) so the block is not active.
 	now := time.Date(2026, 6, 23, 16, 0, 0, 0, time.UTC)
-	_, current := Blocks(events, now, pricing.ModeAuto, engine, time.UTC)
+	_, current := Blocks(events, now, pricing.ModeAuto, engine, time.UTC, nil)
 	if current != nil {
 		t.Fatal("block whose window has ended must not be active")
 	}
@@ -128,7 +128,7 @@ func TestBlocksCurrentBurnRateAndProjection(t *testing.T) {
 	}
 	// now = 12:00 -> elapsed 120 minutes (2h) from block start 10:00.
 	now := time.Date(2026, 6, 23, 12, 0, 0, 0, time.UTC)
-	_, current := Blocks(events, now, pricing.ModeAuto, engine, time.UTC)
+	_, current := Blocks(events, now, pricing.ModeAuto, engine, time.UTC, nil)
 	if current == nil {
 		t.Fatal("expected active block")
 	}

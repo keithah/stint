@@ -50,7 +50,7 @@ func TestCustomPricingOverridesPriceUnpricedModel(t *testing.T) {
 		BillingType:  usage.BillingAPI,
 	}}
 
-	summary := usagestats.Summarize(events, engine, pricing.ModeCalculate, time.UTC)
+	summary := usagestats.Summarize(events, engine, pricing.ModeCalculate, time.UTC, nil)
 	cost := summary.Total.CostUSD
 	// 1M input * $3/1M + 1M output * $15/1M = $18.
 	if cost < 17.999 || cost > 18.001 {
@@ -61,7 +61,7 @@ func TestCustomPricingOverridesPriceUnpricedModel(t *testing.T) {
 	}
 
 	// Without the override the same model is unpriced.
-	bare := usagestats.Summarize(events, base, pricing.ModeCalculate, time.UTC)
+	bare := usagestats.Summarize(events, base, pricing.ModeCalculate, time.UTC, nil)
 	if len(bare.UnpricedModels) != 1 || bare.UnpricedModels[0] != model {
 		t.Fatalf("expected %q unpriced without override, got %v", model, bare.UnpricedModels)
 	}

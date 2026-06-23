@@ -387,6 +387,9 @@ email
 | GET | `/api/v1/users/current/custom_pricing` | List custom AI pricing overrides |
 | PUT | `/api/v1/users/current/custom_pricing` | Upsert a custom AI pricing override |
 | DELETE | `/api/v1/users/current/custom_pricing/:model` | Delete a custom AI pricing override |
+| GET | `/api/v1/users/current/billing_prefs` | List per-agent billing-mode overrides |
+| PUT | `/api/v1/users/current/billing_prefs` | Upsert a per-agent billing-mode override |
+| DELETE | `/api/v1/users/current/billing_prefs/:agent` | Delete a per-agent billing-mode override |
 | POST | `/api/v1/users/current/file_experts` | WakaTime-compatible file experts |
 
 #### Durations

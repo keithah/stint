@@ -82,6 +82,11 @@ func (s *Server) usageEventsSummary(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
 
+	billingOverride, err := s.billingOverridesForUser(c.Request().Context(), user.ID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
+	}
+
 	groups := make([]usagestats.Group, 0, len(aggs))
 	for _, a := range aggs {
 		groups = append(groups, usagestats.Group{
@@ -102,7 +107,7 @@ func (s *Server) usageEventsSummary(c echo.Context) error {
 		})
 	}
 
-	summary := usagestats.SummarizeAggregates(groups, engine, mode)
+	summary := usagestats.SummarizeAggregates(groups, engine, mode, billingOverride)
 
 	return c.JSON(http.StatusOK, map[string]any{"data": struct {
 		usagestats.Summary

@@ -35,10 +35,64 @@ func TestSummarizeAggregatesEqualsSummarize(t *testing.T) {
 	}
 
 	for _, mode := range []pricing.Mode{pricing.ModeCalculate, pricing.ModeAuto} {
-		fromEvents := Summarize(events, engine, mode, time.UTC)
-		fromGroups := SummarizeAggregates(groups, engine, mode)
+		fromEvents := Summarize(events, engine, mode, time.UTC, nil)
+		fromGroups := SummarizeAggregates(groups, engine, mode, nil)
 		if !reflect.DeepEqual(fromEvents, fromGroups) {
 			t.Fatalf("mode %s: aggregates summary != events summary\n events=%+v\n groups=%+v", mode, fromEvents, fromGroups)
 		}
+	}
+}
+
+// TestBillingOverrideZeroesMarginalKeepsCost proves the per-agent override
+// reclasses a stored-api agent as subscription at view time: marginal_usd drops
+// to 0 while cost_usd (the equivalent-API figure) is unchanged.
+func TestBillingOverrideZeroesMarginalKeepsCost(t *testing.T) {
+	engine := newEngine(t)
+
+	// Both groups are stored as api; only claude-code is overridden.
+	groups := []Group{
+		{Agent: "claude-code", Model: "claude-sonnet-4-6", Project: "stint", Day: "2026-06-23", BillingType: string(usage.BillingAPI), Input: 1_000_000, Output: 500_000, EventCount: 3},
+		{Agent: "codex", Model: "claude-sonnet-4-6", Project: "other", Day: "2026-06-23", BillingType: string(usage.BillingAPI), Input: 200_000, Output: 100_000, EventCount: 1},
+	}
+
+	base := SummarizeAggregates(groups, engine, pricing.ModeCalculate, nil)
+	if base.Total.CostUSD <= 0 {
+		t.Fatalf("expected positive cost, got %f", base.Total.CostUSD)
+	}
+	if !approx(base.Total.MarginalUSD, base.Total.CostUSD) {
+		t.Fatalf("without override marginal should equal cost, got marginal=%f cost=%f", base.Total.MarginalUSD, base.Total.CostUSD)
+	}
+
+	override := map[string]usage.BillingType{"claude-code": usage.BillingSubscription}
+	got := SummarizeAggregates(groups, engine, pricing.ModeCalculate, override)
+
+	// cost_usd unchanged by the override.
+	if !approx(got.Total.CostUSD, base.Total.CostUSD) {
+		t.Fatalf("override changed cost_usd: got %f want %f", got.Total.CostUSD, base.Total.CostUSD)
+	}
+
+	// claude-code marginal is now 0; codex marginal still equals its cost.
+	var claude, codex Bucket
+	for _, b := range got.ByAgent {
+		switch b.Name {
+		case "claude-code":
+			claude = b
+		case "codex":
+			codex = b
+		}
+	}
+	if !approx(claude.MarginalUSD, 0) {
+		t.Fatalf("overridden agent marginal should be 0, got %f", claude.MarginalUSD)
+	}
+	if !approx(claude.CostUSD, base.ByAgent[0].CostUSD) && claude.CostUSD <= 0 {
+		t.Fatalf("overridden agent cost should be unchanged/positive, got %f", claude.CostUSD)
+	}
+	if !approx(codex.MarginalUSD, codex.CostUSD) || codex.CostUSD <= 0 {
+		t.Fatalf("non-overridden agent marginal should equal cost, got marginal=%f cost=%f", codex.MarginalUSD, codex.CostUSD)
+	}
+
+	// Total marginal == codex cost only (claude zeroed).
+	if !approx(got.Total.MarginalUSD, codex.CostUSD) {
+		t.Fatalf("total marginal should equal codex cost, got %f want %f", got.Total.MarginalUSD, codex.CostUSD)
 	}
 }

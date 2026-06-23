@@ -133,3 +133,26 @@ export async function upsertCustomPricing(pricing: CustomPricing) {
 export async function deleteCustomPricing(model: string) {
   return request<void>(`/api/v1/users/current/custom_pricing/${encodeURIComponent(model)}`, { method: "DELETE" });
 }
+
+// BillingPref is a per-agent billing-mode override: declare an agent as flat-rate
+// subscription (marginal cost $0) or metered api (marginal = equivalent-API cost),
+// overriding the billing_type the collecting adapter stamped on stored events.
+export type BillingPref = {
+  agent: string;
+  billing_type: "api" | "subscription";
+};
+
+export async function listBillingPrefs() {
+  return request<{ data: BillingPref[] }>("/api/v1/users/current/billing_prefs");
+}
+
+export async function upsertBillingPref(pref: BillingPref) {
+  return request<{ data: BillingPref[] }>("/api/v1/users/current/billing_prefs", {
+    method: "PUT",
+    body: JSON.stringify(pref)
+  });
+}
+
+export async function deleteBillingPref(agent: string) {
+  return request<void>(`/api/v1/users/current/billing_prefs/${encodeURIComponent(agent)}`, { method: "DELETE" });
+}
