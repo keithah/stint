@@ -23,9 +23,29 @@ export type User = {
   public_show_categories: boolean;
   public_show_ai: boolean;
   public_show_summaries: boolean;
+  public_profile: PublicProfileFields;
 };
 
 export type PublicProjectVisibility = "none" | "public_repos" | "all";
+
+export type ProfileLayout = "terminal" | "spotlight" | "rail";
+export type ProfileVisibility = "public" | "private";
+
+export type PublicProfileFields = {
+  bio?: string;
+  location?: string;
+  website_url?: string;
+  twitter_username?: string;
+  linkedin_url?: string;
+  mastodon_url?: string;
+  pronouns?: string;
+  company?: string;
+  role?: string;
+  layout?: ProfileLayout;
+  available_for_hire?: boolean;
+  email_public?: boolean;
+  visibility?: Record<string, ProfileVisibility>;
+};
 
 export type PublicProfilePermissions = {
   total_time: boolean;
@@ -56,6 +76,20 @@ export type PublicUser = {
   github_username?: string;
   github_url?: string;
   avatar_url?: string;
+  layout?: ProfileLayout;
+  bio?: string;
+  location?: string;
+  country?: string;
+  website_url?: string;
+  twitter_username?: string;
+  twitter_url?: string;
+  linkedin_url?: string;
+  mastodon_url?: string;
+  pronouns?: string;
+  company?: string;
+  role?: string;
+  available_for_hire?: boolean;
+  email?: string;
   permissions: PublicProfilePermissions;
 };
 
@@ -814,6 +848,7 @@ export type UserUpdatePayload = Pick<
   | "public_show_categories"
   | "public_show_ai"
   | "public_show_summaries"
+  | "public_profile"
 >;
 
 export async function updateUser(payload: UserUpdatePayload) {

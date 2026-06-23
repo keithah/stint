@@ -2,7 +2,7 @@
 SELECT id, github_id, github_username, email, full_name, avatar_url, timezone, timeout_minutes, writes_only, is_hireable, has_public_profile, country, heartbeat_retention_days,
   public_username, public_display_name, public_github_link_enabled, public_show_total_time, public_show_projects, public_project_visibility,
   public_show_languages, public_show_editors, public_show_machines, public_show_operating_systems, public_show_categories, public_show_ai,
-  public_show_summaries
+  public_show_summaries, public_profile
 FROM users
 WHERE id = $1;
 

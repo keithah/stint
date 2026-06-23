@@ -2378,6 +2378,7 @@ func (s *Server) updateCurrentUser(c echo.Context) error {
 		PublicShowCategories    bool   `json:"public_show_categories"`
 		PublicShowAI            bool   `json:"public_show_ai"`
 		PublicShowSummaries     bool   `json:"public_show_summaries"`
+		PublicProfile           db.PublicProfile `json:"public_profile"`
 	}
 	if err := c.Bind(&payload); err != nil {
 		return c.JSON(http.StatusBadRequest, errorBody("invalid JSON body"))
@@ -2402,6 +2403,7 @@ func (s *Server) updateCurrentUser(c echo.Context) error {
 		PublicShowCategories:    payload.PublicShowCategories,
 		PublicShowAI:            payload.PublicShowAI,
 		PublicShowSummaries:     payload.PublicShowSummaries,
+		PublicProfile:           payload.PublicProfile,
 	}
 	if err := db.ValidateUserSettings(input); err != nil {
 		return c.JSON(http.StatusBadRequest, errorBody(err.Error()))
@@ -5516,10 +5518,16 @@ func publicUser(user db.User) map[string]any {
 	if name == "" && user.PublicGitHubLink {
 		name = user.FullName
 	}
+	profile := user.PublicProfile
+	layout := profile.Layout
+	if layout == "" {
+		layout = "terminal"
+	}
 	payload := map[string]any{
 		"id":       user.ID.String(),
 		"username": username,
 		"name":     name,
+		"layout":   layout,
 		"permissions": map[string]any{
 			"total_time":         user.PublicShowTotalTime,
 			"projects":           user.PublicShowProjects,
@@ -5538,6 +5546,35 @@ func publicUser(user db.User) map[string]any {
 		payload["github_username"] = user.GitHubUsername
 		payload["github_url"] = "https://github.com/" + user.GitHubUsername
 		payload["avatar_url"] = user.AvatarURL
+	}
+	// Personal-info fields are public by default; an explicit "private"
+	// visibility entry hides one. (Empty fields are simply omitted.)
+	vis := func(key string) bool { return profile.Visibility[key] != "private" }
+	setIf := func(key, value string) {
+		if value != "" && vis(key) {
+			payload[key] = value
+		}
+	}
+	setIf("bio", profile.Bio)
+	setIf("location", profile.Location)
+	setIf("website_url", profile.WebsiteURL)
+	setIf("linkedin_url", profile.LinkedInURL)
+	setIf("mastodon_url", profile.MastodonURL)
+	setIf("pronouns", profile.Pronouns)
+	setIf("company", profile.Company)
+	setIf("role", profile.Role)
+	if profile.TwitterUsername != "" && vis("twitter") {
+		payload["twitter_username"] = profile.TwitterUsername
+		payload["twitter_url"] = "https://twitter.com/" + profile.TwitterUsername
+	}
+	if profile.Location == "" && user.Country != "" && vis("location") {
+		payload["country"] = user.Country
+	}
+	if profile.AvailableForHire && vis("hireable") {
+		payload["available_for_hire"] = true
+	}
+	if profile.EmailPublic && user.Email != "" && vis("email") {
+		payload["email"] = user.Email
 	}
 	return payload
 }
