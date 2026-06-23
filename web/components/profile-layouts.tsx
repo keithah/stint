@@ -247,11 +247,11 @@ function TerminalLayout({ user, username, stats, permissions, languageColors, ra
           <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
             <TerminalStat label="total" value={stats?.human_readable_total ?? "0s"} />
             <TerminalStat label="daily avg" value={stats?.human_readable_daily_average ?? "0s"} />
-            <TerminalStat label="best day" value={stats?.best_day.text ?? "0s"} hint={stats?.best_day.date} />
+            <TerminalStat label="best day" value={stats?.best_day?.text ?? "0s"} hint={stats?.best_day?.date} />
           </div>
         ) : null}
 
-        {permissions.total_time && (stats?.days.length ?? 0) > 0 ? (
+        {permissions.total_time && (stats?.days?.length ?? 0) > 0 ? (
           <section className="mt-4 rounded-lg border border-line bg-panel p-5">
             <div className="mb-3 text-xs uppercase tracking-[0.16em] text-zinc-500">activity · {range.replace(/_/g, " ")}</div>
             <ContributionGraph days={stats?.days ?? []} />
@@ -332,7 +332,7 @@ function SpotlightLayout({ user, username, stats, permissions, languageColors, r
                 <div className="text-xs text-zinc-500">daily avg</div>
               </div>
               <div>
-                <div className="text-lg font-semibold text-zinc-100">{stats?.best_day.text ?? "0 secs"}</div>
+                <div className="text-lg font-semibold text-zinc-100">{stats?.best_day?.text ?? "0 secs"}</div>
                 <div className="text-xs text-zinc-500">best day</div>
               </div>
             </div>
@@ -341,7 +341,7 @@ function SpotlightLayout({ user, username, stats, permissions, languageColors, r
 
         <div className="mt-3 flex justify-end"><RangeTabs range={range} setRange={setRange} ranges={ranges} /></div>
 
-        {permissions.total_time && (stats?.days.length ?? 0) > 0 ? (
+        {permissions.total_time && (stats?.days?.length ?? 0) > 0 ? (
           <section className="mt-2 rounded-xl border border-line bg-panel p-5">
             <ContributionGraph days={stats?.days ?? []} />
           </section>
@@ -385,7 +385,7 @@ function RailLayout({ user, username, stats, permissions, languageColors, range,
               <div className="mt-6 space-y-3 border-t border-line pt-5">
                 <RailTotal label="Total" value={stats?.human_readable_total ?? "0 secs"} />
                 <RailTotal label="Daily average" value={stats?.human_readable_daily_average ?? "0 secs"} />
-                <RailTotal label="Best day" value={stats?.best_day.text ?? "0 secs"} hint={stats?.best_day.date} />
+                <RailTotal label="Best day" value={stats?.best_day?.text ?? "0 secs"} hint={stats?.best_day?.date} />
               </div>
             ) : null}
           </div>
@@ -396,7 +396,7 @@ function RailLayout({ user, username, stats, permissions, languageColors, range,
             <h2 className="text-sm uppercase tracking-[0.16em] text-zinc-500">Activity</h2>
             <RangeTabs range={range} setRange={setRange} ranges={ranges} />
           </div>
-          {permissions.total_time && (stats?.days.length ?? 0) > 0 ? (
+          {permissions.total_time && (stats?.days?.length ?? 0) > 0 ? (
             <section className="rounded-2xl border border-line bg-panel p-5">
               <ContributionGraph days={stats?.days ?? []} />
             </section>
