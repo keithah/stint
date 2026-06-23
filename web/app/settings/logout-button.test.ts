@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 
-const source = readFileSync("app/settings/page.tsx", "utf8");
+const source = readFileSync("components/settings/github-account-card.tsx", "utf8");
 const packageJSON = readFileSync("package.json", "utf8");
 
 assert.match(source, /LogOut/);

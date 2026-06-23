@@ -1,0 +1,72 @@
+{
+  "sessionId": "f602469e-8eba-4e1b-ba7f-dfa488f44306",
+  "projectHash": "d72665c74edaecee5d1b53ab6a7d5c05c719d9929915b06123613226006a0866",
+  "cwd": "/home/keith/src/widget",
+  "startTime": "2026-01-25T00:27:21.183Z",
+  "lastUpdated": "2026-01-25T00:27:25.000Z",
+  "messages": [
+    {
+      "id": "8478f792-dad1-4ab3-89ca-fe384a9887ab",
+      "timestamp": "2026-01-25T00:27:21.183Z",
+      "type": "user",
+      "content": "ok"
+    },
+    {
+      "id": "a4cb2387-ca36-47e0-ac11-825b77aeed28",
+      "timestamp": "2026-01-25T00:27:22.817Z",
+      "type": "gemini",
+      "content": "Okay, I'm ready for your first command.",
+      "tokens": {
+        "input": 6773,
+        "output": 11,
+        "cached": 4925,
+        "thoughts": 36,
+        "tool": 0,
+        "total": 6820
+      },
+      "model": "gemini-2.5-flash"
+    },
+    {
+      "id": "a4cb2387-ca36-47e0-ac11-825b77aeed28",
+      "timestamp": "2026-01-25T00:27:22.817Z",
+      "type": "gemini",
+      "content": "Okay, I'm ready for your first command.",
+      "tokens": {
+        "input": 6773,
+        "output": 11,
+        "cached": 4925,
+        "thoughts": 36,
+        "tool": 0,
+        "total": 6820
+      },
+      "model": "gemini-2.5-flash"
+    },
+    {
+      "id": "c1d2e3f4-0000-4000-8000-000000000001",
+      "timestamp": "2026-01-25T00:27:24.000Z",
+      "type": "gemini",
+      "content": "Here is a plan.",
+      "thoughts": [
+        {
+          "subject": "Planning",
+          "description": "Thinking it through."
+        }
+      ],
+      "tokens": {
+        "input": 8000,
+        "output": 250,
+        "cached": 3000,
+        "thoughts": 120,
+        "tool": 0,
+        "total": 8370
+      },
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "id": "deadbeef-tool-only-no-usage-000000000002",
+      "timestamp": "2026-01-25T00:27:24.500Z",
+      "type": "tool",
+      "content": "ran a tool"
+    }
+  ]
+}

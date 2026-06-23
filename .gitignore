@@ -12,3 +12,7 @@ docs/screenshots/
 tmp/
 .tmp/
 *.log
+
+# AI usage collector binary
+/stint-collect
+/collect

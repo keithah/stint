@@ -380,6 +380,13 @@ email
 | POST | `/api/v1/users/current/heartbeats` | Send single heartbeat |
 | POST | `/api/v1/users/current/heartbeats.bulk` | Send up to 25 heartbeats |
 | DELETE | `/api/v1/users/current/heartbeats.bulk` | Delete heartbeats by date+ids |
+| POST | `/api/v1/users/current/usage_events.bulk` | Ingest up to 5000 AI usage events (idempotent) |
+| GET | `/api/v1/users/current/usage_events` | Export AI usage events for a time range |
+| GET | `/api/v1/users/current/usage_events/summary` | Aggregated AI cost/token summary |
+| GET | `/api/v1/users/current/usage_events/blocks` | 5-hour usage blocks + burn rate |
+| GET | `/api/v1/users/current/custom_pricing` | List custom AI pricing overrides |
+| PUT | `/api/v1/users/current/custom_pricing` | Upsert a custom AI pricing override |
+| DELETE | `/api/v1/users/current/custom_pricing/:model` | Delete a custom AI pricing override |
 | POST | `/api/v1/users/current/file_experts` | WakaTime-compatible file experts |
 
 #### Durations

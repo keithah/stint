@@ -1,0 +1,6 @@
+Date,User,Kind,Max Mode,Model,Cost ($),Input (w/ Cache Write),Input (w/o Cache Write),Cache Read,Output Tokens,Total Tokens
+2026-06-22T10:00:00.000Z,scrubbed@example.com,Usage-based,Yes,claude-3-5-sonnet,0.0421,3500,2000,1500,450,5650
+2026-06-22T10:00:00.000Z,scrubbed@example.com,Usage-based,Yes,claude-3-5-sonnet,0.0421,3500,2000,1500,450,5650
+2026-06-22T10:05:00.000Z,scrubbed@example.com,Errored,No,gpt-4o,0,0,0,0,0,0
+2026-06-22T10:10:00.000Z,scrubbed@example.com,Usage-based,No,gpt-4o,0.0100,900,900,0,200,1100
+2026-06-22T10:15:00.000Z,scrubbed@example.com,Usage-based,No,gpt-4o,0.02,1"00,500,0,bad,9999

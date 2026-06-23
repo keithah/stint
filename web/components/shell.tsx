@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BarChart3, Boxes, FileDown, Goal, KeyRound, LayoutDashboard, LogIn, PlugZap, Trophy } from "lucide-react";
+import { Activity, BarChart3, Boxes, Coins, FileDown, Goal, KeyRound, LayoutDashboard, LogIn, PlugZap, Trophy } from "lucide-react";
 import { me } from "@/lib/api";
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -73,6 +73,7 @@ const navItems = [
   { href: "/projects", label: "Projects", icon: Boxes },
   { href: "/integrations", label: "Integrations", icon: PlugZap },
   { href: "/insights", label: "Insights", icon: BarChart3 },
+  { href: "/ai-costs", label: "AI Costs", icon: Coins },
   { href: "/goals", label: "Goals", icon: Goal },
   { href: "/leaderboards", label: "Leaderboards", icon: Trophy },
   { href: "/reports", label: "Reports", icon: FileDown },

@@ -563,7 +563,7 @@ export function dataDumpDownloadURL(path?: string | null) {
   return new URL(path, `${apiBase.replace(/\/$/, "")}/`).toString();
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
     ...init,
     credentials: "include",
@@ -971,3 +971,4 @@ export async function replaceAICosts(settings: AICostSetting[]) {
     body: JSON.stringify(settings)
   });
 }
+

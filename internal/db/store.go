@@ -50,32 +50,32 @@ const userColumnsU = `u.id, u.github_id, u.github_username, coalesce(u.email, ''
 	u.public_show_categories, u.public_show_ai, u.public_show_summaries, coalesce(u.public_profile, '{}'::jsonb)`
 
 type User struct {
-	ID                      uuid.UUID `json:"id"`
-	GitHubID                int64     `json:"github_id"`
-	GitHubUsername          string    `json:"github_username"`
-	Email                   string    `json:"email,omitempty"`
-	FullName                string    `json:"full_name,omitempty"`
-	AvatarURL               string    `json:"avatar_url,omitempty"`
-	Country                 string    `json:"country,omitempty"`
-	Timezone                string    `json:"timezone"`
-	TimeoutMinutes          int       `json:"timeout_minutes"`
-	WritesOnly              bool      `json:"writes_only"`
-	IsHireable              bool      `json:"is_hireable"`
-	HasPublicProfile        bool      `json:"has_public_profile"`
-	HeartbeatRetentionDays  int       `json:"heartbeat_retention_days"`
-	PublicUsername          string    `json:"public_username,omitempty"`
-	PublicDisplayName       string    `json:"public_display_name,omitempty"`
-	PublicGitHubLink        bool      `json:"public_github_link_enabled"`
-	PublicShowTotalTime     bool      `json:"public_show_total_time"`
-	PublicShowProjects      bool      `json:"public_show_projects"`
-	PublicProjectVisibility string    `json:"public_project_visibility"`
-	PublicShowLanguages     bool      `json:"public_show_languages"`
-	PublicShowEditors       bool      `json:"public_show_editors"`
-	PublicShowMachines      bool      `json:"public_show_machines"`
-	PublicShowOS            bool      `json:"public_show_operating_systems"`
-	PublicShowCategories    bool      `json:"public_show_categories"`
-	PublicShowAI            bool      `json:"public_show_ai"`
-	PublicShowSummaries     bool      `json:"public_show_summaries"`
+	ID                      uuid.UUID     `json:"id"`
+	GitHubID                int64         `json:"github_id"`
+	GitHubUsername          string        `json:"github_username"`
+	Email                   string        `json:"email,omitempty"`
+	FullName                string        `json:"full_name,omitempty"`
+	AvatarURL               string        `json:"avatar_url,omitempty"`
+	Country                 string        `json:"country,omitempty"`
+	Timezone                string        `json:"timezone"`
+	TimeoutMinutes          int           `json:"timeout_minutes"`
+	WritesOnly              bool          `json:"writes_only"`
+	IsHireable              bool          `json:"is_hireable"`
+	HasPublicProfile        bool          `json:"has_public_profile"`
+	HeartbeatRetentionDays  int           `json:"heartbeat_retention_days"`
+	PublicUsername          string        `json:"public_username,omitempty"`
+	PublicDisplayName       string        `json:"public_display_name,omitempty"`
+	PublicGitHubLink        bool          `json:"public_github_link_enabled"`
+	PublicShowTotalTime     bool          `json:"public_show_total_time"`
+	PublicShowProjects      bool          `json:"public_show_projects"`
+	PublicProjectVisibility string        `json:"public_project_visibility"`
+	PublicShowLanguages     bool          `json:"public_show_languages"`
+	PublicShowEditors       bool          `json:"public_show_editors"`
+	PublicShowMachines      bool          `json:"public_show_machines"`
+	PublicShowOS            bool          `json:"public_show_operating_systems"`
+	PublicShowCategories    bool          `json:"public_show_categories"`
+	PublicShowAI            bool          `json:"public_show_ai"`
+	PublicShowSummaries     bool          `json:"public_show_summaries"`
 	PublicProfile           PublicProfile `json:"public_profile"`
 }
 
@@ -86,14 +86,14 @@ type User struct {
 // public. The value set is intentionally open so org/team scopes can be added
 // later without breaking stored data.
 type PublicProfile struct {
-	Bio             string            `json:"bio,omitempty"`
-	Location        string            `json:"location,omitempty"`
-	WebsiteURL      string            `json:"website_url,omitempty"`
-	TwitterUsername string            `json:"twitter_username,omitempty"`
-	LinkedInURL     string            `json:"linkedin_url,omitempty"`
-	MastodonURL     string            `json:"mastodon_url,omitempty"`
-	Pronouns        string            `json:"pronouns,omitempty"`
-	Company         string            `json:"company,omitempty"`
+	Bio              string            `json:"bio,omitempty"`
+	Location         string            `json:"location,omitempty"`
+	WebsiteURL       string            `json:"website_url,omitempty"`
+	TwitterUsername  string            `json:"twitter_username,omitempty"`
+	LinkedInURL      string            `json:"linkedin_url,omitempty"`
+	MastodonURL      string            `json:"mastodon_url,omitempty"`
+	Pronouns         string            `json:"pronouns,omitempty"`
+	Company          string            `json:"company,omitempty"`
 	Role             string            `json:"role,omitempty"`
 	Layout           string            `json:"layout,omitempty"`
 	AvailableForHire bool              `json:"available_for_hire,omitempty"`

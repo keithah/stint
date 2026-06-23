@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-const source = readFileSync("app/settings/page.tsx", "utf8");
+const source = readFileSync("components/settings/custom-rules-card.tsx", "utf8");
 const apiSource = readFileSync("lib/api.ts", "utf8");
 
 assertIncludes("settings imports custom rule delete helper", source, "deleteCustomRule");

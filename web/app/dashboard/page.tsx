@@ -12,7 +12,7 @@ import { Shell } from "@/components/shell";
 import { StatCard } from "@/components/stat-card";
 import { allTimeSinceToday, listProgramLanguages, me, statsForRange, statusBarToday, type AIStat, type Stats, type StatsRange, wakatimeAPIURL } from "@/lib/api";
 import { languageColorMap } from "@/lib/language-colors";
-import { compactNumber } from "@/lib/number-format";
+import { compactNumber, formatCents } from "@/lib/number-format";
 import { ONBOARDING_STORAGE_KEY, shouldShowOnboarding } from "@/lib/onboarding-state";
 
 export default function DashboardPage() {
@@ -398,13 +398,6 @@ function ProjectAIMetric({ icon, label, value }: { icon: ReactNode; label: strin
       <div className="truncate text-sm font-medium text-zinc-200">{value}</div>
     </div>
   );
-}
-
-function formatCents(value: number) {
-  if (value <= 0) {
-    return "$0.00";
-  }
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value / 100);
 }
 
 function formatSeconds(value: number) {

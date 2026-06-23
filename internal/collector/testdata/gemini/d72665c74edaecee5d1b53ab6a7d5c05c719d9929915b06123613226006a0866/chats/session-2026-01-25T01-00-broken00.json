@@ -1,0 +1,5 @@
+{
+  "sessionId": "broken-session",
+  "messages": [
+    {
+      "id": "truncated", "type": "gemini", "tokens": {"input": 100,

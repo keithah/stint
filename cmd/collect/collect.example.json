@@ -1,0 +1,13 @@
+{
+  "api_url": "https://stint.example.com/api/v1",
+  "api_key": "stint_xxxxxxxxxxxxxxxxxxxxxxxx",
+  "cost_mode": "calculate",
+  "state_path": "~/.stint/collector-state.json",
+  "watch": false,
+  "interval": "5m",
+  "agents": ["claude", "codex", "gemini"],
+  "agent_paths": {
+    "claude": ["~/.claude/projects", "/mnt/backup/claude/projects"],
+    "codex": ["~/.codex/sessions"]
+  }
+}
