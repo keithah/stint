@@ -1,9 +1,7 @@
 package collector
 
 import (
-	"bufio"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,58 +99,21 @@ func claudeFiles(base string) ([]string, error) {
 // scanClaudeFile reads the unconsumed portion of one file, appending events and
 // updating report + state. It never returns an error; bad lines are counted.
 func scanClaudeFile(path, base string, state *State, events *[]usage.Event, report *ScanReport) {
-	info, err := os.Stat(path)
-	if err != nil {
-		report.Errors++
-		return
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		report.Errors++
-		return
-	}
-	defer f.Close()
-
-	size := info.Size()
-	mtime := info.ModTime().UnixNano()
-	offset, lineNo := state.resume(path, size, mtime)
-	if offset > 0 {
-		if _, err := f.Seek(offset, io.SeekStart); err != nil {
-			offset, lineNo = 0, 0
-			f.Seek(0, io.SeekStart)
-		}
-	}
-
-	reader := bufio.NewReader(f)
-	consumed := offset
 	defaultSession := strings.TrimSuffix(filepath.Base(path), ".jsonl")
 	pathProject := claudeProjectFromPath(path, base)
 
-	for {
-		line, err := reader.ReadBytes('\n')
-		// Only treat a line as complete when terminated by '\n'; a trailing
-		// partial line (no newline, file still being written) is left for the
-		// next scan and not committed to the offset.
-		if len(line) > 0 && (err == nil) {
-			consumed += int64(len(line))
-			lineNo++
-			report.LinesParsed++
-			if ev, ok, perr := parseClaudeLine(line, defaultSession, pathProject); perr != nil {
-				report.Errors++
-				report.LinesSkipped++
-			} else if ok {
-				*events = append(*events, ev)
-				report.EventsEmitted++
-			} else {
-				report.LinesSkipped++
-			}
+	scanJSONLIncremental(path, state, report, func(line []byte, _ int) {
+		report.LinesParsed++
+		if ev, ok, perr := parseClaudeLine(line, defaultSession, pathProject); perr != nil {
+			report.Errors++
+			report.LinesSkipped++
+		} else if ok {
+			*events = append(*events, ev)
+			report.EventsEmitted++
+		} else {
+			report.LinesSkipped++
 		}
-		if err != nil {
-			break
-		}
-	}
-
-	state.commit(path, size, mtime, consumed, lineNo)
+	})
 }
 
 // parseClaudeLine parses one JSONL line. ok=false means it is a valid line with
@@ -258,4 +219,22 @@ func normalizeTimestamp(ts string) (string, int) {
 	}
 	_, offsetSec := t.Zone()
 	return t.UTC().Format(time.RFC3339), offsetSec / 60
+}
+
+// normalizeUnixMillis formats a Unix epoch in milliseconds as an RFC3339 UTC
+// timestamp. A non-positive value yields "" (no timestamp).
+func normalizeUnixMillis(ms int64) string {
+	if ms <= 0 {
+		return ""
+	}
+	return time.UnixMilli(ms).UTC().Format(time.RFC3339)
+}
+
+// normalizeUnixNanos formats a Unix epoch in nanoseconds as an RFC3339 UTC
+// timestamp. A non-positive value yields "" (no timestamp).
+func normalizeUnixNanos(ns int64) string {
+	if ns <= 0 {
+		return ""
+	}
+	return time.Unix(0, ns).UTC().Format(time.RFC3339)
 }

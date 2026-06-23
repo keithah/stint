@@ -8,8 +8,6 @@ import (
 	"strings"
 
 	"github.com/keithah/stint/internal/usage"
-
-	_ "modernc.org/sqlite" // pure-Go SQLite driver (registers driver "sqlite")
 )
 
 const agentZed = "zed"
@@ -164,18 +162,12 @@ func scanZedDB(path string, state *State, events *[]usage.Event, report *ScanRep
 	size := info.Size()
 	mtime := info.ModTime().UnixNano()
 
-	// Coarse incremental skip: if the DB is byte-for-byte the same size as the
-	// last consumed offset and unchanged, there is nothing new to read.
-	if offset, _ := state.resume(path, size, mtime); offset == size && size > 0 {
-		if fs, ok := state.get(path); ok && fs.ModTimeNano == mtime {
-			return
-		}
+	// Whole-file skip: an unchanged DB (same size+mtime) has nothing new.
+	if size > 0 && state.FileUnchanged(path, size, mtime) {
+		return
 	}
 
-	// Open read-only and immutable so a live Zed process holding the DB does not
-	// block the scan.
-	dsn := "file:" + path + "?mode=ro&immutable=1"
-	db, err := sql.Open("sqlite", dsn)
+	db, err := openReadOnlySQLite(path)
 	if err != nil {
 		report.Errors++
 		return
@@ -187,7 +179,7 @@ func scanZedDB(path string, state *State, events *[]usage.Event, report *ScanRep
 		report.Errors++
 		// Still commit so we don't re-probe an unparseable DB forever; eventId
 		// dedup means re-reading later is harmless anyway.
-		state.commit(path, size, mtime, size, 0)
+		state.CommitFile(path, size, mtime, 0)
 		return
 	}
 
@@ -214,7 +206,7 @@ func scanZedDB(path string, state *State, events *[]usage.Event, report *ScanRep
 		report.Errors++
 	}
 
-	state.commit(path, size, mtime, size, rowCount)
+	state.CommitFile(path, size, mtime, rowCount)
 }
 
 // zedDataColumn discovers which table/column holds the JSON thread blob. Zed's

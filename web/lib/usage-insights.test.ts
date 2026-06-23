@@ -49,10 +49,21 @@ const models: UsageSlice[] = [
 ];
 const extremes = modelCostExtremes(models);
 assertEqual("most expensive model", extremes.mostExpensive?.name, "opus");
-assertEqual("cheapest priced model", extremes.cheapest?.name, "haiku");
+assertEqual("cheapest priced model", extremes.cheapest?.name, "free");
 
-const emptyExtremes = modelCostExtremes([{ name: "free", cost_usd: 0, marginal_usd: 0, tokens: 1, event_count: 1 }]);
-assertEqual("no priced models yields null most expensive", emptyExtremes.mostExpensive, null);
+const emptyExtremes = modelCostExtremes([]);
+assertEqual("empty byModel yields null most expensive", emptyExtremes.mostExpensive, null);
+assertEqual("empty byModel yields null cheapest", emptyExtremes.cheapest, null);
+
+// A $0-but-priced model (e.g. OpenRouter free tier) is the legitimate cheapest,
+// not "absent" — an all-$0 set still returns extremes.
+const allFree: UsageSlice[] = [
+  { name: "free-a", cost_usd: 0, marginal_usd: 0, tokens: 10, event_count: 2 },
+  { name: "free-b", cost_usd: 0, marginal_usd: 0, tokens: 5, event_count: 1 }
+];
+const freeExtremes = modelCostExtremes(allFree);
+assertEqual("all-$0 set has a most expensive", freeExtremes.mostExpensive?.name, "free-a");
+assertEqual("all-$0 set has a cheapest", freeExtremes.cheapest?.name, "free-a");
 
 // reasoningShare
 assertClose(

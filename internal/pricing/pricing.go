@@ -52,6 +52,11 @@ type Result struct {
 	MarginalUSD float64
 	// Priced is false when the model is unknown and no provider cost exists.
 	Priced bool
+	// ModelResolved is true iff the model resolves in the table/overrides/fallback,
+	// independent of whether USD came from a provider-reported cost. A model with a
+	// provider cost but no table price is Priced but NOT ModelResolved, so callers
+	// can still flag it as "unpriced" (no table coverage) without a second lookup.
+	ModelResolved bool
 	// Source is "provided", "calculated", or "unpriced".
 	Source string
 }
@@ -108,7 +113,7 @@ func New(snapshot []byte) (*Engine, error) {
 func (e *Engine) SetOverrides(overrides map[string]ModelPrice) {
 	e.overrides = map[string]ModelPrice{}
 	for model, price := range overrides {
-		e.overrides[strings.ToLower(strings.TrimSpace(model))] = price
+		e.overrides[Normalize(model)] = price
 	}
 }
 
@@ -159,6 +164,10 @@ func (e *Engine) lookup(model string) (ModelPrice, bool) {
 	if price, ok := e.overrides[norm]; ok {
 		return price, true
 	}
+	// Raw (un-normalized) probe BEFORE the normalized one is intentional: LiteLLM
+	// ships region-prefixed keys (e.g. "us.anthropic.claude-...") with their own
+	// region-specific pricing. Probing raw first preserves that price before
+	// Normalize strips the prefix and collapses it to the base model. Do not remove.
 	if price, ok := e.table[strings.ToLower(strings.TrimSpace(model))]; ok {
 		return price, true
 	}
@@ -213,34 +222,45 @@ func (e *Engine) Calculate(event usage.Event) (float64, bool) {
 	return cost, true
 }
 
-// Price applies the cost mode to a single event.
+// Price applies the cost mode to a single event. ModelResolved reports whether
+// the model exists in the price table/overrides/fallback so callers can detect
+// "unpriced" models without a separate Has lookup on the hot path.
 func (e *Engine) Price(event usage.Event, mode Mode) Result {
-	withBilling := func(usd float64, source string) Result {
+	withBilling := func(usd float64, source string, resolved bool) Result {
 		marginal := usd
 		if event.BillingType == usage.BillingSubscription {
 			marginal = 0
 		}
-		return Result{USD: usd, MarginalUSD: marginal, Priced: true, Source: source}
+		return Result{USD: usd, MarginalUSD: marginal, Priced: true, ModelResolved: resolved, Source: source}
 	}
 	switch mode {
 	case ModeDisplay:
+		// Display never calls Calculate, so resolve the model with a single lookup
+		// to populate ModelResolved (still one lookup per event, vs. the old
+		// Price+Has pair).
+		_, resolved := e.lookup(event.Model)
 		if event.CostUSDProvided != nil {
-			return withBilling(*event.CostUSDProvided, "provided")
+			return withBilling(*event.CostUSDProvided, "provided", resolved)
 		}
-		return Result{Priced: false, Source: "unpriced"}
+		return Result{Priced: false, ModelResolved: resolved, Source: "unpriced"}
 	case ModeCalculate:
+		// Calculate resolves the model itself; a successful calc means resolved.
 		if usd, ok := e.Calculate(event); ok {
-			return withBilling(usd, "calculated")
+			return withBilling(usd, "calculated", true)
 		}
-		return Result{Priced: false, Source: "unpriced"}
+		return Result{Priced: false, ModelResolved: false, Source: "unpriced"}
 	default: // ModeAuto
 		if event.CostUSDProvided != nil {
-			return withBilling(*event.CostUSDProvided, "provided")
+			// Provider cost is used, but report whether the model also resolves in
+			// the table so a provider-priced-but-table-unknown model still counts
+			// as "unpriced". This is the only extra lookup, replacing the old Has.
+			_, resolved := e.lookup(event.Model)
+			return withBilling(*event.CostUSDProvided, "provided", resolved)
 		}
 		if usd, ok := e.Calculate(event); ok {
-			return withBilling(usd, "calculated")
+			return withBilling(usd, "calculated", true)
 		}
-		return Result{Priced: false, Source: "unpriced"}
+		return Result{Priced: false, ModelResolved: false, Source: "unpriced"}
 	}
 }
 

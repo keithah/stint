@@ -38,10 +38,11 @@ export function cacheSavingsEstimate(
   };
 }
 
-// Most- and least-expensive priced model by cost_usd. Returns null when there
-// is nothing to compare.
+// Most- and least-expensive priced model by cost_usd. A $0-but-priced model
+// (OpenRouter free tier, a $0 custom price) is a legitimate "cheapest", so any
+// model with a non-negative cost counts — only truly absent data yields null.
 export function modelCostExtremes(byModel: UsageSlice[]): { mostExpensive: UsageSlice | null; cheapest: UsageSlice | null } {
-  const priced = byModel.filter((row) => row.cost_usd > 0);
+  const priced = byModel.filter((row) => row.cost_usd >= 0);
   if (priced.length === 0) {
     return { mostExpensive: null, cheapest: null };
   }
@@ -81,30 +82,39 @@ export type BurnRate = {
 // the series. `multiple` is "today is Nx your average". Anomaly when today is
 // >= 1.5x the trailing average (and there is a baseline to compare against).
 export function todayVsAverage(byDay: UsageDay[], anomalyThreshold = 1.5): BurnRate | null {
-  if (byDay.length === 0) {
+  const today = latestDay(byDay);
+  if (!today) {
     return null;
   }
-  const sorted = [...byDay].sort((a, b) => a.date.localeCompare(b.date));
-  const today = sorted[sorted.length - 1];
-  const prior = sorted.slice(0, -1);
-  const priorTotal = prior.reduce((sum, day) => sum + Math.max(0, day.cost_usd), 0);
-  const averageCost = prior.length > 0 ? priorTotal / prior.length : 0;
+  // The latest day is "today"; every other day is the trailing baseline. We
+  // never need the full sorted order, just the max-by-date and the prior total.
+  let priorTotal = 0;
+  let priorCount = 0;
+  for (const day of byDay) {
+    if (day === today) {
+      continue;
+    }
+    priorTotal += Math.max(0, day.cost_usd);
+    priorCount++;
+  }
+  const averageCost = priorCount > 0 ? priorTotal / priorCount : 0;
   const multiple = averageCost > 0 ? today.cost_usd / averageCost : 0;
   return {
     todayCost: Math.max(0, today.cost_usd),
     averageCost,
     multiple,
-    priorDayCount: prior.length,
-    isAnomaly: prior.length > 0 && averageCost > 0 && multiple >= anomalyThreshold
+    priorDayCount: priorCount,
+    isAnomaly: priorCount > 0 && averageCost > 0 && multiple >= anomalyThreshold
   };
 }
 
-// Latest day in a by_day series (by date), or null when empty.
+// Latest day in a by_day series (by date), or null when empty. Single O(n)
+// pass over the date strings — no array copy or full sort.
 export function latestDay(byDay: UsageDay[]): UsageDay | null {
   if (byDay.length === 0) {
     return null;
   }
-  return [...byDay].sort((a, b) => a.date.localeCompare(b.date))[byDay.length - 1];
+  return byDay.reduce((latest, day) => (day.date.localeCompare(latest.date) > 0 ? day : latest));
 }
 
 // Highest-cost project-day rate: total project cost divided by the number of

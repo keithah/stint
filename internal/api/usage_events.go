@@ -16,8 +16,9 @@ import (
 const usageEventsBulkLimit = 5000
 
 // createUsageEventsBulk ingests a batch of canonical AI usage events. Ingest is
-// idempotent: re-sending the same events collapses to duplicates via the store
-// dedup, so totals stay stable across re-scans.
+// an upsert: re-sending an event updates the stored row to the latest token/cost
+// values, so a corrected re-scan fixes totals rather than being dropped.
+// Re-ingested rows are reported as duplicates (not inserts) by the store.
 func (s *Server) createUsageEventsBulk(c echo.Context) error {
 	user := userFromContext(c)
 	var events []usage.Event
@@ -251,7 +252,9 @@ func summarizeUsageEvents(events []usage.Event, engine *pricing.Engine, mode pri
 		totalCost += result.USD
 		totalMarginal += result.MarginalUSD
 
-		if engine == nil || !engine.Has(event.Model) {
+		// Price already resolved the model (result.ModelResolved); reuse it instead
+		// of a second engine.Has lookup per event on this polled hot path.
+		if engine == nil || !result.ModelResolved {
 			if event.Model != "" {
 				unpricedSet[event.Model] = struct{}{}
 			}

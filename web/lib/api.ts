@@ -621,19 +621,26 @@ export type UsageBlocks = {
   current: UsageCurrentBlock | null;
 };
 
+export type UsageBillingType = "api" | "subscription";
+
+// Matches the raw canonical usage.Event JSON returned by listUsageEvents
+// (internal/usage/event.go). These are stored events, not priced summaries:
+// cost is provider-reported (optional) and cache-create keeps 5m/1h granularity.
 export type UsageEvent = {
-  id: string;
-  timestamp: string;
-  agent?: string;
-  model?: string;
+  event_id: string;
+  agent: string;
+  session_id: string;
   project?: string;
-  cost_usd: number;
-  marginal_usd: number;
+  model: string;
   input_tokens: number;
   output_tokens: number;
-  cache_create_tokens: number;
+  cache_create_5m_tokens: number;
+  cache_create_1h_tokens: number;
   cache_read_tokens: number;
-  reasoning_tokens: number;
+  reasoning_tokens?: number;
+  cost_usd_provided?: number;
+  billing_type?: UsageBillingType;
+  timestamp: string;
 };
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";

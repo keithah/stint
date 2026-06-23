@@ -10,7 +10,7 @@ import { Shell } from "@/components/shell";
 import { StatCard } from "@/components/stat-card";
 import { me, usageBlocks, usageSummary, type SliceTotal, type StatsRange, type UsageCostMode, type UsageCurrentBlock, type UsageSlice, type UsageSummary } from "@/lib/api";
 import { activityHeatmapClass } from "@/lib/activity-heatmap";
-import { compactNumber } from "@/lib/number-format";
+import { compactNumber, formatUSD } from "@/lib/number-format";
 import {
   cacheEfficiency,
   cacheSavingsEstimate,
@@ -419,11 +419,4 @@ function totalTokens(total: UsageSummary["total"]) {
 
 function isEmptySummary(data: UsageSummary) {
   return data.total.event_count === 0 && totalTokens(data.total) === 0 && data.total.cost_usd === 0;
-}
-
-function formatUSD(value: number) {
-  if (!value || value <= 0) {
-    return "$0.00";
-  }
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: value < 1 ? 4 : 2 }).format(value);
 }

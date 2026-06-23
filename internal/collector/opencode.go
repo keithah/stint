@@ -1,14 +1,10 @@
 package collector
 
 import (
-	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
-
-	_ "modernc.org/sqlite"
 
 	"github.com/keithah/stint/internal/usage"
 )
@@ -115,14 +111,9 @@ func openCodeScanDB(dbPath string, state *State, events *[]usage.Event, report *
 
 	// Watermark: the max time_created we have already emitted. If the DB shrank
 	// below the recorded size, treat it as reset and start from zero.
-	var watermark int64
-	if fs, ok := state.get(dbPath); ok && size >= fs.Size {
-		watermark = int64(fs.Lines)
-	}
+	watermark := state.MaxUnixMillis(dbPath, size)
 
-	// Open read-only so a live OpenCode process is not disturbed.
-	dsn := "file:" + dbPath + "?mode=ro&immutable=1"
-	db, err := sql.Open("sqlite", dsn)
+	db, err := openReadOnlySQLite(dbPath)
 	if err != nil {
 		report.Errors++
 		return
@@ -176,11 +167,11 @@ func openCodeScanDB(dbPath string, state *State, events *[]usage.Event, report *
 		report.Errors++
 	}
 
-	// Commit the watermark. We store maxSeen in Lines and the DB size so a
+	// Commit the watermark. We store maxSeen (millis) and the DB size so a
 	// rescan skips rows we have already emitted and detects truncation/reset.
 	// Re-using the exact maxSeen as the next lower bound (>=) means rows that
 	// share a millisecond timestamp are re-read, but eventId dedup absorbs them.
-	state.commit(dbPath, size, mtime, 0, int(maxSeen))
+	state.CommitUnixMillis(dbPath, size, mtime, maxSeen)
 }
 
 // parseOpenCodeMessage maps one message row's JSON blob to an event. ok=false
@@ -230,9 +221,7 @@ func parseOpenCodeMessage(id, sessionID string, created int64, data []byte) (usa
 	if ms == 0 {
 		ms = created
 	}
-	if ms != 0 {
-		ev.Timestamp = time.UnixMilli(ms).UTC().Format(time.RFC3339)
-	}
+	ev.Timestamp = normalizeUnixMillis(ms)
 
 	if !ev.HasUsage() {
 		return usage.Event{}, false, nil

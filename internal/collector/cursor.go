@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite"
-
 	"github.com/keithah/stint/internal/usage"
 )
 
@@ -130,10 +128,7 @@ func cursorScanCSV(path string, state *State, events *[]usage.Event, report *Sca
 	mtime := info.ModTime().UnixNano()
 	// Watermark: number of data rows already emitted. If the file shrank below
 	// the recorded size, treat it as a fresh export and start over.
-	var already int
-	if fs, ok := state.get(path); ok && size >= fs.Size {
-		already = fs.Lines
-	}
+	already := state.RowCount(path, size)
 
 	r := csv.NewReader(f)
 	r.FieldsPerRecord = -1 // tolerate ragged rows
@@ -175,7 +170,7 @@ func cursorScanCSV(path string, state *State, events *[]usage.Event, report *Sca
 
 	// Commit the new row count as the watermark.
 	if rowNo > already {
-		state.commit(path, size, mtime, 0, rowNo)
+		state.CommitRowCount(path, size, mtime, rowNo)
 	}
 }
 
@@ -340,7 +335,7 @@ func cursorTimestamp(s string) (string, int) {
 	}
 	// epoch millis?
 	if n, err := strconv.ParseInt(s, 10, 64); err == nil && n > 0 {
-		return time.UnixMilli(n).UTC().Format(time.RFC3339), 0
+		return normalizeUnixMillis(n), 0
 	}
 	layouts := []string{
 		"2006-01-02 15:04:05",
@@ -370,8 +365,7 @@ func cursorScanDB(path string, state *State, events *[]usage.Event, report *Scan
 	size := info.Size()
 	mtime := info.ModTime().UnixNano()
 
-	dsn := "file:" + path + "?mode=ro&immutable=1"
-	db, err := sql.Open("sqlite", dsn)
+	db, err := openReadOnlySQLite(path)
 	if err != nil {
 		report.Errors++
 		return
@@ -381,12 +375,12 @@ func cursorScanDB(path string, state *State, events *[]usage.Event, report *Scan
 	// Prefer an explicit usage table if this install has one.
 	if cursorHasTable(db, "cursorUsage") {
 		cursorScanUsageTable(db, path, state, events, report)
-		state.commit(path, size, mtime, 0, 0)
+		state.CommitRowCount(path, size, mtime, 0)
 		return
 	}
 	// No recognized usage table: nothing to extract. Leave a watermark so the
 	// scan is recorded as having looked at the DB.
-	state.commit(path, size, mtime, 0, 0)
+	state.CommitRowCount(path, size, mtime, 0)
 }
 
 // cursorHasTable reports whether a table exists in the SQLite DB.
@@ -438,9 +432,7 @@ func cursorScanUsageTable(db *sql.DB, path string, state *State, events *[]usage
 			v := cost.Float64
 			ev.CostUSDProvided = &v
 		}
-		if tsMs > 0 {
-			ev.Timestamp = time.UnixMilli(tsMs).UTC().Format(time.RFC3339)
-		}
+		ev.Timestamp = normalizeUnixMillis(tsMs)
 		if !ev.HasUsage() {
 			report.LinesSkipped++
 			continue

@@ -7,16 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	_ "modernc.org/sqlite"
-
 	"github.com/keithah/stint/internal/usage"
 )
 
 const agentGoose = "goose"
-
-// gooseSQLiteDriver is the pure-Go SQLite driver registered by
-// modernc.org/sqlite under the name "sqlite".
-const gooseSQLiteDriver = "sqlite"
 
 // gooseDBNames are the SQLite database filenames Goose is documented to use for
 // its session/message store. The first match under a base dir is scanned.
@@ -141,7 +135,7 @@ func scanGooseDB(path string, state *State, events *[]usage.Event, report *ScanR
 		return
 	}
 
-	db, err := sql.Open(gooseSQLiteDriver, "file:"+path+"?mode=ro&_pragma=busy_timeout(5000)")
+	db, err := openReadOnlySQLite(path)
 	if err != nil {
 		report.Errors++
 		return
@@ -173,8 +167,8 @@ func scanGooseDB(path string, state *State, events *[]usage.Event, report *ScanR
 	sel = append(sel, gooseSelectExpr(timeCol))
 	sel = append(sel, gooseSelectExpr(metaCol))
 
-	// Coarse incremental cursor: reuse FileState.Offset as the max rowid seen.
-	cursor, _ := state.resume(path, info.Size(), info.ModTime().UnixNano())
+	// Coarse incremental cursor: the highest rowid already emitted.
+	cursor := state.Rowid(path)
 
 	query := "SELECT " + strings.Join(sel, ", ") +
 		" FROM messages WHERE rowid > ? ORDER BY rowid ASC"
@@ -221,7 +215,7 @@ func scanGooseDB(path string, state *State, events *[]usage.Event, report *ScanR
 		report.Errors++
 	}
 
-	state.commit(path, info.Size(), info.ModTime().UnixNano(), maxRowID, lineCount)
+	state.CommitRowid(path, info.Size(), info.ModTime().UnixNano(), maxRowID, lineCount)
 }
 
 // gooseBuildEvent maps one scanned row to a usage.Event. ok=false means the row

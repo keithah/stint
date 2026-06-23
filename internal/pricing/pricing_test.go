@@ -123,3 +123,51 @@ func TestUnknownModelUnpricedUnlessOverridden(t *testing.T) {
 		t.Fatalf("override should price the model, got %+v", r)
 	}
 }
+
+// SetOverrides must key by Normalize (matching lookup), so an override defined
+// against a prefixed/proxied model id is honored when an event arrives with that
+// same prefixed id.
+func TestSetOverridesNormalizesPrefixedModelID(t *testing.T) {
+	e := engine(t)
+	e.SetOverrides(map[string]ModelPrice{
+		"us.anthropic.claude-private": {InputPerToken: 4e-6, OutputPerToken: 8e-6},
+		"openrouter/foo/bar":          {InputPerToken: 1e-6, OutputPerToken: 1e-6},
+	})
+
+	regional := usage.Event{Model: "us.anthropic.claude-private", InputTokens: 1000, OutputTokens: 1000}
+	if !e.Has(regional.Model) {
+		t.Fatal("prefixed override id should resolve via Normalize")
+	}
+	if r := e.Price(regional, ModeCalculate); !r.Priced || !approx(r.USD, 1000*4e-6+1000*8e-6) {
+		t.Fatalf("regional-prefixed override should price the event, got %+v", r)
+	}
+
+	proxy := usage.Event{Model: "openrouter/foo/bar", InputTokens: 1000, OutputTokens: 1000}
+	if r := e.Price(proxy, ModeCalculate); !r.Priced || !approx(r.USD, 1000*1e-6+1000*1e-6) {
+		t.Fatalf("proxy-prefixed override should price the event, got %+v", r)
+	}
+}
+
+// ModelResolved must reflect table resolution independent of provider cost, so a
+// model with a provider-reported cost but no table price still reads as unpriced.
+func TestModelResolvedIndependentOfProvidedCost(t *testing.T) {
+	e := engine(t)
+	provided := 0.5
+
+	// Known model + provided cost: priced and resolved.
+	known := usage.Event{Model: "claude-sonnet-4-5", CostUSDProvided: &provided}
+	if r := e.Price(known, ModeAuto); !r.ModelResolved {
+		t.Fatalf("known model should be ModelResolved, got %+v", r)
+	}
+
+	// Unknown model + provided cost: priced (provider cost) but NOT resolved, so
+	// it must still be flagged as unpriced by callers.
+	unknown := usage.Event{Model: "totally-unknown-model", CostUSDProvided: &provided}
+	r := e.Price(unknown, ModeAuto)
+	if !r.Priced {
+		t.Fatalf("provider cost should make it priced, got %+v", r)
+	}
+	if r.ModelResolved {
+		t.Fatalf("unknown model must not be ModelResolved despite provider cost, got %+v", r)
+	}
+}

@@ -68,9 +68,10 @@ func stub() Adapter {
 	})
 }
 
-// DefaultRegistry returns the built-in registry. Claude Code has a real
-// adapter; the rest are stubs whose specs already describe their default
-// locations so implementing one is just swapping stub() for a parser.
+// DefaultRegistry returns the built-in registry. Nine agents have real adapters
+// (claude, codex, gemini, opencode, goose, zed, cursor, copilot, openclaw); the
+// remaining entries are stubs whose specs already describe their default
+// locations, so implementing one is just swapping stub() for a parser.
 func DefaultRegistry() Registry {
 	r := Registry{}
 

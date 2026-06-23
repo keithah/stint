@@ -1,9 +1,7 @@
 package collector
 
 import (
-	"bufio"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,59 +136,22 @@ func codexFiles(base string) ([]string, error) {
 // emitted (model/project simply default), which is acceptable for incremental
 // tails and keeps the scan resilient.
 func scanCodexFile(path, base string, state *State, events *[]usage.Event, report *ScanReport) {
-	info, err := os.Stat(path)
-	if err != nil {
-		report.Errors++
-		return
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		report.Errors++
-		return
-	}
-	defer f.Close()
-
-	size := info.Size()
-	mtime := info.ModTime().UnixNano()
-	offset, lineNo := state.resume(path, size, mtime)
-	if offset > 0 {
-		if _, err := f.Seek(offset, io.SeekStart); err != nil {
-			offset, lineNo = 0, 0
-			f.Seek(0, io.SeekStart)
-		}
-	}
-
-	reader := bufio.NewReader(f)
-	consumed := offset
 	defaultSession := codexSessionFromName(path)
 	pathProject := codexProjectFromPath(path, base)
 	cs := &codexState{}
 
-	for {
-		line, err := reader.ReadBytes('\n')
-		// Only treat a line as complete when terminated by '\n'; a trailing
-		// partial line (no newline, file still being written) is left for the
-		// next scan and not committed to the offset.
-		if len(line) > 0 && (err == nil) {
-			consumed += int64(len(line))
-			lineNo++
-			report.LinesParsed++
-			if ev, ok, perr := parseCodexLine(line, defaultSession, pathProject, cs); perr != nil {
-				report.Errors++
-				report.LinesSkipped++
-			} else if ok {
-				*events = append(*events, ev)
-				report.EventsEmitted++
-			} else {
-				report.LinesSkipped++
-			}
+	scanJSONLIncremental(path, state, report, func(line []byte, _ int) {
+		report.LinesParsed++
+		if ev, ok, perr := parseCodexLine(line, defaultSession, pathProject, cs); perr != nil {
+			report.Errors++
+			report.LinesSkipped++
+		} else if ok {
+			*events = append(*events, ev)
+			report.EventsEmitted++
+		} else {
+			report.LinesSkipped++
 		}
-		if err != nil {
-			break
-		}
-	}
-
-	state.commit(path, size, mtime, consumed, lineNo)
+	})
 }
 
 // parseCodexLine parses one JSONL line. It updates cs with any model/cwd context
@@ -305,13 +266,7 @@ func codexSessionFromName(path string) string {
 // rollout path (~/.codex/sessions/YYYY/MM/DD/<file>.jsonl). There is no project
 // dir in the path, so it falls back to the immediate parent dir name.
 func codexProjectFromPath(path, base string) string {
-	rel, err := filepath.Rel(base, path)
-	if err != nil {
-		return filepath.Base(filepath.Dir(path))
-	}
-	parts := strings.Split(filepath.ToSlash(rel), "/")
-	if len(parts) >= 2 {
-		return filepath.Base(filepath.Dir(path))
-	}
+	// The rollout path has no project dir, so the project always falls back to
+	// the immediate parent dir name.
 	return filepath.Base(filepath.Dir(path))
 }

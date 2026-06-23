@@ -150,7 +150,7 @@ func scanGeminiFile(path string, state *State, events *[]usage.Event, report *Sc
 
 	// File granularity skip: if size+mtime are unchanged from the recorded
 	// cursor, nothing new to read.
-	if fs, ok := state.get(path); ok && fs.Size == size && fs.ModTimeNano == mtime {
+	if state.FileUnchanged(path, size, mtime) {
 		return
 	}
 
@@ -166,7 +166,7 @@ func scanGeminiFile(path string, state *State, events *[]usage.Event, report *Sc
 		report.LinesSkipped++
 		// Record the cursor anyway so an unparseable file is not retried every
 		// scan; it will be reparsed only when it changes again.
-		state.commit(path, size, mtime, size, 0)
+		state.CommitFile(path, size, mtime, 0)
 		return
 	}
 
@@ -187,7 +187,7 @@ func scanGeminiFile(path string, state *State, events *[]usage.Event, report *Sc
 		}
 	}
 
-	state.commit(path, size, mtime, size, len(sess.Messages))
+	state.CommitFile(path, size, mtime, len(sess.Messages))
 }
 
 // parseGeminiMessage maps one session message to an event. ok=false means the

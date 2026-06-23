@@ -1,14 +1,11 @@
 package collector
 
 import (
-	"bufio"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/keithah/stint/internal/usage"
 )
@@ -141,58 +138,20 @@ func copilotSpanFile(name string) bool {
 // pretty-printed single-object file is handled by the whole-file fallback when
 // the file is not newline-delimited: the first scan reads it as one record.
 func scanCopilotFile(path, base string, state *State, events *[]usage.Event, report *ScanReport) {
-	info, err := os.Stat(path)
-	if err != nil {
-		report.Errors++
-		return
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		report.Errors++
-		return
-	}
-	defer f.Close()
-
-	size := info.Size()
-	mtime := info.ModTime().UnixNano()
-	offset, lineNo := state.resume(path, size, mtime)
-	if offset > 0 {
-		if _, err := f.Seek(offset, io.SeekStart); err != nil {
-			offset, lineNo = 0, 0
-			f.Seek(0, io.SeekStart)
-		}
-	}
-
 	pathProject := copilotProjectFromPath(path, base)
 	defaultSession := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(
 		filepath.Base(path), ".ndjson"), ".jsonl"), ".json")
 
-	reader := bufio.NewReader(f)
-	consumed := offset
-
-	for {
-		line, err := reader.ReadBytes('\n')
-		// Only treat a line as complete when terminated by '\n'; a trailing
-		// partial line (no newline, file still being written) is left for the
-		// next scan and not committed to the offset.
-		if len(line) > 0 && err == nil {
-			consumed += int64(len(line))
-			lineNo++
-			report.LinesParsed++
-			n, perr := parseCopilotExport(line, defaultSession, pathProject, events, report)
-			if perr != nil {
-				report.Errors++
-				report.LinesSkipped++
-			} else if n == 0 {
-				report.LinesSkipped++
-			}
+	scanJSONLIncremental(path, state, report, func(line []byte, _ int) {
+		report.LinesParsed++
+		n, perr := parseCopilotExport(line, defaultSession, pathProject, events, report)
+		if perr != nil {
+			report.Errors++
+			report.LinesSkipped++
+		} else if n == 0 {
+			report.LinesSkipped++
 		}
-		if err != nil {
-			break
-		}
-	}
-
-	state.commit(path, size, mtime, consumed, lineNo)
+	})
 }
 
 // parseCopilotExport parses one OTLP/JSON export request (one NDJSON line, or a
@@ -325,10 +284,10 @@ func copilotTimestamp(unixNano string) string {
 		return ""
 	}
 	n, err := strconv.ParseInt(unixNano, 10, 64)
-	if err != nil || n == 0 {
+	if err != nil {
 		return ""
 	}
-	return time.Unix(0, n).UTC().Format(time.RFC3339)
+	return normalizeUnixNanos(n)
 }
 
 // copilotProjectFromPath derives a fallback project name from the OTEL file

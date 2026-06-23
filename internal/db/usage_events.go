@@ -21,9 +21,11 @@ type UsageIngestResult struct {
 const usageInsertColumns = 18
 
 // InsertUsageEvents stores canonical usage events, deduping within the batch by
-// event id and against existing rows via ON CONFLICT DO NOTHING. Re-ingesting
-// the same events is a no-op (idempotent), which is what makes totals stable
-// across re-scans.
+// event id. Existing rows are upserted via ON CONFLICT DO UPDATE: re-ingesting an
+// event updates the stored row to the latest token/cost values, so a corrected
+// re-scan fixes totals rather than being dropped. Re-ingested rows are counted as
+// duplicates (not inserts) via `RETURNING (xmax = 0)`, which is true only for
+// freshly-inserted rows.
 func (s *Store) InsertUsageEvents(ctx context.Context, userID uuid.UUID, events []usage.Event) (UsageIngestResult, error) {
 	result := UsageIngestResult{Received: len(events)}
 	seen := make(map[string]struct{}, len(events))
