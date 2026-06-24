@@ -19,6 +19,9 @@ export type CustomPricing = {
 export type UsageTotal = {
   cost_usd: number;
   marginal_usd: number;
+  // What these tokens would cost with no prompt caching (cache reads/writes at
+  // the full input rate). uncached_cost_usd - cost_usd = dollars saved by caching.
+  uncached_cost_usd: number;
   event_count: number;
   input_tokens: number;
   output_tokens: number;

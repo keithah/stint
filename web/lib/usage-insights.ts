@@ -38,6 +38,24 @@ export function cacheSavingsEstimate(
   };
 }
 
+// Real dollar savings from prompt caching, using the server-computed
+// uncached-equivalent cost (every input-side token at the full input rate).
+// savedUSD = uncached - actual; savingsRatio is that saving as a fraction of the
+// uncached cost. This is the honest counter to trackers that price cache reads at
+// full freight and so over-report cost several-fold.
+export function cachingDollarSavings(
+  total: Pick<UsageTotal, "cost_usd" | "uncached_cost_usd">
+): { savedUSD: number; uncachedUSD: number; savingsRatio: number; hasData: boolean } {
+  const uncachedUSD = Math.max(0, total.uncached_cost_usd ?? 0);
+  const savedUSD = Math.max(0, uncachedUSD - Math.max(0, total.cost_usd));
+  return {
+    savedUSD,
+    uncachedUSD,
+    savingsRatio: uncachedUSD > 0 ? savedUSD / uncachedUSD : 0,
+    hasData: uncachedUSD > 0
+  };
+}
+
 // Most- and least-expensive priced model by cost_usd. A $0-but-priced model
 // (OpenRouter free tier, a $0 custom price) is a legitimate "cheapest", so any
 // model with a non-negative cost counts — only truly absent data yields null.

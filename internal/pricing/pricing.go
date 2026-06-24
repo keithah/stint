@@ -50,6 +50,11 @@ type Result struct {
 	USD float64
 	// MarginalUSD is real out-of-pocket spend: 0 for subscription usage.
 	MarginalUSD float64
+	// UncachedUSD is what this usage would cost with NO prompt caching: every
+	// input-side token (fresh input + cache reads + cache writes) priced at the
+	// full input rate. UncachedUSD - USD is the dollars saved by caching. For
+	// provider-priced events (no token-level breakdown) it equals USD.
+	UncachedUSD float64
 	// Priced is false when the model is unknown and no provider cost exists.
 	Priced bool
 	// ModelResolved is true iff the model resolves in the table/overrides/fallback,
@@ -201,9 +206,18 @@ func (e *Engine) lookup(model string) (ModelPrice, bool) {
 // The 1h cache write falls back to input*2 when the table lacks an explicit
 // above-1hr rate (matches ccusage and Anthropic's published multiplier).
 func (e *Engine) Calculate(event usage.Event) (float64, bool) {
+	cost, _, ok := e.calculate(event)
+	return cost, ok
+}
+
+// calculate returns (cost, uncached, ok). uncached prices every input-side token
+// (fresh input + cache reads + cache writes) at the full input rate — what the
+// same usage would cost with no prompt caching. uncached - cost is the savings
+// caching delivered, and the honest counterpoint to cost models that ignore it.
+func (e *Engine) calculate(event usage.Event) (float64, float64, bool) {
 	price, ok := e.lookup(event.Model)
 	if !ok {
-		return 0, false
+		return 0, 0, false
 	}
 	cache1h := price.CacheCreate1hPerToken
 	// Only infer the 1h-cache rate (Anthropic's input*2 convention) for models
@@ -219,19 +233,26 @@ func (e *Engine) Calculate(event usage.Event) (float64, bool) {
 		float64(event.CacheCreate1hTokens)*cache1h +
 		float64(event.CacheReadTokens)*price.CacheReadPerToken +
 		float64(event.ReasoningTokens)*price.OutputPerToken
-	return cost, true
+	// No-cache counterfactual: cache reads and cache writes collapse to plain
+	// fresh-input tokens at the input rate (no read discount, no write premium).
+	uncachedInput := event.InputTokens + event.CacheCreate5mTokens +
+		event.CacheCreate1hTokens + event.CacheReadTokens
+	uncached := float64(uncachedInput)*price.InputPerToken +
+		float64(event.OutputTokens)*price.OutputPerToken +
+		float64(event.ReasoningTokens)*price.OutputPerToken
+	return cost, uncached, true
 }
 
 // Price applies the cost mode to a single event. ModelResolved reports whether
 // the model exists in the price table/overrides/fallback so callers can detect
 // "unpriced" models without a separate Has lookup on the hot path.
 func (e *Engine) Price(event usage.Event, mode Mode) Result {
-	withBilling := func(usd float64, source string, resolved bool) Result {
+	withBilling := func(usd, uncached float64, source string, resolved bool) Result {
 		marginal := usd
 		if event.BillingType == usage.BillingSubscription {
 			marginal = 0
 		}
-		return Result{USD: usd, MarginalUSD: marginal, Priced: true, ModelResolved: resolved, Source: source}
+		return Result{USD: usd, MarginalUSD: marginal, UncachedUSD: uncached, Priced: true, ModelResolved: resolved, Source: source}
 	}
 	switch mode {
 	case ModeDisplay:
@@ -240,13 +261,13 @@ func (e *Engine) Price(event usage.Event, mode Mode) Result {
 		// Price+Has pair).
 		_, resolved := e.lookup(event.Model)
 		if event.CostUSDProvided != nil {
-			return withBilling(*event.CostUSDProvided, "provided", resolved)
+			return withBilling(*event.CostUSDProvided, *event.CostUSDProvided, "provided", resolved)
 		}
 		return Result{Priced: false, ModelResolved: resolved, Source: "unpriced"}
 	case ModeCalculate:
 		// Calculate resolves the model itself; a successful calc means resolved.
-		if usd, ok := e.Calculate(event); ok {
-			return withBilling(usd, "calculated", true)
+		if usd, uncached, ok := e.calculate(event); ok {
+			return withBilling(usd, uncached, "calculated", true)
 		}
 		return Result{Priced: false, ModelResolved: false, Source: "unpriced"}
 	default: // ModeAuto
@@ -255,10 +276,10 @@ func (e *Engine) Price(event usage.Event, mode Mode) Result {
 			// the table so a provider-priced-but-table-unknown model still counts
 			// as "unpriced". This is the only extra lookup, replacing the old Has.
 			_, resolved := e.lookup(event.Model)
-			return withBilling(*event.CostUSDProvided, "provided", resolved)
+			return withBilling(*event.CostUSDProvided, *event.CostUSDProvided, "provided", resolved)
 		}
-		if usd, ok := e.Calculate(event); ok {
-			return withBilling(usd, "calculated", true)
+		if usd, uncached, ok := e.calculate(event); ok {
+			return withBilling(usd, uncached, "calculated", true)
 		}
 		return Result{Priced: false, ModelResolved: false, Source: "unpriced"}
 	}

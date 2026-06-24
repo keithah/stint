@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { AIMetrics } from "@/lib/api";
 import { aiAgentDonutRows } from "@/lib/ai-agent-donut";
 import { aiDayPercentage, aiHeatmapClass, aiHeatmapTitle, formatCents } from "@/lib/ai-heatmap";
@@ -25,7 +26,8 @@ export function AIPanel({ metrics }: { metrics?: AIMetrics }) {
     estimated_cost_cents: 0,
     agents: [],
     days: [],
-    costs: []
+    costs: [],
+    tool_costs: []
   };
   const totalTokens = ai.ai_input_tokens + ai.ai_output_tokens;
   const activeDays = ai.days.filter((day) => day.ai_line_changes > 0 || day.ai_input_tokens > 0 || day.estimated_cost_cents > 0);
@@ -67,26 +69,7 @@ export function AIPanel({ metrics }: { metrics?: AIMetrics }) {
       <CostTracker rows={ai.costs ?? []} />
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_1fr_0.9fr]">
-        <div className="rounded-md border border-line bg-ink p-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-medium text-zinc-200">Agent breakdown</h3>
-              <p className="mt-1 text-xs text-zinc-500">{activeDays.length.toLocaleString()} active AI days in this range</p>
-            </div>
-          </div>
-          <div className="mt-4 divide-y divide-line">
-            {(ai.agents.length ? ai.agents : [emptyAgent()]).slice(0, 6).map((agent) => (
-              <div key={agent.name} className="grid grid-cols-[1fr_96px_84px] gap-3 py-3 text-sm">
-                <span className="truncate font-medium text-zinc-100">{agent.name}</span>
-                <span className="text-right text-zinc-400">{compactNumber(agent.ai_line_changes)} lines</span>
-                <span className="text-right text-zinc-500">{formatCents(agent.estimated_cost_cents)}</span>
-                <span className="col-span-3 text-xs text-zinc-600">
-                  {compactNumber(agent.session_count)} sessions · {compactNumber(agent.ai_input_tokens + agent.ai_output_tokens)} tokens · {agent.session_count > 0 ? compactNumber(Math.round(agent.ai_prompt_length / agent.session_count)) : 0} avg prompt
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <AgentBreakdown agents={ai.agents} toolCosts={ai.tool_costs} activeDays={activeDays.length} />
 
         <AgentsDonut agents={ai.agents} />
 
@@ -110,6 +93,65 @@ export function AIPanel({ metrics }: { metrics?: AIMetrics }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function AgentBreakdown({
+  agents,
+  toolCosts,
+  activeDays
+}: {
+  agents: AIMetrics["agents"];
+  toolCosts: AIMetrics["tool_costs"];
+  activeDays: number;
+}) {
+  // "tool" = usage_events taxonomy (codex/claude/opencode), accurate per-tool
+  // cost. "agent" = heartbeat taxonomy (gpt/anthropic), keeps line counts with
+  // cost mapped up. Default to "tool" since it is the precise, cache-aware view.
+  const [groupBy, setGroupBy] = useState<"tool" | "agent">("tool");
+  return (
+    <div className="rounded-md border border-line bg-ink p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-medium text-zinc-200">Agent breakdown</h3>
+          <p className="mt-1 text-xs text-zinc-500">{activeDays.toLocaleString()} active AI days in this range</p>
+        </div>
+        <div className="flex shrink-0 rounded border border-line text-xs">
+          {(["tool", "agent"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setGroupBy(mode)}
+              className={`px-2.5 py-1 ${groupBy === mode ? "bg-accent/20 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}
+            >
+              {mode === "tool" ? "By tool" : "By agent"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="mt-4 divide-y divide-line">
+        {groupBy === "agent"
+          ? (agents.length ? agents : [emptyAgent()]).slice(0, 6).map((agent) => (
+              <div key={agent.name} className="grid grid-cols-[1fr_96px_84px] gap-3 py-3 text-sm">
+                <span className="truncate font-medium text-zinc-100">{agent.name}</span>
+                <span className="text-right text-zinc-400">{compactNumber(agent.ai_line_changes)} lines</span>
+                <span className="text-right text-zinc-500">{formatCents(agent.estimated_cost_cents)}</span>
+                <span className="col-span-3 text-xs text-zinc-600">
+                  {compactNumber(agent.session_count)} sessions · {compactNumber(agent.ai_input_tokens + agent.ai_output_tokens)} tokens · {agent.session_count > 0 ? compactNumber(Math.round(agent.ai_prompt_length / agent.session_count)) : 0} avg prompt
+                </span>
+              </div>
+            ))
+          : (toolCosts.length ? toolCosts : [{ name: "No usage", cost_cents: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0 }]).slice(0, 6).map((tool) => (
+              <div key={tool.name} className="grid grid-cols-[1fr_84px] gap-3 py-3 text-sm">
+                <span className="truncate font-medium text-zinc-100">{tool.name}</span>
+                <span className="text-right text-zinc-500">{formatCents(tool.cost_cents)}</span>
+                <span className="col-span-2 text-xs text-zinc-600">
+                  {compactNumber(tool.input_tokens + tool.output_tokens)} tokens · {compactNumber(tool.cache_read_tokens)} cache reads
+                </span>
+              </div>
+            ))}
+      </div>
+    </div>
   );
 }
 

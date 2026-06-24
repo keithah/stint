@@ -1,6 +1,7 @@
 import {
   cacheEfficiency,
   cacheSavingsEstimate,
+  cachingDollarSavings,
   costPerProjectPerDay,
   latestDay,
   modelCostExtremes,
@@ -40,6 +41,17 @@ assertClose("savings ratio", savings.savingsRatio, 0.9);
 
 const noSavings = cacheSavingsEstimate({ cache_read_tokens: 0, input_tokens: 0 });
 assertClose("no billable tokens means zero savings ratio", noSavings.savingsRatio, 0);
+
+// cachingDollarSavings
+const dollars = cachingDollarSavings({ cost_usd: 100, uncached_cost_usd: 1000 });
+assertClose("dollars saved by caching", dollars.savedUSD, 900);
+assertClose("uncached cost surfaced", dollars.uncachedUSD, 1000);
+assertClose("dollar savings ratio", dollars.savingsRatio, 0.9);
+assertEqual("dollar savings has data", dollars.hasData, true);
+
+const noDollars = cachingDollarSavings({ cost_usd: 0, uncached_cost_usd: 0 });
+assertClose("no uncached cost means zero ratio", noDollars.savingsRatio, 0);
+assertEqual("no uncached cost reports no data", noDollars.hasData, false);
 
 // modelCostExtremes
 const models: UsageSlice[] = [

@@ -296,6 +296,18 @@ type AICostPeriod struct {
 	TotalCents   int    `json:"total_cents"`
 }
 
+// AIToolCost is the cache-aware cost and token mix for one usage-events agent
+// (the fine-grained "tool" taxonomy: codex, claude, opencode, gemini). It backs
+// the AI panel's "by tool" grouping; the heartbeat "by agent" taxonomy (gpt,
+// anthropic, ...) lives in Agents, with cost mapped up from these tools.
+type AIToolCost struct {
+	Name            string `json:"name"`
+	CostCents       int    `json:"cost_cents"`
+	InputTokens     int    `json:"input_tokens"`
+	OutputTokens    int    `json:"output_tokens"`
+	CacheReadTokens int    `json:"cache_read_tokens"`
+}
+
 type AIMetrics struct {
 	AILineChanges         int            `json:"ai_line_changes"`
 	HumanLineChanges      int            `json:"human_line_changes"`
@@ -313,6 +325,9 @@ type AIMetrics struct {
 	Agents                []AIStat       `json:"agents"`
 	Days                  []AIStat       `json:"days"`
 	Costs                 []AICostPeriod `json:"costs"`
+	// ToolCosts is the accurate per-tool cost breakdown from usage_events,
+	// powering the AI panel's "by tool" grouping. Empty when no usage events.
+	ToolCosts []AIToolCost `json:"tool_costs"`
 }
 
 type Stats struct {

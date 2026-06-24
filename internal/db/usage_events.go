@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/keithah/stint/internal/usage"
+	"github.com/keithah/stint/internal/usagestats"
 )
 
 // UsageIngestResult summarizes a bulk usage ingest for the health panel.
@@ -121,6 +122,28 @@ type UsageAggregate struct {
 	ReasoningTokens     int64
 	ProvidedCostUSD     float64
 	EventCount          int
+}
+
+// StatsGroup converts an aggregate row into the pricing-engine group shape used
+// by usagestats. Shared by the API and stats worker so both price usage events
+// identically when baking AI cost into the stats cache.
+func (a UsageAggregate) StatsGroup() usagestats.Group {
+	return usagestats.Group{
+		Agent:           a.Agent,
+		Model:           a.Model,
+		Project:         a.Project,
+		Day:             a.Day,
+		BillingType:     a.BillingType,
+		HasProvided:     a.HasProvided,
+		Input:           int(a.InputTokens),
+		Output:          int(a.OutputTokens),
+		CacheCreate5m:   int(a.CacheCreate5mTokens),
+		CacheCreate1h:   int(a.CacheCreate1hTokens),
+		CacheRead:       int(a.CacheReadTokens),
+		Reasoning:       int(a.ReasoningTokens),
+		ProvidedCostUSD: a.ProvidedCostUSD,
+		EventCount:      a.EventCount,
+	}
 }
 
 // UsageAggregatesBetween returns usage events in [start, end) summed into

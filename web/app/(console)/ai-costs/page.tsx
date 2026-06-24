@@ -17,7 +17,7 @@ import { rangeOptions, costModeOptions } from "@/lib/ranges";
 import { hasSubscriptionSavings, subscriptionCovered } from "@/lib/usage-billing";
 import {
   cacheEfficiency,
-  cacheSavingsEstimate,
+  cachingDollarSavings,
   costPerProjectPerDay,
   latestDay,
   modelCostExtremes,
@@ -160,7 +160,7 @@ function SummaryBody({
 }) {
   const total = data.total;
   const eff = useMemo(() => cacheEfficiency(total), [total]);
-  const savings = useMemo(() => cacheSavingsEstimate(total), [total]);
+  const savings = useMemo(() => cachingDollarSavings(total), [total]);
   const extremes = useMemo(() => modelCostExtremes(data.by_model), [data.by_model]);
   const reasoning = useMemo(() => reasoningShare(total), [total]);
   const burn = useMemo(() => todayVsAverage(data.by_day), [data.by_day]);
@@ -239,10 +239,11 @@ function SummaryBody({
       <section className="mt-6 grid gap-5 lg:grid-cols-3">
         <InsightCard icon={<Database size={16} />} title="Cache efficiency">
           <Metric label="Cache hit ratio" value={`${(eff.cacheHitRatio * 100).toFixed(1)}%`} />
-          <Metric label="Estimated savings" value={`~${(savings.savingsRatio * 100).toFixed(1)}% of input cost`} />
+          <Metric label="Saved by caching" value={savings.hasData ? `${formatUSD(savings.savedUSD)} (${(savings.savingsRatio * 100).toFixed(0)}%)` : "—"} />
+          <Metric label="Without caching" value={savings.hasData ? formatUSD(savings.uncachedUSD) : "—"} />
           <p className="mt-2 text-xs leading-5 text-zinc-500">
-            {eff.hasData
-              ? `Cache reads (${compactNumber(eff.cacheReadTokens)} tok) are billed far below fresh input (${compactNumber(eff.freshInputTokens)} tok). A higher ratio means cheaper context.`
+            {savings.hasData
+              ? `Cache reads (${compactNumber(eff.cacheReadTokens)} tok) bill far below fresh input. Uncached, this range would cost ${formatUSD(savings.uncachedUSD)} — trackers that ignore caching report that inflated number.`
               : "No input/cache tokens recorded yet."}
           </p>
         </InsightCard>

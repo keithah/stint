@@ -34,6 +34,34 @@ func TestCalculateGoldenSonnet(t *testing.T) {
 	}
 }
 
+// UncachedUSD prices cache reads + cache writes at the full input rate; the gap
+// to USD is the caching savings. Uses the same pinned sonnet snapshot as above.
+func TestUncachedAndCachingSavings(t *testing.T) {
+	e := engine(t)
+	event := usage.Event{Model: "claude-sonnet-4-5", InputTokens: 1000, OutputTokens: 500, CacheCreate5mTokens: 2000, CacheReadTokens: 10000}
+	r := e.Price(event, ModeCalculate)
+	// All input-side tokens (1000+2000+10000) at the input rate, output at output.
+	wantUncached := float64(1000+2000+10000)*3e-6 + 500*1.5e-5
+	if !approx(r.UncachedUSD, wantUncached) {
+		t.Fatalf("uncached: expected %.9f, got %.9f", wantUncached, r.UncachedUSD)
+	}
+	if !(r.UncachedUSD > r.USD) {
+		t.Fatalf("expected caching to save money: uncached %.9f should exceed cost %.9f", r.UncachedUSD, r.USD)
+	}
+}
+
+// Provider-priced events have no token breakdown, so UncachedUSD mirrors USD
+// (zero implied savings) rather than fabricating a counterfactual.
+func TestUncachedMirrorsProvidedCost(t *testing.T) {
+	e := engine(t)
+	provided := 0.42
+	event := usage.Event{Model: "claude-sonnet-4-5", CacheReadTokens: 10000, CostUSDProvided: &provided}
+	r := e.Price(event, ModeAuto)
+	if !approx(r.UncachedUSD, provided) || !approx(r.USD, provided) {
+		t.Fatalf("provided: expected uncached==usd==%.4f, got usd=%.4f uncached=%.4f", provided, r.USD, r.UncachedUSD)
+	}
+}
+
 func TestNormalizeAndRegionalDatedLookup(t *testing.T) {
 	e := engine(t)
 	if Normalize("us.anthropic.claude-sonnet-4-5-20250929") != "claude-sonnet-4-5-20250929" {

@@ -16,6 +16,10 @@ import (
 type Totals struct {
 	CostUSD           float64 `json:"cost_usd"`
 	MarginalUSD       float64 `json:"marginal_usd"`
+	// UncachedCostUSD is what these tokens would cost with no prompt caching
+	// (cache reads/writes priced at the full input rate). The gap to CostUSD is
+	// the savings caching delivered — and why naive trackers over-report cost.
+	UncachedCostUSD float64 `json:"uncached_cost_usd"`
 	EventCount        int     `json:"event_count"`
 	InputTokens       int     `json:"input_tokens"`
 	OutputTokens      int     `json:"output_tokens"`
@@ -229,6 +233,7 @@ func SummarizeAggregates(groups []Group, engine *pricing.Engine, mode pricing.Mo
 		}
 		total.CostUSD += result.USD
 		total.MarginalUSD += result.MarginalUSD
+		total.UncachedCostUSD += result.UncachedUSD
 
 		// Price already resolved the model (result.ModelResolved); reuse it instead
 		// of a second engine.Has lookup on this polled hot path.

@@ -153,6 +153,13 @@ export type AICostPeriod = {
   monthly_cents: number;
   total_cents: number;
 };
+export type AIToolCost = {
+  name: string;
+  cost_cents: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+};
 
 export type AIMetrics = {
   ai_line_changes: number;
@@ -171,6 +178,7 @@ export type AIMetrics = {
   agents: AIStat[];
   days: AIStat[];
   costs: AICostPeriod[];
+  tool_costs: AIToolCost[];
 };
 
 export type Stats = {
