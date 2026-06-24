@@ -7,21 +7,20 @@ import type { ReactNode } from "react";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { AIPanel } from "@/components/ai-panel";
 import { ActivityBars, AIHumanByDay, HourlyTimeline, ProjectStackedArea, SliceBars, SliceDonut, WeekdayHeatmap } from "@/components/dashboard-charts";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
+import { AuthGate, EmptyState, HeroHeader, SecondaryButton, SecondaryLink, SegmentedToggle, Skeleton, pillWrapperClass } from "@/components/ui";
 import { allTimeSinceToday, listProgramLanguages, me, statsForRange, statusBarToday, type AIStat, type Stats, type StatsRange, wakatimeAPIURL } from "@/lib/api";
 import { languageColorMap } from "@/lib/language-colors";
+import { rangeOptions } from "@/lib/ranges";
 import { compactNumber, formatCents } from "@/lib/number-format";
 import { ONBOARDING_STORAGE_KEY, shouldShowOnboarding } from "@/lib/onboarding-state";
 
 export default function DashboardPage() {
   return (
-    <Providers>
-      <Shell>
-        <DashboardContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <DashboardContent />
+    </AppShell>
   );
 }
 
@@ -45,17 +44,7 @@ function DashboardContent() {
 	const showOnboarding = Boolean(user.data?.data) && stats.isSuccess && shouldShowOnboarding(data?.total_seconds, onboardingDismissed);
 
 	if (user.isError) {
-    return (
-      <div className="grid min-h-screen place-items-center px-6">
-        <div className="max-w-md rounded border border-line bg-panel p-6">
-          <h1 className="text-xl font-semibold">Login required</h1>
-          <p className="mt-2 text-sm text-zinc-400">Create a session before viewing activity.</p>
-          <Link className="mt-5 inline-flex items-center gap-2 rounded bg-accent px-4 py-2 font-medium text-ink" href="/login">
-            Login <ArrowRight size={16} />
-          </Link>
-        </div>
-      </div>
-    );
+    return <AuthGate message="Create a session before viewing activity." />;
   }
 
 	return (
@@ -66,28 +55,47 @@ function DashboardContent() {
 					onDismiss={() => setOnboardingDismissed(true)}
 				/>
 			) : null}
-			<OpsStatusHeader
-				activeRange={activeRange}
-				data={data}
-				range={range}
-				setRange={setRange}
-				todayText={status.data?.data.grand_total_text ?? "0 secs"}
-				userName={user.data?.data.github_username ?? "local"}
-				onRefresh={() => {
-					stats.refetch();
-					status.refetch();
-				}}
+			<HeroHeader
+				className="ops-dashboard-header"
+				caption={`Coding activity · ${activeRange.label}`}
+				value={data?.human_readable_total ?? "0 secs"}
+				freshness={freshnessLabel(data)}
+				freshnessActive={Boolean(data) && !data?.is_up_to_date}
+				subline={
+					<>
+						{status.data?.data.grand_total_text ?? "0 secs"} today · averaging {data?.human_readable_daily_average ?? "0 secs"} a day · @{user.data?.data.github_username ?? "local"}
+					</>
+				}
+				controls={
+					<>
+						<SegmentedToggle options={rangeOptions} value={range} onChange={setRange} variant="pill" className={pillWrapperClass} />
+						<div className="flex gap-2">
+							<SecondaryButton onClick={() => { stats.refetch(); status.refetch(); }}>
+								<RefreshCw size={15} /> Refresh
+							</SecondaryButton>
+							<SecondaryLink href="/settings">
+								Setup <ArrowRight size={15} />
+							</SecondaryLink>
+						</div>
+					</>
+				}
 			/>
 
-      <section className="grid gap-4 md:grid-cols-5">
-        <StatCard label={activeRange.label} value={data?.human_readable_total ?? "0 secs"} detail={user.data?.data.github_username ?? "Waiting for session"} />
-        <StatCard label="Today" value={status.data?.data.grand_total_text ?? "0 secs"} detail={todayDetail(status.data?.data.project, status.data?.data.language)} />
-        <StatCard label="Daily average" value={data?.human_readable_daily_average ?? "0 secs"} detail={`${data?.days?.length ?? 0} calendar days`} />
-        <StatCard label="Best day" value={data?.best_day?.text ?? "0 secs"} detail={data?.best_day?.date ?? "No activity yet"} />
-        <StatCard label="All time" value={allTime.data?.data.text ?? "0 secs"} detail="Since first heartbeat" />
-      </section>
+      {stats.isLoading || status.isLoading || allTime.isLoading ? (
+        <section className="grid gap-4 md:grid-cols-5" aria-busy="true" aria-label="Loading activity totals">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[88px]" />)}
+        </section>
+      ) : (
+        <section className="grid gap-4 md:grid-cols-5">
+          <StatCard label={activeRange.label} value={data?.human_readable_total ?? "0 secs"} detail={user.data?.data.github_username ?? "Waiting for session"} />
+          <StatCard label="Today" value={status.data?.data.grand_total_text ?? "0 secs"} detail={todayDetail(status.data?.data.project, status.data?.data.language)} />
+          <StatCard label="Daily average" value={data?.human_readable_daily_average ?? "0 secs"} detail={`${data?.days?.length ?? 0} calendar days`} />
+          <StatCard label="Best day" value={data?.best_day?.text ?? "0 secs"} detail={data?.best_day?.date ?? "No activity yet"} />
+          <StatCard label="All time" value={allTime.data?.data.text ?? "0 secs"} detail="Since first heartbeat" />
+        </section>
+      )}
 
-      <section className="mt-5 rounded border border-line bg-panel p-5">
+      <section className="mt-6 rounded border border-line bg-panel p-5">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded bg-white/5 text-accent">
@@ -108,18 +116,18 @@ function DashboardContent() {
         </div>
       </section>
 
-      <div className="mt-5">
+      <div className="mt-6">
         <AIPanel metrics={data?.ai} />
       </div>
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+      <section className="mt-6 grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <AIHumanByDay days={aiTrend.data?.data.ai?.days ?? []} title="AI vs Human 30-Day Trend" />
         <WeekdayHeatmap days={data?.days ?? []} />
       </section>
 
       <ProjectAIGrid rows={data?.project_ai ?? []} />
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+      <section className="mt-6 grid gap-5 xl:grid-cols-[1.4fr_1fr]">
         <ProjectStackedArea days={data?.days ?? []} />
         <div className="grid gap-5">
           <SliceDonut title="Projects" rows={data?.projects ?? []} />
@@ -128,22 +136,22 @@ function DashboardContent() {
         </div>
       </section>
 
-      <section className="mt-5">
+      <section className="mt-6">
         <ActivityBars days={data?.days ?? []} title={`${activeRange.label} Activity`} />
       </section>
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-2">
+      <section className="mt-6 grid gap-5 xl:grid-cols-2">
         <HourlyTimeline hours={data?.hourly ?? []} mode="projects" />
         <HourlyTimeline hours={data?.hourly ?? []} mode="languages" colors={languageColors} />
       </section>
 
-      <section className="mt-5 grid gap-5 lg:grid-cols-3">
+      <section className="mt-6 grid gap-5 lg:grid-cols-3">
         <SliceDonut title="Editors" rows={data?.editors ?? []} />
         <SliceDonut title="Machines" rows={data?.machines ?? []} />
         <SliceDonut title="Operating Systems" rows={data?.operating_systems ?? []} />
       </section>
 
-      <section className="mt-5 rounded border border-line bg-panel p-5">
+      <section className="mt-6 rounded border border-line bg-panel p-5">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <h2 className="font-medium">Editor setup</h2>
@@ -197,15 +205,14 @@ function OnboardingModal({ configBlock, onDismiss }: { configBlock: string; onDi
 					<div className="min-w-0">
 						<div className="mb-3 flex items-center justify-between gap-3">
 							<div className="text-sm font-medium text-zinc-200">Editor config</div>
-							<button
-								className="inline-flex items-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
+							<SecondaryButton
 								onClick={async () => {
 									await navigator.clipboard.writeText(configBlock);
 									setCopied(true);
 								}}
 							>
 								{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copied" : "Copy"}
-							</button>
+							</SecondaryButton>
 						</div>
 						<pre className="overflow-x-auto rounded border border-line bg-ink p-4 text-sm leading-6 text-zinc-200">{configBlock}</pre>
 					</div>
@@ -248,91 +255,6 @@ function serverWakaTimeAPIURL() {
 	return "/api/v1";
 }
 
-const rangeOptions: Array<{ value: StatsRange; label: string }> = [
-  { value: "last_7_days", label: "7 days" },
-  { value: "last_30_days", label: "30 days" },
-  { value: "last_6_months", label: "6 months" },
-  { value: "last_year", label: "Year" },
-  { value: "all_time", label: "All time" }
-];
-
-function OpsStatusHeader({
-  activeRange,
-  data,
-  range,
-  setRange,
-  todayText,
-  userName,
-  onRefresh
-}: {
-  activeRange: { value: StatsRange; label: string };
-  data?: Stats;
-  range: StatsRange;
-  setRange: (range: StatsRange) => void;
-  todayText: string;
-  userName: string;
-  onRefresh: () => void;
-}) {
-  return (
-    <header className="ops-dashboard-header mb-6 rounded border border-line bg-panel/95 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
-      <div className="grid gap-0 lg:grid-cols-[1fr_auto]">
-        <div className="border-b border-line p-5 lg:border-b-0 lg:border-r">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs uppercase tracking-[0.16em] text-accent">
-              <Activity size={14} /> Live pipeline
-            </span>
-            <span className="rounded border border-line bg-ink px-2.5 py-1 text-xs text-zinc-500">{freshnessLabel(data)}</span>
-            <span className="rounded border border-line bg-ink px-2.5 py-1 text-xs text-zinc-500">{data?.percent_calculated ?? 0}% calculated</span>
-          </div>
-          <div className="grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-zinc-50">Coding activity ops</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-                Heartbeats, duration rollups, cached stats, and AI telemetry for @{userName}.
-              </p>
-            </div>
-            <HeaderReadout label={activeRange.label} value={data?.human_readable_total ?? "0 secs"} />
-            <HeaderReadout label="Today" value={todayText} />
-          </div>
-        </div>
-        <div className="flex flex-col justify-between gap-4 p-5 lg:min-w-80">
-          <div className="grid grid-cols-2 gap-2">
-            {rangeOptions.map((option) => (
-              <button
-                key={option.value}
-                className={`rounded border px-3 py-2 text-sm transition ${range === option.value ? "border-accent bg-accent text-ink" : "border-line bg-ink text-zinc-300 hover:border-zinc-500"}`}
-                onClick={() => setRange(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
-              onClick={onRefresh}
-            >
-              <RefreshCw size={15} /> Refresh
-            </button>
-            <Link className="inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5" href="/settings">
-              Setup <ArrowRight size={15} />
-            </Link>
-          </div>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function HeaderReadout({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-36 rounded border border-line bg-ink px-3 py-2">
-      <div className="text-xs uppercase tracking-[0.14em] text-zinc-500">{label}</div>
-      <div className="mt-1 truncate text-lg font-semibold text-zinc-100">{value}</div>
-    </div>
-  );
-}
-
 function freshnessLabel(stats?: Stats) {
   if (!stats) {
     return "loading cache";
@@ -343,7 +265,7 @@ function freshnessLabel(stats?: Stats) {
 function ProjectAIGrid({ rows }: { rows: AIStat[] }) {
   const visibleRows = rows.slice(0, 6);
   return (
-    <section className="mt-5">
+    <section className="mt-6">
       <div className="mb-3 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
         <div>
           <h2 className="text-lg font-medium text-zinc-100">Project AI mix</h2>
@@ -382,7 +304,7 @@ function ProjectAIGrid({ rows }: { rows: AIStat[] }) {
           ))}
         </div>
       ) : (
-        <div className="rounded border border-dashed border-line bg-panel/70 p-5 text-sm text-zinc-500">Send heartbeats with project data to populate the project grid.</div>
+        <EmptyState icon={<Bot size={20} />} title="No project activity yet" hint="Send heartbeats with project data to populate the project grid." />
       )}
     </section>
   );

@@ -3,8 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Goal as GoalIcon, PauseCircle, Pencil, Plus, Power, Save, Trash2, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
+import { PageHeader, SecondaryButton } from "@/components/ui";
 import { createGoal, deleteGoal, listGoals, updateGoal, type Goal, type GoalPayload, type GoalProgress } from "@/lib/api";
 import { boundedPercent } from "@/lib/chart-percent";
 
@@ -29,11 +29,9 @@ type GoalDraft = {
 
 export default function GoalsPage() {
   return (
-    <Providers>
-      <Shell>
-        <GoalsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <GoalsContent />
+    </AppShell>
   );
 }
 
@@ -69,26 +67,25 @@ function GoalsContent() {
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
-      <header className="mb-8 flex flex-col justify-between gap-4 border-b border-line pb-6 sm:flex-row sm:items-end">
-        <div>
-          <div className="mb-3 inline-flex items-center gap-2 rounded border border-accent/30 bg-accent/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-accent">
-            <GoalIcon size={14} /> Personal targets
-          </div>
-          <h1 className="text-4xl font-semibold tracking-tight">Goals</h1>
-          <p className="mt-2 text-sm text-zinc-400">Track daily or weekly coding targets against real heartbeat durations.</p>
-        </div>
-        <button className="inline-flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-sm font-medium text-ink" onClick={() => setCreateModalOpen(true)}>
-          <Plus size={16} /> Create goal
-        </button>
-      </header>
+      <PageHeader
+        icon={<GoalIcon size={14} />}
+        caption="Personal targets"
+        title="Goals"
+        sub="Track daily or weekly coding targets against real heartbeat durations."
+        actions={
+          <button className="inline-flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-sm font-medium text-ink" onClick={() => setCreateModalOpen(true)}>
+            <Plus size={16} /> Create goal
+          </button>
+        }
+      />
 
       {createModalOpen ? (
         <GoalModal mode="create" title="Create goal" onClose={() => setCreateModalOpen(false)}>
           <GoalEditorFields draft={createDraft} onChange={setCreateDraft} />
-          <div className="mt-5 flex justify-end gap-2">
-            <button className="inline-flex items-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5" onClick={() => setCreateModalOpen(false)}>
+          <div className="mt-6 flex justify-end gap-2">
+            <SecondaryButton onClick={() => setCreateModalOpen(false)}>
               <X size={15} /> Cancel
-            </button>
+            </SecondaryButton>
             <button className="inline-flex items-center gap-2 rounded bg-accent px-3 py-2 text-sm font-medium text-ink disabled:opacity-60" onClick={() => create.mutate()} disabled={create.isPending || !validGoalDraft(createDraft)}>
               <Plus size={15} /> Create
             </button>
@@ -99,10 +96,10 @@ function GoalsContent() {
       {editing ? (
         <GoalModal mode="edit" title="Edit goal" onClose={() => setEditing(null)}>
           <GoalEditorFields draft={editing} onChange={setEditing} />
-          <div className="mt-5 flex justify-end gap-2">
-            <button className="inline-flex items-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5" onClick={() => setEditing(null)}>
+          <div className="mt-6 flex justify-end gap-2">
+            <SecondaryButton onClick={() => setEditing(null)}>
               <X size={15} /> Cancel
-            </button>
+            </SecondaryButton>
             <button className="inline-flex items-center gap-2 rounded bg-accent px-3 py-2 text-sm font-medium text-ink disabled:opacity-60" onClick={() => update.mutate(editing)} disabled={update.isPending || !validGoalDraft(editing)}>
               <Save size={15} /> Save
             </button>
@@ -147,7 +144,7 @@ function GoalsContent() {
                   </button>
                 </div>
               </div>
-              <div className="mt-5">
+              <div className="mt-6">
                 <div className="mb-2 flex justify-between gap-3 text-sm">
                   <span className="text-zinc-300">{item.is_snoozed ? "Snoozed" : item.is_ignored ? "Ignored" : item.human_readable_actual}</span>
                   <span className={item.is_complete ? "text-moss" : "text-zinc-500"}>{item.percent}%</span>

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Plus } from "lucide-react";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { createKey, me, wakatimeAPIURL } from "@/lib/api";
+import { SecondaryButton } from "@/components/ui";
 import { noopSubscribe, serverWakaTimeAPIURL } from "@/components/settings/shared";
 
 export function ApiKeysCard() {
@@ -68,12 +69,9 @@ export function ApiKeysCard() {
       <div className="rounded border border-line bg-panel p-5">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-medium">Editor config file</h2>
-          <button
-            className="inline-flex items-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
-            onClick={() => navigator.clipboard.writeText(configBlock)}
-          >
+          <SecondaryButton onClick={() => navigator.clipboard.writeText(configBlock)}>
             <Copy size={15} /> Copy
-          </button>
+          </SecondaryButton>
         </div>
         <pre className="mt-4 overflow-x-auto rounded border border-line bg-ink p-4 text-sm leading-6 text-zinc-200">{configBlock}</pre>
       </div>
@@ -81,12 +79,9 @@ export function ApiKeysCard() {
       <div className="rounded border border-line bg-panel p-5">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-medium">api_urls fanout</h2>
-          <button
-            className="inline-flex items-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
-            onClick={() => navigator.clipboard.writeText(fanoutConfigBlock)}
-          >
+          <SecondaryButton onClick={() => navigator.clipboard.writeText(fanoutConfigBlock)}>
             <Copy size={15} /> Copy
-          </button>
+          </SecondaryButton>
         </div>
         <p className="mt-2 text-sm text-zinc-400">Use this form when sending the same Codex or editor activity to multiple services.</p>
         <pre className="mt-4 overflow-x-auto rounded border border-line bg-ink p-4 text-sm leading-6 text-zinc-200">{fanoutConfigBlock}</pre>

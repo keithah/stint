@@ -4,16 +4,17 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Coins, Database, Flame, RefreshCw, Sparkles, Wallet, X, Zap } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
 import { TokenTypeBar } from "@/components/token-type-bar";
 import { UsageBlockPanel } from "@/components/usage-block-panel";
 import { UsageBreakdown } from "@/components/usage-breakdown";
+import { AuthGate, EmptyState, HeroHeader, SecondaryButton, SegmentedToggle, Skeleton, pillWrapperClass } from "@/components/ui";
 import { me, type StatsRange } from "@/lib/api";
 import { usageBlocks, usageSummary, type UsageCostMode, type UsageCurrentBlock, type UsageSummary } from "@/lib/usage-api";
-import { activityHeatmapClass } from "@/lib/activity-heatmap";
+import { activityHeatmapClass, activityHeatmapClassForLevel } from "@/lib/activity-heatmap";
 import { compactNumber, formatUSD } from "@/lib/number-format";
+import { rangeOptions, costModeOptions } from "@/lib/ranges";
 import { hasSubscriptionSavings, subscriptionCovered } from "@/lib/usage-billing";
 import {
   cacheEfficiency,
@@ -25,27 +26,11 @@ import {
   todayVsAverage
 } from "@/lib/usage-insights";
 
-const rangeOptions: Array<{ value: StatsRange; label: string }> = [
-  { value: "last_7_days", label: "7 days" },
-  { value: "last_30_days", label: "30 days" },
-  { value: "last_6_months", label: "6 months" },
-  { value: "last_year", label: "Year" },
-  { value: "all_time", label: "All time" }
-];
-
-const costModeOptions: Array<{ value: UsageCostMode; label: string }> = [
-  { value: "auto", label: "Auto" },
-  { value: "calculate", label: "Calculate" },
-  { value: "display", label: "Display" }
-];
-
 export default function AICostsPage() {
   return (
-    <Providers>
-      <Shell>
-        <AICostsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <AICostsContent />
+    </AppShell>
   );
 }
 
@@ -76,62 +61,83 @@ function AICostsContent() {
   const liveToday = latestDay(data?.by_day ?? []);
 
   if (user.isError) {
-    return (
-      <div className="grid min-h-screen place-items-center px-6">
-        <div className="max-w-md rounded border border-line bg-panel p-6">
-          <h1 className="text-xl font-semibold">Login required</h1>
-          <p className="mt-2 text-sm text-zinc-400">Create a session before viewing AI costs.</p>
-          <Link className="mt-5 inline-flex items-center gap-2 rounded bg-accent px-4 py-2 font-medium text-ink" href="/login">
-            Login <ArrowRight size={16} />
-          </Link>
-        </div>
-      </div>
-    );
+    return <AuthGate message="Create a session before viewing AI costs." />;
   }
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-6 lg:px-8">
-      <LiveHeader
-        activeRange={activeRange}
-        data={data}
-        range={range}
-        setRange={setRange}
-        costMode={costMode}
-        setCostMode={setCostMode}
-        todayCost={liveToday?.cost_usd ?? 0}
-        todayTokens={liveToday?.tokens ?? 0}
-        todayDate={liveToday?.date}
-        isUpdating={summary.isFetching}
-        agent={agent}
-        onClearAgent={() => setAgent(null)}
-        onRefresh={() => {
-          summary.refetch();
-          blocks.refetch();
-        }}
+      <HeroHeader
+        srLabel={activeRange.label}
+        caption={liveToday?.date ? `AI spend · today · ${liveToday.date.slice(5)}` : "AI spend · today"}
+        value={formatUSD(liveToday?.cost_usd ?? 0)}
+        accentValue
+        freshness={summary.isFetching ? "Updating…" : "Live"}
+        freshnessActive={summary.isFetching}
+        subline={
+          <>
+            {compactNumber(liveToday?.tokens ?? 0)} tokens today{agent ? <> · <span className="text-accent">{agent}</span></> : <> across all agents</>}
+            {data ? <> · {data.total.event_count.toLocaleString()} events in {activeRange.label.toLowerCase()}</> : null}
+          </>
+        }
+        controls={
+          <>
+            <div className="flex flex-col gap-2 sm:items-end">
+              <SegmentedToggle options={rangeOptions} value={range} onChange={setRange} variant="pill" className={pillWrapperClass} />
+              <SegmentedToggle
+                options={costModeOptions}
+                value={costMode}
+                onChange={setCostMode}
+                variant="pill"
+                size="xs"
+                className={pillWrapperClass}
+                optionTitle={(option) => `Cost mode: ${option.label}`}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              {agent ? (
+                <button
+                  type="button"
+                  onClick={() => setAgent(null)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent transition hover:bg-accent/20"
+                  title="Clear agent filter"
+                >
+                  Filtered: {agent} <X size={13} />
+                </button>
+              ) : null}
+              <SecondaryButton onClick={() => { summary.refetch(); blocks.refetch(); }}>
+                <RefreshCw size={15} className={summary.isFetching ? "animate-spin" : ""} /> Refresh
+              </SecondaryButton>
+            </div>
+          </>
+        }
       />
 
       {summary.isError ? (
-        <div className="mt-5 rounded border border-ember/40 bg-ember/10 p-5 text-sm text-ember">
+        <div className="mt-6 rounded border border-ember/40 bg-ember/10 p-5 text-sm text-ember">
           Could not load usage: {(summary.error as Error)?.message ?? "unknown error"}
         </div>
       ) : null}
 
       {summary.isLoading ? (
-        <div className="mt-5 rounded border border-dashed border-line bg-panel/70 p-8 text-center text-sm text-zinc-500">
-          Loading usage…
+        <div className="mt-6 space-y-5" aria-busy="true" aria-label="Loading usage">
+          <div className="grid gap-4 md:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
+          </div>
+          <Skeleton className="h-44" />
         </div>
       ) : null}
 
       {data && isEmptySummary(data) && !summary.isLoading ? (
-        <div className="mt-5 rounded border border-dashed border-line bg-panel/70 p-8 text-center">
-          <div className="text-base font-medium text-zinc-200">No AI usage yet</div>
-          <p className="mt-2 text-sm text-zinc-500">
-            {agent ? (
+        <div className="mt-6">
+          <EmptyState
+            icon={<Wallet size={20} />}
+            title="No AI usage yet"
+            hint={agent ? (
               <>No usage recorded for <span className="text-zinc-300">{agent}</span> in this range.</>
             ) : (
               <>Run <code className="rounded bg-ink px-1.5 py-0.5 text-zinc-300">stint-collect</code> to start recording agent usage events.</>
             )}
-          </p>
+          />
         </div>
       ) : null}
 
@@ -170,7 +176,7 @@ function SummaryBody({
   return (
     <>
       {data.unpriced_models.length > 0 ? (
-        <div className="mt-5 flex flex-col gap-3 rounded border border-ember/40 bg-ember/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-6 flex flex-col gap-3 rounded border border-ember/40 bg-ember/10 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3 text-sm text-ember">
             <AlertTriangle size={18} className="mt-0.5 shrink-0" />
             <div>
@@ -185,7 +191,7 @@ function SummaryBody({
       ) : null}
 
       {subscription ? (
-        <section className="mt-5 rounded border border-moss/30 bg-moss/[0.06] p-5">
+        <section className="mt-6 rounded border border-moss/30 bg-moss/[0.06] p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <span className="mt-0.5 text-moss"><Wallet size={18} /></span>
@@ -207,7 +213,7 @@ function SummaryBody({
         </section>
       ) : null}
 
-      <section className="mt-5 grid gap-4 md:grid-cols-4">
+      <section className="mt-6 grid gap-4 md:grid-cols-4">
         <StatCard
           label={`${activeRange.label} cost`}
           value={formatUSD(total.cost_usd)}
@@ -218,22 +224,22 @@ function SummaryBody({
         <StatCard label="Reasoning share" value={`${(reasoning * 100).toFixed(1)}%`} detail={`${compactNumber(total.reasoning_tokens)} reasoning tokens`} />
       </section>
 
-      <section className="mt-5 grid gap-5 lg:grid-cols-3">
+      <section className="mt-6 grid gap-5 lg:grid-cols-3">
         <UsageBreakdown title="By agent" rows={data.by_agent} showBilling onSelect={toggleAgent} selected={agent} />
         <UsageBreakdown title="By model" rows={data.by_model} />
         <UsageBreakdown title="By project" rows={data.by_project} />
       </section>
 
-      <section className="mt-5 grid gap-5 lg:grid-cols-[1fr_1fr] xl:grid-cols-[1.4fr_1fr]">
+      <section className="mt-6 grid gap-5 lg:grid-cols-[1fr_1fr] xl:grid-cols-[1.4fr_1fr]">
         <TokenTypeBar total={total} />
         <UsageBlockPanel block={currentBlock} />
       </section>
 
-      <section className="mt-5">
+      <section className="mt-6">
         <CostHeatmap data={data} />
       </section>
 
-      <section className="mt-5 grid gap-5 lg:grid-cols-3">
+      <section className="mt-6 grid gap-5 lg:grid-cols-3">
         <InsightCard icon={<Database size={16} />} title="Cache efficiency">
           <Metric label="Cache hit ratio" value={`${(eff.cacheHitRatio * 100).toFixed(1)}%`} />
           <Metric label="Estimated savings" value={`~${(savings.savingsRatio * 100).toFixed(1)}% of input cost`} />
@@ -272,7 +278,7 @@ function SummaryBody({
         </InsightCard>
       </section>
 
-      <section className="mt-5 rounded border border-line bg-panel/95 p-5">
+      <section className="mt-6 rounded border border-line bg-panel/95 p-5">
         <div className="mb-4 flex items-center gap-2 text-sm font-medium text-zinc-300">
           <Sparkles size={16} /> Cost per project per day
         </div>
@@ -300,18 +306,28 @@ function CostHeatmap({ data }: { data: UsageSummary }) {
     <div className="ops-chart-panel rounded border border-line bg-panel/95 p-4 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="text-sm font-medium text-zinc-300">Cross-agent day heatmap</div>
-        <div className="text-xs text-zinc-500">Color by cost</div>
+        <div className="flex items-center gap-2 text-xs text-zinc-500">
+          <span>Less</span>
+          {[0, 1, 2, 3, 4].map((level) => (
+            <span key={level} className={`h-3 w-3 rounded-sm border ${activityHeatmapClassForLevel(level)}`} />
+          ))}
+          <span>More</span>
+        </div>
       </div>
       {days.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
-          {days.map((day) => (
-            <div
-              key={day.date}
-              // Reuse the activity-heatmap colour ramp, scaled to cost in cents.
-              className={`h-5 w-5 rounded-sm border ${activityHeatmapClass({ total_seconds: Math.round(day.cost_usd * 100) }, Math.round(maxCost * 100))}`}
-              title={`${day.date}: ${formatUSD(day.cost_usd)} · ${compactNumber(day.tokens)} tokens`}
-            />
-          ))}
+          {days.map((day) => {
+            const cellTitle = `${day.date}: ${formatUSD(day.cost_usd)} · ${compactNumber(day.tokens)} tokens`;
+            return (
+              <div
+                key={day.date}
+                // Reuse the activity-heatmap colour ramp, scaled to cost in cents.
+                className={`h-5 w-5 rounded-sm border ${activityHeatmapClass({ total_seconds: Math.round(day.cost_usd * 100) }, Math.round(maxCost * 100))}`}
+                title={cellTitle}
+                aria-label={cellTitle}
+              />
+            );
+          })}
         </div>
       ) : (
         <p className="text-sm text-zinc-500">No daily usage in this range.</p>
@@ -338,118 +354,6 @@ function Metric({ label, value }: { label: string; value: string }) {
       <span className="text-zinc-500">{label}</span>
       <span className="truncate text-right font-medium text-zinc-200">{value}</span>
     </div>
-  );
-}
-
-function LiveHeader({
-  activeRange,
-  data,
-  range,
-  setRange,
-  costMode,
-  setCostMode,
-  todayCost,
-  todayTokens,
-  todayDate,
-  isUpdating,
-  agent,
-  onClearAgent,
-  onRefresh
-}: {
-  activeRange: { value: StatsRange; label: string };
-  data?: UsageSummary;
-  range: StatsRange;
-  setRange: (range: StatsRange) => void;
-  costMode: UsageCostMode;
-  setCostMode: (mode: UsageCostMode) => void;
-  todayCost: number;
-  todayTokens: number;
-  todayDate?: string;
-  isUpdating: boolean;
-  agent: string | null;
-  onClearAgent: () => void;
-  onRefresh: () => void;
-}) {
-  return (
-    <header className="ops-dashboard-header mb-6 rounded border border-line bg-panel/95 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
-      <div className="grid gap-0 lg:grid-cols-[1fr_auto]">
-        <div className="border-b border-line p-5 lg:border-b-0 lg:border-r">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs uppercase tracking-[0.16em] text-accent">
-              <Coins size={14} /> AI cost ops
-            </span>
-            <span className="rounded border border-line bg-ink px-2.5 py-1 text-xs text-zinc-500">cost mode: {costMode}</span>
-            {data ? <span className="rounded border border-line bg-ink px-2.5 py-1 text-xs text-zinc-500">{data.total.event_count.toLocaleString()} events</span> : null}
-            {agent ? (
-              <button
-                onClick={onClearAgent}
-                className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent transition hover:bg-accent/20"
-                title="Clear agent filter"
-              >
-                Filtered: {agent} <X size={13} />
-              </button>
-            ) : null}
-          </div>
-          <div className="grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs uppercase tracking-[0.16em] text-zinc-500">{todayDate ? `Today · ${todayDate.slice(5)}` : "Today"}</span>
-                <LiveDot active={isUpdating} />
-              </div>
-              <h1 className="mt-2 text-4xl font-semibold tracking-tight text-zinc-50">{formatUSD(todayCost)}</h1>
-              <p className="mt-1.5 text-sm text-zinc-400">
-                {compactNumber(todayTokens)} tokens today{agent ? <> · <span className="text-accent">{agent}</span></> : <> across all agents</>}
-              </p>
-            </div>
-            <div className="hidden md:block md:self-stretch md:border-l md:border-line" aria-hidden />
-            <div className="max-w-xs text-sm leading-6 text-zinc-500">
-              Cross-agent spend, tokens, cache efficiency, and burn rate over your selected range.
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-col justify-between gap-4 p-5 lg:min-w-80">
-          <div className="grid grid-cols-2 gap-2">
-            {rangeOptions.map((option) => (
-              <button
-                key={option.value}
-                className={`rounded border px-3 py-2 text-sm transition ${range === option.value ? "border-accent bg-accent text-ink" : "border-line bg-ink text-zinc-300 hover:border-zinc-500"}`}
-                onClick={() => setRange(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {costModeOptions.map((option) => (
-              <button
-                key={option.value}
-                className={`rounded border px-3 py-2 text-xs transition ${costMode === option.value ? "border-accent bg-accent text-ink" : "border-line bg-ink text-zinc-300 hover:border-zinc-500"}`}
-                onClick={() => setCostMode(option.value)}
-                title={`Cost mode: ${option.label}`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <button
-            className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
-            onClick={onRefresh}
-          >
-            <RefreshCw size={15} className={isUpdating ? "animate-spin" : ""} /> Refresh
-          </button>
-        </div>
-      </div>
-      <div className="sr-only">{activeRange.label}</div>
-    </header>
-  );
-}
-
-function LiveDot({ active }: { active: boolean }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-ink px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-zinc-500">
-      <span className={`h-1.5 w-1.5 rounded-full ${active ? "animate-pulse bg-accent" : "bg-moss"}`} />
-      {active ? "Updating" : "Live"}
-    </span>
   );
 }
 

@@ -13,10 +13,10 @@ export function ActivityBars({ days, title = "Last 7 Days" }: { days: DailyStat[
       <div className="mb-4 text-sm font-medium text-zinc-300">{title}</div>
       <ResponsiveContainer width="100%" height="85%">
         <BarChart data={data}>
-          <CartesianGrid stroke="#303030" vertical={false} />
+          <CartesianGrid stroke="#26262b" vertical={false} />
           <XAxis dataKey="date" stroke="#888" tick={{ fontSize: 12 }} tickFormatter={(value) => value.slice(5)} />
           <YAxis stroke="#888" tick={{ fontSize: 12 }} />
-          <Tooltip contentStyle={{ background: "#171717", border: "1px solid #303030", borderRadius: 8 }} />
+          <Tooltip contentStyle={{ background: "#161618", border: "1px solid #26262b", borderRadius: 8 }} />
           <Bar dataKey="hours" fill="#00b4d8" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
@@ -42,10 +42,10 @@ export function ProjectStackedArea({ days }: { days: DailyStat[] }) {
       </div>
       <ResponsiveContainer width="100%" height="82%">
         <AreaChart data={data}>
-          <CartesianGrid stroke="#303030" vertical={false} />
+          <CartesianGrid stroke="#26262b" vertical={false} />
           <XAxis dataKey="label" stroke="#888" tick={{ fontSize: 12 }} />
           <YAxis stroke="#888" tick={{ fontSize: 12 }} />
-          <Tooltip contentStyle={{ background: "#171717", border: "1px solid #303030", borderRadius: 8 }} />
+          <Tooltip contentStyle={{ background: "#161618", border: "1px solid #26262b", borderRadius: 8 }} />
           {keys.map((key, index) => (
             <Area key={key} dataKey={key} stackId="projects" stroke={fallbackPalette[index % fallbackPalette.length]} fill={fallbackPalette[index % fallbackPalette.length]} fillOpacity={0.72} />
           ))}
@@ -70,7 +70,7 @@ export function SliceDonut({ title, rows, colors = {} }: { title: string; rows: 
                   <Cell key={index} fill={colorForLanguage(row.name, colors, index)} />
                 ))}
               </Pie>
-              <Tooltip contentStyle={{ background: "#171717", border: "1px solid #303030", borderRadius: 8 }} />
+              <Tooltip contentStyle={{ background: "#161618", border: "1px solid #26262b", borderRadius: 8 }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -135,10 +135,10 @@ export function HourlyTimeline({ hours, mode, colors = {} }: { hours: HourlyStat
       </div>
       <ResponsiveContainer width="100%" height="82%">
         <BarChart data={data}>
-          <CartesianGrid stroke="#303030" vertical={false} />
+          <CartesianGrid stroke="#26262b" vertical={false} />
           <XAxis dataKey="label" stroke="#888" tick={{ fontSize: 11 }} interval={2} />
           <YAxis stroke="#888" tick={{ fontSize: 12 }} />
-          <Tooltip contentStyle={{ background: "#171717", border: "1px solid #303030", borderRadius: 8 }} />
+          <Tooltip contentStyle={{ background: "#161618", border: "1px solid #26262b", borderRadius: 8 }} />
           {keys.map((key, index) => (
             <Bar key={key} dataKey={key} stackId={mode} fill={colorForLanguage(key, colors, index)} radius={index === keys.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
           ))}
@@ -169,11 +169,11 @@ export function AIHumanByDay({ days, title = "AI vs Human by Day" }: { days: AIS
       </div>
       <ResponsiveContainer width="100%" height="82%">
         <BarChart data={data}>
-          <CartesianGrid stroke="#303030" vertical={false} />
+          <CartesianGrid stroke="#26262b" vertical={false} />
           <XAxis dataKey="name" stroke="#888" tick={{ fontSize: 12 }} />
           <YAxis stroke="#888" tick={{ fontSize: 12 }} />
           <Tooltip
-            contentStyle={{ background: "#171717", border: "1px solid #303030", borderRadius: 8 }}
+            contentStyle={{ background: "#161618", border: "1px solid #26262b", borderRadius: 8 }}
             formatter={(value, name) => [Number(value).toLocaleString(), name === "ai" ? "AI changes" : "Human changes"]}
           />
           <Bar dataKey="ai" stackId="lines" fill={fallbackPalette[0]} radius={[4, 4, 0, 0]} />

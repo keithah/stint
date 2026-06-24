@@ -3,17 +3,15 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowRight, Boxes, Clock3 } from "lucide-react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
+import { PageHeader, SecondaryLink } from "@/components/ui";
 import { listProjects, statsForRange } from "@/lib/api";
 
 export default function ProjectsPage() {
   return (
-    <Providers>
-      <Shell>
-        <ProjectsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <ProjectsContent />
+    </AppShell>
   );
 }
 
@@ -24,13 +22,12 @@ function ProjectsContent() {
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
-      <header className="mb-8 border-b border-line pb-6">
-        <div className="mb-3 inline-flex items-center gap-2 rounded border border-accent/30 bg-accent/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-accent">
-          <Boxes size={14} /> Project activity
-        </div>
-        <h1 className="text-4xl font-semibold tracking-tight">Projects</h1>
-        <p className="mt-2 text-sm text-zinc-400">Recently seen projects with last heartbeat timestamps and 30-day totals.</p>
-      </header>
+      <PageHeader
+        icon={<Boxes size={14} />}
+        caption="Project activity"
+        title="Projects"
+        sub="Recently seen projects with last heartbeat timestamps and 30-day totals."
+      />
 
       <section className="overflow-hidden rounded border border-line bg-panel">
         <div className="grid grid-cols-[1.4fr_1fr_1fr_auto] gap-4 border-b border-line px-4 py-3 text-xs uppercase tracking-[0.16em] text-zinc-500">
@@ -51,9 +48,9 @@ function ProjectsContent() {
                 <Clock3 size={15} className="text-accent" /> {total?.text ?? "0 secs"}
               </div>
               <div className="text-sm text-zinc-400">{project.last_heartbeat_at ? formatDate(project.last_heartbeat_at) : "No heartbeat"}</div>
-              <Link className="inline-flex items-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5" href={`/projects/${encodeURIComponent(project.name)}`}>
+              <SecondaryLink href={`/projects/${encodeURIComponent(project.name)}`}>
                 Inspect <ArrowRight size={15} />
-              </Link>
+              </SecondaryLink>
             </div>
           );
         })}

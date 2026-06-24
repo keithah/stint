@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LogIn, Plus, Trash2, Trophy, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
+import { PageHeader } from "@/components/ui";
 import { addLeaderboardMember, createLeaderboard, deleteLeaderboard, leaderboardEntries, listLeaderboards, me, publicLeaders, removeLeaderboardMember, updateLeaderboard, type LeaderboardEntry, type LeaderboardMember, type StatsRange } from "@/lib/api";
 import { currentLeaderboardEntry, isCurrentLeaderboardUser } from "@/lib/leaderboard-current-user";
 import { leaderboardRangeIsValid, normalizeLeaderboardRangeInput } from "@/lib/leaderboard-ranges";
@@ -15,11 +15,9 @@ const publicCountryOptions = ["", "US", "CA", "GB", "DE", "FR", "IN", "BR", "AU"
 
 export default function LeaderboardsPage() {
   return (
-    <Providers>
-      <Shell>
-        <LeaderboardsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <LeaderboardsContent />
+    </AppShell>
   );
 }
 
@@ -90,13 +88,12 @@ function LeaderboardsContent() {
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
-      <header className="mb-8 border-b border-line pb-6">
-        <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-accent/30 bg-accent/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-accent">
-          <Trophy size={14} /> Rankings
-        </div>
-        <h1 className="text-4xl font-semibold tracking-tight">Leaderboards</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">Public rankings are open to everyone. Sign in to create private boards for teams, friends, and local competitions.</p>
-      </header>
+      <PageHeader
+        icon={<Trophy size={14} />}
+        caption="Rankings"
+        title="Leaderboards"
+        sub="Public rankings are open to everyone. Sign in to create private boards for teams, friends, and local competitions."
+      />
 
       {isLoggedIn ? (
         <section className="mb-5 rounded-md border border-line bg-panel p-5">
@@ -210,7 +207,7 @@ function LeaderboardsContent() {
             </div>
             <h2 className="font-medium">Private boards require a session</h2>
             <p className="mt-2 text-sm leading-6 text-zinc-400">Public leaders stay visible without login. Connect GitHub to create private leaderboards and add members.</p>
-            <Link className="mt-5 inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-ink" href="/login">
+            <Link className="mt-6 inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-ink" href="/login">
               Login <LogIn size={15} />
             </Link>
           </div>

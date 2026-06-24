@@ -5,6 +5,7 @@ import { RotateCcw, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { abortCustomRulesProgress, customRulesProgress, deleteCustomRule, listCustomRules, replaceCustomRules } from "@/lib/api";
 import { boundedPercent } from "@/lib/chart-percent";
+import { SecondaryButton } from "@/components/ui";
 
 const ruleFields = ["entity", "type", "category", "project", "branch", "language", "editor", "operating_system"];
 const ruleOperations = [
@@ -155,13 +156,13 @@ export function CustomRulesCard() {
               {ruleProgress.data?.data.status ?? "NotStarted"} · {ruleProgress.data?.data.percent_complete ?? 0}% · {ruleProgress.data?.data.changed ?? 0} changed · {ruleProgress.data?.data.deleted ?? 0} deleted
             </div>
           </div>
-          <button
-            className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 disabled:opacity-60"
+          <SecondaryButton
+            className="disabled:opacity-60"
             onClick={() => abortRuleProgress.mutate()}
             disabled={abortRuleProgress.isPending}
           >
             <RotateCcw size={15} /> Abort job
-          </button>
+          </SecondaryButton>
         </div>
         <div className="mt-3 h-2 overflow-hidden rounded bg-white/5">
           <div className="h-full rounded bg-accent" style={{ width: `${boundedPercent(ruleProgress.data?.data.percent_complete ?? 0)}%` }} />

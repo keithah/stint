@@ -3,9 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, CalendarDays } from "lucide-react";
 import { useState } from "react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
-import { activityHeatmapClass, activityHeatmapTitle } from "@/lib/activity-heatmap";
+import { AppShell } from "@/components/app-shell";
+import { PageHeader, SegmentedToggle, pillWrapperClass } from "@/components/ui";
+import { activityHeatmapClass, activityHeatmapClassForLevel, activityHeatmapTitle } from "@/lib/activity-heatmap";
 import {
   insight,
   statsForRange,
@@ -54,11 +54,9 @@ type DailyAverageInsightValue = {
 
 export default function InsightsPage() {
   return (
-    <Providers>
-      <Shell>
-        <InsightsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <InsightsContent />
+    </AppShell>
   );
 }
 
@@ -79,26 +77,13 @@ function InsightsContent() {
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
-      <header className="mb-8 flex flex-col justify-between gap-4 border-b border-line pb-6 lg:flex-row lg:items-end">
-        <div>
-          <div className="mb-3 inline-flex items-center gap-2 rounded border border-accent/30 bg-accent/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-accent">
-            <BarChart3 size={14} /> Breakdown explorer
-          </div>
-          <h1 className="text-4xl font-semibold tracking-tight">Insights</h1>
-          <p className="mt-2 text-sm text-zinc-400">Range-aware totals by project, language, editor, machine, OS, and category.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {ranges.map((option) => (
-            <button
-              key={option.value}
-              className={`rounded border px-3 py-2 text-sm ${range === option.value ? "border-accent bg-accent text-ink" : "border-line text-zinc-300 hover:bg-white/5"}`}
-              onClick={() => setRange(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </header>
+      <PageHeader
+        icon={<BarChart3 size={14} />}
+        caption="Breakdown explorer"
+        title="Insights"
+        sub="Range-aware totals by project, language, editor, machine, OS, and category."
+        actions={<SegmentedToggle options={ranges} value={range} onChange={setRange} variant="pill" className={pillWrapperClass} />}
+      />
 
       <section className="grid gap-5 lg:grid-cols-[220px_1fr]">
         <div className="rounded border border-line bg-panel p-3">
@@ -133,7 +118,7 @@ function InsightsContent() {
         </div>
       </section>
 
-      <section className="mt-5 rounded border border-line bg-panel p-5">
+      <section className="mt-6 rounded border border-line bg-panel p-5">
         <ActivityHeatmap days={stats.data?.data.days ?? []} />
         <div className="mb-4 mt-6 flex items-center gap-2 text-sm font-medium text-zinc-300">
           <CalendarDays size={16} /> Daily buckets
@@ -167,7 +152,7 @@ function ActivityHeatmap({ days }: { days: DailyStat[] }) {
         <div className="flex items-center gap-2 text-xs text-zinc-500">
           <span>Less</span>
           {[0, 1, 2, 3, 4].map((level) => (
-            <span key={level} className={`h-3 w-3 rounded-sm border ${activityHeatmapClass({ total_seconds: level }, 4)}`} />
+            <span key={level} className={`h-3 w-3 rounded-sm border ${activityHeatmapClassForLevel(level)}`} />
           ))}
           <span>More</span>
         </div>

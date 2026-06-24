@@ -1,8 +1,8 @@
 "use client";
 
 import { KeyRound } from "lucide-react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
+import { PageHeader } from "@/components/ui";
 import { AICostsCard } from "@/components/settings/ai-costs-card";
 import { AccountCard } from "@/components/settings/account-card";
 import { ApiKeysCard } from "@/components/settings/api-keys-card";
@@ -21,24 +21,21 @@ import { WakaTimeImportCard } from "@/components/settings/wakatime-import-card";
 
 export default function SettingsPage() {
   return (
-    <Providers>
-      <Shell>
-        <SettingsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <SettingsContent />
+    </AppShell>
   );
 }
 
 function SettingsContent() {
   return (
     <div className="mx-auto max-w-5xl px-5 py-6 lg:px-8">
-      <header className="mb-8 border-b border-line pb-6">
-        <div className="mb-3 inline-flex items-center gap-2 rounded border border-accent/30 bg-accent/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-accent">
-          <KeyRound size={14} /> Stint config
-        </div>
-        <h1 className="text-4xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-2 text-sm text-zinc-400">Manage profile privacy, API keys, editor setup, imports, sharing, and AI cost settings.</p>
-      </header>
+      <PageHeader
+        icon={<KeyRound size={14} />}
+        caption="Stint config"
+        title="Settings"
+        sub="Manage profile privacy, API keys, editor setup, imports, sharing, and AI cost settings."
+      />
 
       <GitHubAccountCard />
       <ProfileCard />
