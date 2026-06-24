@@ -42,25 +42,62 @@ export function HeaderReadout({ label, value }: { label: string; value: string }
   );
 }
 
-// Generic segmented control. Caller supplies the grid wrapper via className.
+// Generic segmented control. Caller supplies the grid/pill wrapper via className.
+// `variant` "boxed" (default) is the original bordered-button grid; "pill" is the
+// Direction-B inset pill (borderless segments, active fills with accent).
 // `optionTitle` is optional so callers that rendered a native tooltip per button
 // (e.g. the ai-costs cost-mode control) keep byte-identical markup.
-export function SegmentedToggle<T extends string>({ options, value, onChange, className = "", size = "sm", optionTitle }:
-  { options: ReadonlyArray<{ value: T; label: string }>; value: T; onChange: (v: T) => void; className?: string; size?: "sm" | "xs"; optionTitle?: (option: { value: T; label: string }) => string; }) {
+export function SegmentedToggle<T extends string>({ options, value, onChange, className = "", size = "sm", variant = "boxed", optionTitle }:
+  { options: ReadonlyArray<{ value: T; label: string }>; value: T; onChange: (v: T) => void; className?: string; size?: "sm" | "xs"; variant?: "boxed" | "pill"; optionTitle?: (option: { value: T; label: string }) => string; }) {
   const pad = size === "xs" ? "px-3 py-2 text-xs" : "px-3 py-2 text-sm";
+  const button = (active: boolean) =>
+    variant === "pill"
+      ? `rounded-[3px] ${size === "xs" ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm"} transition ${active
+          ? "bg-accent text-ink"
+          : "text-zinc-400 hover:text-zinc-100"}`
+      : `rounded border ${pad} transition ${active
+          ? "border-accent bg-accent text-ink"
+          : "border-line bg-ink text-zinc-300 hover:border-zinc-500"}`;
   return (
     <div className={className}>
       {options.map((o) => (
         <button key={o.value} type="button" aria-pressed={value === o.value}
           title={optionTitle?.(o)}
           onClick={() => onChange(o.value)}
-          className={`rounded border ${pad} transition ${value === o.value
-            ? "border-accent bg-accent text-ink"
-            : "border-line bg-ink text-zinc-300 hover:border-zinc-500"}`}>
+          className={button(value === o.value)}>
           {o.label}
         </button>
       ))}
     </div>
+  );
+}
+
+// Direction-B inset pill wrapper for SegmentedToggle variant="pill".
+export const pillWrapperClass = "inline-flex gap-1 rounded border border-[#2e2e34] bg-rail p-[3px]";
+
+// Direction-B hero header: a muted caption, the page's primary metric rendered
+// large, an optional plain-English subline, an optional freshness dot (color +
+// tooltip), and right-aligned controls. Cyan is reserved for the metric/accent.
+export function HeroHeader({ caption, value, accentValue = false, subline, freshness, controls }:
+  { caption: string; value: string; accentValue?: boolean; subline?: ReactNode; freshness?: string; controls?: ReactNode }) {
+  return (
+    <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
+          {caption}
+          {freshness ? (
+            <span className="inline-flex items-center" title={freshness} aria-label={freshness}>
+              <span className="h-1.5 w-1.5 rounded-full bg-moss" />
+            </span>
+          ) : null}
+        </div>
+        <div className={`mt-2 text-[44px] font-medium leading-none tracking-[-1px] ${accentValue ? "text-accent" : "text-zinc-50"}`}>
+          {value}
+        </div>
+        {subline ? <p className="mt-3 text-sm leading-6 text-zinc-400">{subline}</p> : null}
+      </div>
+      {controls ? <div className="flex shrink-0 flex-col items-stretch gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-end">{controls}</div> : null}
+    </header>
   );
 }
 

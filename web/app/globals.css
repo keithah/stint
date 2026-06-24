@@ -7,12 +7,13 @@
 
   /* Core palette as space-separated RGB channels so Tailwind's /opacity
      modifiers keep working: tailwind.config maps each color to
-     rgb(var(--token) / <alpha-value>). Change the theme here, once. */
-  --surface: 13 13 13;       /* ink    #0d0d0d */
-  --surface-2: 23 23 23;     /* panel  #171717 */
-  --rail: 36 36 36;          /* rail   #242424 */
-  --border: 48 48 48;        /* line   #303030 */
-  --accent: 0 180 216;       /* accent #00b4d8 */
+     rgb(var(--token) / <alpha-value>). Change the theme here, once.
+     Direction B "calmer modern": softer surfaces, hairline borders. */
+  --surface: 15 15 17;       /* page  #0f0f11 (off pure black) */
+  --surface-2: 22 22 24;     /* panel #161618 */
+  --rail: 31 31 35;          /* inset #1f1f23 (segmented pill, insets) */
+  --border: 38 38 43;        /* hairline #26262b */
+  --accent: 0 180 216;       /* accent #00b4d8 — AI/cost + active control only */
   --ember: 249 115 22;       /* ember  #f97316 */
   --moss: 132 204 22;        /* moss   #84cc16 */
   --text: 232 232 232;       /* body   #e8e8e8 */
@@ -25,11 +26,8 @@
 
 body {
   margin: 0;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    rgb(var(--surface));
-  background-size: 48px 48px;
+  /* Direction B: flat calm surface, no grid background. */
+  background: rgb(var(--surface));
   color: rgb(var(--text));
   font-family: Geist, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }

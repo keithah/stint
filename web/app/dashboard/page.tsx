@@ -9,7 +9,7 @@ import { AIPanel } from "@/components/ai-panel";
 import { ActivityBars, AIHumanByDay, HourlyTimeline, ProjectStackedArea, SliceBars, SliceDonut, WeekdayHeatmap } from "@/components/dashboard-charts";
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
-import { AuthGate, EmptyState, HeaderReadout, SegmentedToggle, Skeleton } from "@/components/ui";
+import { AuthGate, EmptyState, HeroHeader, SegmentedToggle, Skeleton, pillWrapperClass } from "@/components/ui";
 import { allTimeSinceToday, listProgramLanguages, me, statsForRange, statusBarToday, type AIStat, type Stats, type StatsRange, wakatimeAPIURL } from "@/lib/api";
 import { languageColorMap } from "@/lib/language-colors";
 import { rangeOptions } from "@/lib/ranges";
@@ -82,7 +82,7 @@ function DashboardContent() {
         </section>
       )}
 
-      <section className="mt-5 rounded border border-line bg-panel p-5">
+      <section className="mt-6 rounded border border-line bg-panel p-5">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded bg-white/5 text-accent">
@@ -103,18 +103,18 @@ function DashboardContent() {
         </div>
       </section>
 
-      <div className="mt-5">
+      <div className="mt-6">
         <AIPanel metrics={data?.ai} />
       </div>
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+      <section className="mt-6 grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <AIHumanByDay days={aiTrend.data?.data.ai?.days ?? []} title="AI vs Human 30-Day Trend" />
         <WeekdayHeatmap days={data?.days ?? []} />
       </section>
 
       <ProjectAIGrid rows={data?.project_ai ?? []} />
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+      <section className="mt-6 grid gap-5 xl:grid-cols-[1.4fr_1fr]">
         <ProjectStackedArea days={data?.days ?? []} />
         <div className="grid gap-5">
           <SliceDonut title="Projects" rows={data?.projects ?? []} />
@@ -123,22 +123,22 @@ function DashboardContent() {
         </div>
       </section>
 
-      <section className="mt-5">
+      <section className="mt-6">
         <ActivityBars days={data?.days ?? []} title={`${activeRange.label} Activity`} />
       </section>
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-2">
+      <section className="mt-6 grid gap-5 xl:grid-cols-2">
         <HourlyTimeline hours={data?.hourly ?? []} mode="projects" />
         <HourlyTimeline hours={data?.hourly ?? []} mode="languages" colors={languageColors} />
       </section>
 
-      <section className="mt-5 grid gap-5 lg:grid-cols-3">
+      <section className="mt-6 grid gap-5 lg:grid-cols-3">
         <SliceDonut title="Editors" rows={data?.editors ?? []} />
         <SliceDonut title="Machines" rows={data?.machines ?? []} />
         <SliceDonut title="Operating Systems" rows={data?.operating_systems ?? []} />
       </section>
 
-      <section className="mt-5 rounded border border-line bg-panel p-5">
+      <section className="mt-6 rounded border border-line bg-panel p-5">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <h2 className="font-medium">Editor setup</h2>
@@ -261,42 +261,34 @@ function OpsStatusHeader({
   onRefresh: () => void;
 }) {
   return (
-    <header className="ops-dashboard-header mb-6 rounded border border-line bg-panel/95 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
-      <div className="grid gap-0 lg:grid-cols-[1fr_auto]">
-        <div className="border-b border-line p-5 lg:border-b-0 lg:border-r">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs uppercase tracking-[0.16em] text-accent">
-              <Activity size={14} /> Live pipeline
-            </span>
-            <span className="rounded border border-line bg-ink px-2.5 py-1 text-xs text-zinc-500">{freshnessLabel(data)}</span>
-            <span className="rounded border border-line bg-ink px-2.5 py-1 text-xs text-zinc-500">{data?.percent_calculated ?? 0}% calculated</span>
-          </div>
-          <div className="grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-zinc-50">Coding activity ops</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-                Heartbeats, duration rollups, cached stats, and AI telemetry for @{userName}.
-              </p>
+    <header className="ops-dashboard-header mb-8 border-b border-line pb-6">
+      <HeroHeader
+        caption={`Coding activity · ${activeRange.label}`}
+        value={data?.human_readable_total ?? "0 secs"}
+        freshness={freshnessLabel(data)}
+        subline={
+          <>
+            {todayText} today · averaging {data?.human_readable_daily_average ?? "0 secs"} a day · @{userName}
+          </>
+        }
+        controls={
+          <>
+            <SegmentedToggle options={rangeOptions} value={range} onChange={setRange} variant="pill" className={pillWrapperClass} />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
+                onClick={onRefresh}
+              >
+                <RefreshCw size={15} /> Refresh
+              </button>
+              <Link className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5" href="/settings">
+                Setup <ArrowRight size={15} />
+              </Link>
             </div>
-            <HeaderReadout label={activeRange.label} value={data?.human_readable_total ?? "0 secs"} />
-            <HeaderReadout label="Today" value={todayText} />
-          </div>
-        </div>
-        <div className="flex flex-col justify-between gap-4 p-5 lg:min-w-80">
-          <SegmentedToggle options={rangeOptions} value={range} onChange={setRange} className="grid grid-cols-2 gap-2" />
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
-              onClick={onRefresh}
-            >
-              <RefreshCw size={15} /> Refresh
-            </button>
-            <Link className="inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5" href="/settings">
-              Setup <ArrowRight size={15} />
-            </Link>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
     </header>
   );
 }
@@ -311,7 +303,7 @@ function freshnessLabel(stats?: Stats) {
 function ProjectAIGrid({ rows }: { rows: AIStat[] }) {
   const visibleRows = rows.slice(0, 6);
   return (
-    <section className="mt-5">
+    <section className="mt-6">
       <div className="mb-3 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
         <div>
           <h2 className="text-lg font-medium text-zinc-100">Project AI mix</h2>
