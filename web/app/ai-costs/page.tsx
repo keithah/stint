@@ -9,7 +9,7 @@ import { StatCard } from "@/components/stat-card";
 import { TokenTypeBar } from "@/components/token-type-bar";
 import { UsageBlockPanel } from "@/components/usage-block-panel";
 import { UsageBreakdown } from "@/components/usage-breakdown";
-import { AuthGate, EmptyState, SegmentedToggle, Skeleton } from "@/components/ui";
+import { AuthGate, EmptyState, HeroHeader, SegmentedToggle, Skeleton, pillWrapperClass } from "@/components/ui";
 import { me, type StatsRange } from "@/lib/api";
 import { usageBlocks, usageSummary, type UsageCostMode, type UsageCurrentBlock, type UsageSummary } from "@/lib/usage-api";
 import { activityHeatmapClass } from "@/lib/activity-heatmap";
@@ -86,13 +86,13 @@ function AICostsContent() {
       />
 
       {summary.isError ? (
-        <div className="mt-5 rounded border border-ember/40 bg-ember/10 p-5 text-sm text-ember">
+        <div className="mt-6 rounded border border-ember/40 bg-ember/10 p-5 text-sm text-ember">
           Could not load usage: {(summary.error as Error)?.message ?? "unknown error"}
         </div>
       ) : null}
 
       {summary.isLoading ? (
-        <div className="mt-5 space-y-5" aria-busy="true" aria-label="Loading usage">
+        <div className="mt-6 space-y-5" aria-busy="true" aria-label="Loading usage">
           <div className="grid gap-4 md:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
           </div>
@@ -101,7 +101,7 @@ function AICostsContent() {
       ) : null}
 
       {data && isEmptySummary(data) && !summary.isLoading ? (
-        <div className="mt-5">
+        <div className="mt-6">
           <EmptyState
             icon={<Wallet size={20} />}
             title="No AI usage yet"
@@ -149,7 +149,7 @@ function SummaryBody({
   return (
     <>
       {data.unpriced_models.length > 0 ? (
-        <div className="mt-5 flex flex-col gap-3 rounded border border-ember/40 bg-ember/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-6 flex flex-col gap-3 rounded border border-ember/40 bg-ember/10 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3 text-sm text-ember">
             <AlertTriangle size={18} className="mt-0.5 shrink-0" />
             <div>
@@ -164,7 +164,7 @@ function SummaryBody({
       ) : null}
 
       {subscription ? (
-        <section className="mt-5 rounded border border-moss/30 bg-moss/[0.06] p-5">
+        <section className="mt-6 rounded border border-moss/30 bg-moss/[0.06] p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <span className="mt-0.5 text-moss"><Wallet size={18} /></span>
@@ -186,7 +186,7 @@ function SummaryBody({
         </section>
       ) : null}
 
-      <section className="mt-5 grid gap-4 md:grid-cols-4">
+      <section className="mt-6 grid gap-4 md:grid-cols-4">
         <StatCard
           label={`${activeRange.label} cost`}
           value={formatUSD(total.cost_usd)}
@@ -197,22 +197,22 @@ function SummaryBody({
         <StatCard label="Reasoning share" value={`${(reasoning * 100).toFixed(1)}%`} detail={`${compactNumber(total.reasoning_tokens)} reasoning tokens`} />
       </section>
 
-      <section className="mt-5 grid gap-5 lg:grid-cols-3">
+      <section className="mt-6 grid gap-5 lg:grid-cols-3">
         <UsageBreakdown title="By agent" rows={data.by_agent} showBilling onSelect={toggleAgent} selected={agent} />
         <UsageBreakdown title="By model" rows={data.by_model} />
         <UsageBreakdown title="By project" rows={data.by_project} />
       </section>
 
-      <section className="mt-5 grid gap-5 lg:grid-cols-[1fr_1fr] xl:grid-cols-[1.4fr_1fr]">
+      <section className="mt-6 grid gap-5 lg:grid-cols-[1fr_1fr] xl:grid-cols-[1.4fr_1fr]">
         <TokenTypeBar total={total} />
         <UsageBlockPanel block={currentBlock} />
       </section>
 
-      <section className="mt-5">
+      <section className="mt-6">
         <CostHeatmap data={data} />
       </section>
 
-      <section className="mt-5 grid gap-5 lg:grid-cols-3">
+      <section className="mt-6 grid gap-5 lg:grid-cols-3">
         <InsightCard icon={<Database size={16} />} title="Cache efficiency">
           <Metric label="Cache hit ratio" value={`${(eff.cacheHitRatio * 100).toFixed(1)}%`} />
           <Metric label="Estimated savings" value={`~${(savings.savingsRatio * 100).toFixed(1)}% of input cost`} />
@@ -251,7 +251,7 @@ function SummaryBody({
         </InsightCard>
       </section>
 
-      <section className="mt-5 rounded border border-line bg-panel/95 p-5">
+      <section className="mt-6 rounded border border-line bg-panel/95 p-5">
         <div className="mb-4 flex items-center gap-2 text-sm font-medium text-zinc-300">
           <Sparkles size={16} /> Cost per project per day
         </div>
@@ -360,71 +360,56 @@ function LiveHeader({
   onRefresh: () => void;
 }) {
   return (
-    <header className="ops-dashboard-header mb-6 rounded border border-line bg-panel/95 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
-      <div className="grid gap-0 lg:grid-cols-[1fr_auto]">
-        <div className="border-b border-line p-5 lg:border-b-0 lg:border-r">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs uppercase tracking-[0.16em] text-accent">
-              <Coins size={14} /> AI cost ops
-            </span>
-            <span className="rounded border border-line bg-ink px-2.5 py-1 text-xs text-zinc-500">cost mode: {costMode}</span>
-            {data ? <span className="rounded border border-line bg-ink px-2.5 py-1 text-xs text-zinc-500">{data.total.event_count.toLocaleString()} events</span> : null}
-            {agent ? (
+    <header className="mb-8 border-b border-line pb-6">
+      <HeroHeader
+        caption={todayDate ? `AI spend · today · ${todayDate.slice(5)}` : "AI spend · today"}
+        value={formatUSD(todayCost)}
+        accentValue
+        freshness={isUpdating ? "Updating…" : "Live"}
+        subline={
+          <>
+            {compactNumber(todayTokens)} tokens today{agent ? <> · <span className="text-accent">{agent}</span></> : <> across all agents</>}
+            {data ? <> · {data.total.event_count.toLocaleString()} events in {activeRange.label.toLowerCase()}</> : null}
+          </>
+        }
+        controls={
+          <>
+            <div className="flex flex-col gap-2 sm:items-end">
+              <SegmentedToggle options={rangeOptions} value={range} onChange={setRange} variant="pill" className={pillWrapperClass} />
+              <SegmentedToggle
+                options={costModeOptions}
+                value={costMode}
+                onChange={setCostMode}
+                variant="pill"
+                size="xs"
+                className={pillWrapperClass}
+                optionTitle={(option) => `Cost mode: ${option.label}`}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              {agent ? (
+                <button
+                  type="button"
+                  onClick={onClearAgent}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent transition hover:bg-accent/20"
+                  title="Clear agent filter"
+                >
+                  Filtered: {agent} <X size={13} />
+                </button>
+              ) : null}
               <button
-                onClick={onClearAgent}
-                className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent transition hover:bg-accent/20"
-                title="Clear agent filter"
+                type="button"
+                className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
+                onClick={onRefresh}
               >
-                Filtered: {agent} <X size={13} />
+                <RefreshCw size={15} className={isUpdating ? "animate-spin" : ""} /> Refresh
               </button>
-            ) : null}
-          </div>
-          <div className="grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs uppercase tracking-[0.16em] text-zinc-500">{todayDate ? `Today · ${todayDate.slice(5)}` : "Today"}</span>
-                <LiveDot active={isUpdating} />
-              </div>
-              <h1 className="mt-2 text-4xl font-semibold tracking-tight text-zinc-50">{formatUSD(todayCost)}</h1>
-              <p className="mt-1.5 text-sm text-zinc-400">
-                {compactNumber(todayTokens)} tokens today{agent ? <> · <span className="text-accent">{agent}</span></> : <> across all agents</>}
-              </p>
             </div>
-            <div className="hidden md:block md:self-stretch md:border-l md:border-line" aria-hidden />
-            <div className="max-w-xs text-sm leading-6 text-zinc-500">
-              Cross-agent spend, tokens, cache efficiency, and burn rate over your selected range.
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-col justify-between gap-4 p-5 lg:min-w-80">
-          <SegmentedToggle options={rangeOptions} value={range} onChange={setRange} className="grid grid-cols-2 gap-2" />
-          <SegmentedToggle
-            options={costModeOptions}
-            value={costMode}
-            onChange={setCostMode}
-            size="xs"
-            className="grid grid-cols-3 gap-2"
-            optionTitle={(option) => `Cost mode: ${option.label}`}
-          />
-          <button
-            className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
-            onClick={onRefresh}
-          >
-            <RefreshCw size={15} className={isUpdating ? "animate-spin" : ""} /> Refresh
-          </button>
-        </div>
-      </div>
+          </>
+        }
+      />
       <div className="sr-only">{activeRange.label}</div>
     </header>
-  );
-}
-
-function LiveDot({ active }: { active: boolean }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-ink px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-zinc-500">
-      <span className={`h-1.5 w-1.5 rounded-full ${active ? "animate-pulse bg-accent" : "bg-moss"}`} />
-      {active ? "Updating" : "Live"}
-    </span>
   );
 }
 
