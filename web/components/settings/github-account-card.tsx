@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 import { logout, me } from "@/lib/api";
+import { SecondaryButton } from "@/components/ui";
 
 export function GitHubAccountCard() {
   const user = useQuery({ queryKey: ["me"], queryFn: me, retry: false });
@@ -41,13 +42,13 @@ export function GitHubAccountCard() {
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <div className="rounded border border-line bg-ink px-3 py-2 text-xs text-zinc-500">GitHub SSO</div>
-          <button
-            className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 disabled:opacity-60"
+          <SecondaryButton
+            className="disabled:opacity-60"
             onClick={() => signOut.mutate()}
             disabled={signOut.isPending}
           >
             <LogOut size={16} /> Sign out
-          </button>
+          </SecondaryButton>
         </div>
       </div>
     </section>

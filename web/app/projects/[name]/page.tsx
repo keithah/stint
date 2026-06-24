@@ -11,7 +11,7 @@ import { StatCard } from "@/components/stat-card";
 import { listProgramLanguages, listProjectCommits, projectDetail, type StatsRange } from "@/lib/api";
 import { languageColorMap } from "@/lib/language-colors";
 import { rangeOptions } from "@/lib/ranges";
-import { PageHeader, SegmentedToggle, pillWrapperClass } from "@/components/ui";
+import { PageHeader, SecondaryButton, SegmentedToggle, pillWrapperClass } from "@/components/ui";
 
 export default function ProjectDetailPage() {
   return (
@@ -91,22 +91,22 @@ function ProjectDetailContent() {
               }}
             />
             <div className="grid grid-cols-2 gap-2">
-              <button
-                className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 disabled:opacity-40"
+              <SecondaryButton
+                className="disabled:opacity-40"
                 onClick={() => setCommitPage(commits.data?.prev_page ?? 1)}
                 disabled={!commits.data?.prev_page}
                 aria-label="Previous commit page"
               >
                 <ChevronLeft size={16} /> Prev
-              </button>
-              <button
-                className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 disabled:opacity-40"
+              </SecondaryButton>
+              <SecondaryButton
+                className="disabled:opacity-40"
                 onClick={() => setCommitPage(commits.data?.next_page ?? commitPage)}
                 disabled={!commits.data?.next_page}
                 aria-label="Next commit page"
               >
                 Next <ChevronRight size={16} />
-              </button>
+              </SecondaryButton>
             </div>
           </div>
         </div>

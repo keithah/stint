@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowRight, Boxes, Clock3 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, SecondaryLink } from "@/components/ui";
 import { listProjects, statsForRange } from "@/lib/api";
 
 export default function ProjectsPage() {
@@ -48,9 +48,9 @@ function ProjectsContent() {
                 <Clock3 size={15} className="text-accent" /> {total?.text ?? "0 secs"}
               </div>
               <div className="text-sm text-zinc-400">{project.last_heartbeat_at ? formatDate(project.last_heartbeat_at) : "No heartbeat"}</div>
-              <Link className="inline-flex items-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5" href={`/projects/${encodeURIComponent(project.name)}`}>
+              <SecondaryLink href={`/projects/${encodeURIComponent(project.name)}`}>
                 Inspect <ArrowRight size={15} />
-              </Link>
+              </SecondaryLink>
             </div>
           );
         })}

@@ -1,12 +1,24 @@
 "use client";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ComponentProps, ReactNode } from "react";
 
 // Loading placeholder. aria-hidden so screen readers don't announce the
 // shimmer; the live region / final content carries the real semantics.
 export function Skeleton({ className = "" }: { className?: string }) {
   return <div aria-hidden="true" className={`animate-pulse rounded bg-white/5 ${className}`} />;
+}
+
+// The shared secondary control style (Refresh, Setup, pagination, …). One home
+// for the most-repeated button/link in the app, as a <button> or a next/link.
+const secondaryControlClass = "inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5";
+
+export function SecondaryButton({ className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return <button type="button" className={`${secondaryControlClass} ${className}`} {...props} />;
+}
+
+export function SecondaryLink({ className = "", ...props }: ComponentProps<typeof Link>) {
+  return <Link className={`${secondaryControlClass} ${className}`} {...props} />;
 }
 
 // Consistent empty state: a dashed panel with an icon, title, hint, and an
@@ -52,22 +64,20 @@ export function PageHeader({ icon, caption, title, sub, actions }:
 // (e.g. the ai-costs cost-mode control) keep byte-identical markup.
 export function SegmentedToggle<T extends string>({ options, value, onChange, className = "", size = "sm", variant = "boxed", optionTitle }:
   { options: ReadonlyArray<{ value: T; label: string }>; value: T; onChange: (v: T) => void; className?: string; size?: "sm" | "xs"; variant?: "boxed" | "pill"; optionTitle?: (option: { value: T; label: string }) => string; }) {
-  const pad = size === "xs" ? "px-3 py-2 text-xs" : "px-3 py-2 text-sm";
-  const button = (active: boolean) =>
-    variant === "pill"
-      ? `rounded-[3px] ${size === "xs" ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm"} transition ${active
-          ? "bg-accent text-ink"
-          : "text-zinc-400 hover:text-zinc-100"}`
-      : `rounded border ${pad} transition ${active
-          ? "border-accent bg-accent text-ink"
-          : "border-line bg-ink text-zinc-300 hover:border-zinc-500"}`;
+  const pill = variant === "pill";
+  const padding = pill
+    ? (size === "xs" ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm")
+    : (size === "xs" ? "px-3 py-2 text-xs" : "px-3 py-2 text-sm");
+  const base = pill ? `rounded-[3px] ${padding} transition` : `rounded border ${padding} transition`;
+  const activeClass = pill ? "bg-accent text-ink" : "border-accent bg-accent text-ink";
+  const inactiveClass = pill ? "text-zinc-400 hover:text-zinc-100" : "border-line bg-ink text-zinc-300 hover:border-zinc-500";
   return (
     <div className={className}>
       {options.map((o) => (
         <button key={o.value} type="button" aria-pressed={value === o.value}
           title={optionTitle?.(o)}
           onClick={() => onChange(o.value)}
-          className={button(value === o.value)}>
+          className={`${base} ${value === o.value ? activeClass : inactiveClass}`}>
           {o.label}
         </button>
       ))}
@@ -84,25 +94,31 @@ export const pillWrapperClass = "inline-flex gap-1 rounded border border-pill-li
 // tooltip), and right-aligned controls. Cyan is reserved for the metric/accent.
 // `freshnessActive` drives the dot's appearance: an accent pulse while data is
 // refreshing (the cue the old LiveDot gave), a steady moss dot when settled.
-export function HeroHeader({ caption, value, accentValue = false, subline, freshness, freshnessActive = false, controls }:
-  { caption: string; value: string; accentValue?: boolean; subline?: ReactNode; freshness?: string; freshnessActive?: boolean; controls?: ReactNode }) {
+// Owns its own frame (divider + spacing) like PageHeader, so callers render it
+// directly without wrapping it in a second <header>. `className` carries any
+// page marker class; `srLabel` adds an off-screen label for tests/AT.
+export function HeroHeader({ caption, value, accentValue = false, subline, freshness, freshnessActive = false, controls, className = "", srLabel }:
+  { caption: string; value: string; accentValue?: boolean; subline?: ReactNode; freshness?: string; freshnessActive?: boolean; controls?: ReactNode; className?: string; srLabel?: string }) {
   return (
-    <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
-          {caption}
-          {freshness ? (
-            <span className="inline-flex items-center" title={freshness} aria-label={freshness}>
-              <span className={`h-1.5 w-1.5 rounded-full ${freshnessActive ? "animate-pulse bg-accent" : "bg-moss"}`} />
-            </span>
-          ) : null}
+    <header className={`mb-8 border-b border-line pb-6 ${className}`}>
+      <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
+            {caption}
+            {freshness ? (
+              <span className="inline-flex items-center" title={freshness} aria-label={freshness}>
+                <span className={`h-1.5 w-1.5 rounded-full ${freshnessActive ? "animate-pulse bg-accent" : "bg-moss"}`} />
+              </span>
+            ) : null}
+          </div>
+          <div className={`mt-2 text-[44px] font-medium leading-none tracking-[-1px] ${accentValue ? "text-accent" : "text-zinc-50"}`}>
+            {value}
+          </div>
+          {subline ? <p className="mt-3 text-sm leading-6 text-zinc-400">{subline}</p> : null}
         </div>
-        <div className={`mt-2 text-[44px] font-medium leading-none tracking-[-1px] ${accentValue ? "text-accent" : "text-zinc-50"}`}>
-          {value}
-        </div>
-        {subline ? <p className="mt-3 text-sm leading-6 text-zinc-400">{subline}</p> : null}
+        {controls ? <div className="flex shrink-0 flex-col items-stretch gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-end">{controls}</div> : null}
       </div>
-      {controls ? <div className="flex shrink-0 flex-col items-stretch gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-end">{controls}</div> : null}
+      {srLabel ? <div className="sr-only">{srLabel}</div> : null}
     </header>
   );
 }

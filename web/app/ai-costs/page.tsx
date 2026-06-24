@@ -9,7 +9,7 @@ import { StatCard } from "@/components/stat-card";
 import { TokenTypeBar } from "@/components/token-type-bar";
 import { UsageBlockPanel } from "@/components/usage-block-panel";
 import { UsageBreakdown } from "@/components/usage-breakdown";
-import { AuthGate, EmptyState, HeroHeader, SegmentedToggle, Skeleton, pillWrapperClass } from "@/components/ui";
+import { AuthGate, EmptyState, HeroHeader, SecondaryButton, SegmentedToggle, Skeleton, pillWrapperClass } from "@/components/ui";
 import { me, type StatsRange } from "@/lib/api";
 import { usageBlocks, usageSummary, type UsageCostMode, type UsageCurrentBlock, type UsageSummary } from "@/lib/usage-api";
 import { activityHeatmapClass, activityHeatmapClassForLevel } from "@/lib/activity-heatmap";
@@ -66,23 +66,50 @@ function AICostsContent() {
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-6 lg:px-8">
-      <LiveHeader
-        activeRange={activeRange}
-        data={data}
-        range={range}
-        setRange={setRange}
-        costMode={costMode}
-        setCostMode={setCostMode}
-        todayCost={liveToday?.cost_usd ?? 0}
-        todayTokens={liveToday?.tokens ?? 0}
-        todayDate={liveToday?.date}
-        isUpdating={summary.isFetching}
-        agent={agent}
-        onClearAgent={() => setAgent(null)}
-        onRefresh={() => {
-          summary.refetch();
-          blocks.refetch();
-        }}
+      <HeroHeader
+        srLabel={activeRange.label}
+        caption={liveToday?.date ? `AI spend · today · ${liveToday.date.slice(5)}` : "AI spend · today"}
+        value={formatUSD(liveToday?.cost_usd ?? 0)}
+        accentValue
+        freshness={summary.isFetching ? "Updating…" : "Live"}
+        freshnessActive={summary.isFetching}
+        subline={
+          <>
+            {compactNumber(liveToday?.tokens ?? 0)} tokens today{agent ? <> · <span className="text-accent">{agent}</span></> : <> across all agents</>}
+            {data ? <> · {data.total.event_count.toLocaleString()} events in {activeRange.label.toLowerCase()}</> : null}
+          </>
+        }
+        controls={
+          <>
+            <div className="flex flex-col gap-2 sm:items-end">
+              <SegmentedToggle options={rangeOptions} value={range} onChange={setRange} variant="pill" className={pillWrapperClass} />
+              <SegmentedToggle
+                options={costModeOptions}
+                value={costMode}
+                onChange={setCostMode}
+                variant="pill"
+                size="xs"
+                className={pillWrapperClass}
+                optionTitle={(option) => `Cost mode: ${option.label}`}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              {agent ? (
+                <button
+                  type="button"
+                  onClick={() => setAgent(null)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent transition hover:bg-accent/20"
+                  title="Clear agent filter"
+                >
+                  Filtered: {agent} <X size={13} />
+                </button>
+              ) : null}
+              <SecondaryButton onClick={() => { summary.refetch(); blocks.refetch(); }}>
+                <RefreshCw size={15} className={summary.isFetching ? "animate-spin" : ""} /> Refresh
+              </SecondaryButton>
+            </div>
+          </>
+        }
       />
 
       {summary.isError ? (
@@ -327,90 +354,6 @@ function Metric({ label, value }: { label: string; value: string }) {
       <span className="text-zinc-500">{label}</span>
       <span className="truncate text-right font-medium text-zinc-200">{value}</span>
     </div>
-  );
-}
-
-function LiveHeader({
-  activeRange,
-  data,
-  range,
-  setRange,
-  costMode,
-  setCostMode,
-  todayCost,
-  todayTokens,
-  todayDate,
-  isUpdating,
-  agent,
-  onClearAgent,
-  onRefresh
-}: {
-  activeRange: { value: StatsRange; label: string };
-  data?: UsageSummary;
-  range: StatsRange;
-  setRange: (range: StatsRange) => void;
-  costMode: UsageCostMode;
-  setCostMode: (mode: UsageCostMode) => void;
-  todayCost: number;
-  todayTokens: number;
-  todayDate?: string;
-  isUpdating: boolean;
-  agent: string | null;
-  onClearAgent: () => void;
-  onRefresh: () => void;
-}) {
-  return (
-    <header className="mb-8 border-b border-line pb-6">
-      <HeroHeader
-        caption={todayDate ? `AI spend · today · ${todayDate.slice(5)}` : "AI spend · today"}
-        value={formatUSD(todayCost)}
-        accentValue
-        freshness={isUpdating ? "Updating…" : "Live"}
-        freshnessActive={isUpdating}
-        subline={
-          <>
-            {compactNumber(todayTokens)} tokens today{agent ? <> · <span className="text-accent">{agent}</span></> : <> across all agents</>}
-            {data ? <> · {data.total.event_count.toLocaleString()} events in {activeRange.label.toLowerCase()}</> : null}
-          </>
-        }
-        controls={
-          <>
-            <div className="flex flex-col gap-2 sm:items-end">
-              <SegmentedToggle options={rangeOptions} value={range} onChange={setRange} variant="pill" className={pillWrapperClass} />
-              <SegmentedToggle
-                options={costModeOptions}
-                value={costMode}
-                onChange={setCostMode}
-                variant="pill"
-                size="xs"
-                className={pillWrapperClass}
-                optionTitle={(option) => `Cost mode: ${option.label}`}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              {agent ? (
-                <button
-                  type="button"
-                  onClick={onClearAgent}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent transition hover:bg-accent/20"
-                  title="Clear agent filter"
-                >
-                  Filtered: {agent} <X size={13} />
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
-                onClick={onRefresh}
-              >
-                <RefreshCw size={15} className={isUpdating ? "animate-spin" : ""} /> Refresh
-              </button>
-            </div>
-          </>
-        }
-      />
-      <div className="sr-only">{activeRange.label}</div>
-    </header>
   );
 }
 

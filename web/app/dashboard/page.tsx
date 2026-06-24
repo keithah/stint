@@ -9,7 +9,7 @@ import { AIPanel } from "@/components/ai-panel";
 import { ActivityBars, AIHumanByDay, HourlyTimeline, ProjectStackedArea, SliceBars, SliceDonut, WeekdayHeatmap } from "@/components/dashboard-charts";
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
-import { AuthGate, EmptyState, HeroHeader, SegmentedToggle, Skeleton, pillWrapperClass } from "@/components/ui";
+import { AuthGate, EmptyState, HeroHeader, SecondaryButton, SecondaryLink, SegmentedToggle, Skeleton, pillWrapperClass } from "@/components/ui";
 import { allTimeSinceToday, listProgramLanguages, me, statsForRange, statusBarToday, type AIStat, type Stats, type StatsRange, wakatimeAPIURL } from "@/lib/api";
 import { languageColorMap } from "@/lib/language-colors";
 import { rangeOptions } from "@/lib/ranges";
@@ -55,17 +55,30 @@ function DashboardContent() {
 					onDismiss={() => setOnboardingDismissed(true)}
 				/>
 			) : null}
-			<OpsStatusHeader
-				activeRange={activeRange}
-				data={data}
-				range={range}
-				setRange={setRange}
-				todayText={status.data?.data.grand_total_text ?? "0 secs"}
-				userName={user.data?.data.github_username ?? "local"}
-				onRefresh={() => {
-					stats.refetch();
-					status.refetch();
-				}}
+			<HeroHeader
+				className="ops-dashboard-header"
+				caption={`Coding activity · ${activeRange.label}`}
+				value={data?.human_readable_total ?? "0 secs"}
+				freshness={freshnessLabel(data)}
+				freshnessActive={Boolean(data) && !data?.is_up_to_date}
+				subline={
+					<>
+						{status.data?.data.grand_total_text ?? "0 secs"} today · averaging {data?.human_readable_daily_average ?? "0 secs"} a day · @{user.data?.data.github_username ?? "local"}
+					</>
+				}
+				controls={
+					<>
+						<SegmentedToggle options={rangeOptions} value={range} onChange={setRange} variant="pill" className={pillWrapperClass} />
+						<div className="flex gap-2">
+							<SecondaryButton onClick={() => { stats.refetch(); status.refetch(); }}>
+								<RefreshCw size={15} /> Refresh
+							</SecondaryButton>
+							<SecondaryLink href="/settings">
+								Setup <ArrowRight size={15} />
+							</SecondaryLink>
+						</div>
+					</>
+				}
 			/>
 
       {stats.isLoading || status.isLoading || allTime.isLoading ? (
@@ -192,15 +205,14 @@ function OnboardingModal({ configBlock, onDismiss }: { configBlock: string; onDi
 					<div className="min-w-0">
 						<div className="mb-3 flex items-center justify-between gap-3">
 							<div className="text-sm font-medium text-zinc-200">Editor config</div>
-							<button
-								className="inline-flex items-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
+							<SecondaryButton
 								onClick={async () => {
 									await navigator.clipboard.writeText(configBlock);
 									setCopied(true);
 								}}
 							>
 								{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copied" : "Copy"}
-							</button>
+							</SecondaryButton>
 						</div>
 						<pre className="overflow-x-auto rounded border border-line bg-ink p-4 text-sm leading-6 text-zinc-200">{configBlock}</pre>
 					</div>
@@ -241,57 +253,6 @@ function noopSubscribe() {
 
 function serverWakaTimeAPIURL() {
 	return "/api/v1";
-}
-
-function OpsStatusHeader({
-  activeRange,
-  data,
-  range,
-  setRange,
-  todayText,
-  userName,
-  onRefresh
-}: {
-  activeRange: { value: StatsRange; label: string };
-  data?: Stats;
-  range: StatsRange;
-  setRange: (range: StatsRange) => void;
-  todayText: string;
-  userName: string;
-  onRefresh: () => void;
-}) {
-  return (
-    <header className="ops-dashboard-header mb-8 border-b border-line pb-6">
-      <HeroHeader
-        caption={`Coding activity · ${activeRange.label}`}
-        value={data?.human_readable_total ?? "0 secs"}
-        freshness={freshnessLabel(data)}
-        freshnessActive={Boolean(data) && !data?.is_up_to_date}
-        subline={
-          <>
-            {todayText} today · averaging {data?.human_readable_daily_average ?? "0 secs"} a day · @{userName}
-          </>
-        }
-        controls={
-          <>
-            <SegmentedToggle options={rangeOptions} value={range} onChange={setRange} variant="pill" className={pillWrapperClass} />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
-                onClick={onRefresh}
-              >
-                <RefreshCw size={15} /> Refresh
-              </button>
-              <Link className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5" href="/settings">
-                Setup <ArrowRight size={15} />
-              </Link>
-            </div>
-          </>
-        }
-      />
-    </header>
-  );
 }
 
 function freshnessLabel(stats?: Stats) {

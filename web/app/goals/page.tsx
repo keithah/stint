@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Goal as GoalIcon, PauseCircle, Pencil, Plus, Power, Save, Trash2, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, SecondaryButton } from "@/components/ui";
 import { createGoal, deleteGoal, listGoals, updateGoal, type Goal, type GoalPayload, type GoalProgress } from "@/lib/api";
 import { boundedPercent } from "@/lib/chart-percent";
 
@@ -83,9 +83,9 @@ function GoalsContent() {
         <GoalModal mode="create" title="Create goal" onClose={() => setCreateModalOpen(false)}>
           <GoalEditorFields draft={createDraft} onChange={setCreateDraft} />
           <div className="mt-6 flex justify-end gap-2">
-            <button className="inline-flex items-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5" onClick={() => setCreateModalOpen(false)}>
+            <SecondaryButton onClick={() => setCreateModalOpen(false)}>
               <X size={15} /> Cancel
-            </button>
+            </SecondaryButton>
             <button className="inline-flex items-center gap-2 rounded bg-accent px-3 py-2 text-sm font-medium text-ink disabled:opacity-60" onClick={() => create.mutate()} disabled={create.isPending || !validGoalDraft(createDraft)}>
               <Plus size={15} /> Create
             </button>
@@ -97,9 +97,9 @@ function GoalsContent() {
         <GoalModal mode="edit" title="Edit goal" onClose={() => setEditing(null)}>
           <GoalEditorFields draft={editing} onChange={setEditing} />
           <div className="mt-6 flex justify-end gap-2">
-            <button className="inline-flex items-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5" onClick={() => setEditing(null)}>
+            <SecondaryButton onClick={() => setEditing(null)}>
               <X size={15} /> Cancel
-            </button>
+            </SecondaryButton>
             <button className="inline-flex items-center gap-2 rounded bg-accent px-3 py-2 text-sm font-medium text-ink disabled:opacity-60" onClick={() => update.mutate(editing)} disabled={update.isPending || !validGoalDraft(editing)}>
               <Save size={15} /> Save
             </button>

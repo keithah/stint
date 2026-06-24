@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 const dashboardSource = readFileSync("app/dashboard/page.tsx", "utf8");
 const chartSource = readFileSync("components/dashboard-charts.tsx", "utf8");
 
-assertIncludes("dashboard renders an ops status header", dashboardSource, "<OpsStatusHeader");
+assertIncludes("dashboard renders its hero status header", dashboardSource, "<HeroHeader");
 assertIncludes("dashboard header carries a stable ops class", dashboardSource, "ops-dashboard-header");
 assertIncludes("dashboard header surfaces cache freshness", dashboardSource, "freshnessLabel(data)");
 assertIncludes("dashboard header links to settings setup", dashboardSource, 'href="/settings"');
