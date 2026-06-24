@@ -11,6 +11,7 @@ import { StatCard } from "@/components/stat-card";
 import { listProgramLanguages, listProjectCommits, projectDetail, type StatsRange } from "@/lib/api";
 import { languageColorMap } from "@/lib/language-colors";
 import { rangeOptions } from "@/lib/ranges";
+import { SegmentedToggle, pillWrapperClass } from "@/components/ui";
 
 export default function ProjectDetailPage() {
   return (
@@ -37,23 +38,13 @@ function ProjectDetailContent() {
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
       <header className="mb-8 flex flex-col justify-between gap-4 border-b border-line pb-6 lg:flex-row lg:items-end">
         <div>
-          <div className="mb-3 inline-flex items-center gap-2 rounded border border-accent/30 bg-accent/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-accent">
+          <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
             <Boxes size={14} /> Project detail
           </div>
           <h1 className="break-words text-4xl font-semibold tracking-tight">{name}</h1>
           <p className="mt-2 text-sm text-zinc-400">{activeRange.label} of project-specific activity.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {rangeOptions.map((option) => (
-            <button
-              key={option.value}
-              className={`rounded border px-3 py-2 text-sm ${range === option.value ? "border-accent bg-accent text-ink" : "border-line text-zinc-300 hover:bg-white/5"}`}
-              onClick={() => setRange(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedToggle options={rangeOptions} value={range} onChange={setRange} variant="pill" className={pillWrapperClass} />
       </header>
 
       <section className="grid gap-4 md:grid-cols-3">
@@ -62,7 +53,7 @@ function ProjectDetailContent() {
         <StatCard label="Last seen" value={data?.project.last_heartbeat_at ? formatDate(data.project.last_heartbeat_at) : "Never"} detail="Most recent heartbeat" />
       </section>
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+      <section className="mt-6 grid gap-5 xl:grid-cols-[1.4fr_1fr]">
         <ActivityBars days={data?.stats.days ?? []} title={`${activeRange.label} Activity`} />
         <div className="grid gap-5">
           <SliceDonut title="Languages" rows={data?.stats.languages ?? []} colors={languageColors} />
@@ -70,16 +61,16 @@ function ProjectDetailContent() {
         </div>
       </section>
 
-      <section className="mt-5">
+      <section className="mt-6">
         <AIPanel metrics={data?.stats.ai} />
       </section>
 
-      <section className="mt-5 grid gap-5 lg:grid-cols-2">
+      <section className="mt-6 grid gap-5 lg:grid-cols-2">
         <SliceDonut title="Branches" rows={data?.stats.branches ?? []} />
         <SliceDonut title="Dependencies" rows={data?.stats.dependencies ?? []} />
       </section>
 
-      <section className="mt-5 overflow-hidden rounded border border-line bg-panel/80">
+      <section className="mt-6 overflow-hidden rounded border border-line bg-panel/80">
         <div className="flex flex-col justify-between gap-4 border-b border-line px-5 py-4 lg:flex-row lg:items-center">
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-zinc-200">
