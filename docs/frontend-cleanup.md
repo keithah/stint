@@ -20,6 +20,59 @@ The `web` test script (`package.json`) is `tsc --noEmit` plus a long list of `su
 3. **Run `npm test` in `web/` after every page edit.** If a string-match test breaks because of a legitimate refactor, update that test to assert the new reality — but keep its intent, never delete coverage to make it pass.
 4. These are **untested and safe to extract freely**: `rangeOptions`, `costModeOptions`, `HeaderReadout`, `LiveHeader`, the `<Providers><Shell>` wrapper, and the "Login required" auth block.
 
+> If you run **Phase 0** below first, it converts the brittle string-match tests into behavioral tests and removes the specific string pins in items 2–3. After Phase 0, those pins (`ops-dashboard-header`, `ops-chart-panel`, `freshnessLabel(data)`, the `grid gap-4 md:grid-cols-5` className, exact-JSX assertions, `Operations console`) are no longer required, and the dead marker classes can actually be deleted. If you skip Phase 0, obey items 2–3 as written.
+
+---
+
+## Phase 0 — De-brittle the tests (optional but recommended; do it first)
+
+The frontend suite has ~18 tests that `readFileSync` a component and assert literal substrings — classNames, marker classes, and exact JSX. They pin styling and markup, so they actively block the cleanup and restyle in Phases 1–3 (and they pass even when the UI is broken, since they never render anything). Convert them to behavioral tests before refactoring.
+
+Find them all:
+
+```
+cd web && grep -rl "readFileSync" --include=*.test.ts app components
+```
+
+Two reference styles already exist in the repo — copy the good one:
+- **Bad (brittle):** `app/dashboard/ops-polish.test.ts`, `app/dashboard/current-day-card.test.ts`, `app/dashboard/project-stacked-chart.test.ts`, `components/ai-human-title.test.ts`, `components/shell-ops-polish.test.ts` — assert source strings.
+- **Good (behavioral):** `lib/ai-ring.test.ts`, `lib/activity-heatmap.test.ts` — `import` a pure function and assert its output.
+
+### Conversion strategy
+
+1. **Extract embedded logic into pure `lib/` modules, then test the module.** Several brittle tests are really asserting logic that's trapped inside a page component:
+   - `freshnessLabel`, `todayDetail`, `formatSeconds` (in `app/dashboard/page.tsx`) → move to `lib/dashboard-format.ts` and write `lib/dashboard-format.test.ts` that imports and asserts return values (e.g. `freshnessLabel({is_up_to_date:true})` → `"cache fresh"`; `todayDetail("api","Go")` → `"api · Go"`).
+   - `isActive(pathname, href)` (in `components/shell.tsx`) → move to `lib/nav.ts` with `navItems`, test the active-matching behavior directly. Drop the assertions that merely check the strings `desktopNavClass`/`mobileNavClass`/`usePathname` exist.
+   - Any range/cost logic → covered by `lib/ranges.ts` + `lib/ranges.test.ts` from Phase 1.
+
+2. **Delete pure-styling assertions outright.** Assertions that only check a className or marker class is present (`ops-dashboard-header`, `ops-chart-panel`, `grid gap-4 md:grid-cols-5`, `chartPanelClass`) verify nothing behavioral and exist only to freeze the layout. Remove them. This is what frees you to delete the dead marker classes and restyle in Phase 1/3.
+
+3. **Replace exact-JSX assertions with render-independent checks.** Tests like `assertIncludes(..., "<ProjectStackedArea days={data?.days ?? []} />")` should become either (a) a behavioral test of the chart's data-shaping helper, or (b) deleted if they only assert "this component is referenced." Don't assert literal JSX.
+
+4. **Keep the registration convention.** Each test file is listed in the `web/package.json` `test` script and several assert their own path is present in `package.json`. When you add/rename/remove a test, update that script string accordingly (and keep or drop the self-registration assertion consistently).
+
+### Example conversion
+
+Before — `app/dashboard/ops-polish.test.ts` (brittle):
+```ts
+const dashboardSource = readFileSync("app/dashboard/page.tsx", "utf8");
+assertIncludes("...", dashboardSource, "ops-dashboard-header");
+assertIncludes("...", dashboardSource, "freshnessLabel(data)");
+```
+
+After — `lib/dashboard-format.test.ts` (behavioral):
+```ts
+import { freshnessLabel, todayDetail } from "./dashboard-format";
+assertEqual("fresh cache", freshnessLabel({ is_up_to_date: true } as any), "cache fresh");
+assertEqual("refreshing cache", freshnessLabel({ is_up_to_date: false } as any), "cache refreshing");
+assertEqual("loading cache", freshnessLabel(undefined), "loading cache");
+assertEqual("project + language", todayDetail("api", "Go"), "api · Go");
+```
+…and the `ops-dashboard-header`/`ops-chart-panel`/className assertions are simply removed.
+
+### Gate
+`cd web && npm test` green, `npm run lint` clean, `npx tsc --noEmit` clean. Report which tests you converted, which you deleted (and why each deleted assertion was non-behavioral), and confirm coverage of real logic did not drop.
+
 ---
 
 ## Phase 1 — Structural cleanup (DRY). Visually identical. Test-safe.
