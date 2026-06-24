@@ -1,5 +1,6 @@
 import { compactNumber } from "@/lib/number-format";
 import type { UsageTotal } from "@/lib/usage-api";
+import { boundedPercent } from "@/lib/chart-percent";
 
 type Segment = {
   key: string;
@@ -40,8 +41,8 @@ export function TokenTypeBar({ total }: { total: UsageTotal }) {
               <div
                 key={segment.key}
                 className={`${segment.className} h-full first:rounded-l-full last:rounded-r-full`}
-                style={{ width: `${(segment.tokens / sum) * 100}%` }}
-                title={`${segment.label}: ${compactNumber(segment.tokens)} tokens (${((segment.tokens / sum) * 100).toFixed(1)}%)`}
+                style={{ width: `${boundedPercent((segment.tokens / sum) * 100)}%` }}
+                title={`${segment.label}: ${compactNumber(segment.tokens)} tokens (${boundedPercent((segment.tokens / sum) * 100)}%)`}
               />
             ))}
           </div>
@@ -54,7 +55,7 @@ export function TokenTypeBar({ total }: { total: UsageTotal }) {
                   <span className="truncate">{segment.label}</span>
                 </span>
                 <span className="shrink-0 tabular-nums text-zinc-500">
-                  {compactNumber(segment.tokens)} · {((segment.tokens / sum) * 100).toFixed(0)}%
+                  {compactNumber(segment.tokens)} · {boundedPercent((segment.tokens / sum) * 100)}%
                 </span>
               </div>
             ))}

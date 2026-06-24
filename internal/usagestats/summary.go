@@ -25,12 +25,16 @@ type Totals struct {
 }
 
 // Bucket is a single named aggregation row (one agent, model, or project).
+// BillingType is the authoritative effective billing mode (post-override) and is
+// only set for per-agent rows, where it is well-defined; it is "mixed" if an
+// agent's events somehow span billing types, and empty for model/project rows.
 type Bucket struct {
 	Name        string  `json:"name"`
 	CostUSD     float64 `json:"cost_usd"`
 	MarginalUSD float64 `json:"marginal_usd"`
 	Tokens      int     `json:"tokens"`
 	EventCount  int     `json:"event_count"`
+	BillingType string  `json:"billing_type,omitempty"`
 }
 
 // DayTotal is the priced total for one calendar day (in the user's timezone).
@@ -61,6 +65,7 @@ type usageBucket struct {
 	marginalUSD float64
 	tokens      int
 	eventCount  int
+	billingType string // set only for per-agent buckets ("mixed" on conflict)
 }
 
 // Group is one pre-summed set of usage events that is homogeneous in every
@@ -237,6 +242,20 @@ func SummarizeAggregates(groups []Group, engine *pricing.Engine, mode pricing.Mo
 		bump(byModel, g.Model, result.USD, result.MarginalUSD, tokens, g.EventCount)
 		bump(byProject, g.Project, result.USD, result.MarginalUSD, tokens, g.EventCount)
 
+		// Record the effective (post-override) billing mode on the agent bucket so
+		// the client badges from ground truth instead of inferring it from the
+		// cost/marginal ratio. An agent's groups share one billing type; "mixed"
+		// guards the unexpected case where they don't.
+		effBilling := g.BillingType
+		if override, ok := billingOverride[g.Agent]; ok {
+			effBilling = string(override)
+		}
+		if ab := byAgent[g.Agent]; ab.billingType == "" {
+			ab.billingType = effBilling
+		} else if ab.billingType != effBilling && effBilling != "" {
+			ab.billingType = "mixed"
+		}
+
 		d := byDay[g.Day]
 		if d == nil {
 			d = &dayBucket{}
@@ -306,6 +325,7 @@ func sortedBuckets(buckets map[string]*usageBucket) []Bucket {
 			MarginalUSD: b.marginalUSD,
 			Tokens:      b.tokens,
 			EventCount:  b.eventCount,
+			BillingType: b.billingType,
 		})
 	}
 	return result

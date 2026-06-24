@@ -127,6 +127,56 @@ false). Incremental state means each run only reads new file content:
 Either way is safe to run repeatedly: posts are deduped server-side by
 `event_id`, and the local state cursor advances only after a successful POST.
 
+## Docker Compose collector
+
+The repo ships an opt-in `collector` service (profile `collector`) that runs
+this binary in a container on a `--watch` loop against the local `api` service:
+
+```sh
+docker compose --profile collector up -d collector
+```
+
+Configure it via the `STINT_COLLECT_*` block in `.env` (copy from
+`.env.example`). `STINT_COLLECT_API_KEY` is required.
+
+**Set `STINT_COLLECT_HOME` to your absolute home path** (e.g. `/home/youruser`).
+Compose does not shell-expand `${HOME}` from a `.env` file value, so the literal
+must be set there; the `${STINT_COLLECT_HOME:-${HOME}}` default in the compose
+file only fills in when `HOME` is exported in the shell running `docker compose`.
+
+### Mount layout
+
+The container runs with `HOME=/host-home` so each adapter's `~/.<agent>` default
+path resolves. Rather than mounting the whole host home (which would expose
+`~/.ssh`, `~/.aws`, `~/.netrc`, etc.), only the per-agent data roots are bind
+mounted read-only into `/host-home`:
+
+Only the dirs the **implemented** adapters read are mounted by default:
+
+| Host path (under `$STINT_COLLECT_HOME`) | Container path | Adapters |
+|---|---|---|
+| `.claude` | `/host-home/.claude` | Claude Code |
+| `.codex` | `/host-home/.codex` | Codex |
+| `.gemini` | `/host-home/.gemini` | Gemini |
+| `.local/share` | `/host-home/.local/share` | OpenCode, Goose, Zed (SQLite; broader) |
+
+`docker-compose.yml` carries commented-out lines for the stubbed agents
+(`.cursor` `.copilot` `.qwen` `.kimi` `.kiro` `.factory` `.hermes` `.openclaw`
+`.pi` `.config/Code`). Docker errors if a bind-mount **source** directory is
+missing, so only uncomment a line once that adapter ships *and* the dir exists
+on your host.
+
+### State directory
+
+Incremental scan state is written to `/state/collector-state.json`, backed by
+the committed `./.collector-state` bind mount (override with
+`STINT_COLLECT_STATE_DIR`). This dir is committed (with a `.gitkeep`) so it
+already exists owned by the cloning user — if it were missing, Docker would
+auto-create the bind source as **root**, and the collector (running as
+`STINT_COLLECT_UID`, default 1000) could not write it, so state would never
+persist and every restart would re-scan and re-post everything. The state dir
+**must be writable by `STINT_COLLECT_UID`**.
+
 ## Supported agents
 
 Real adapters: `claude`, `codex`, `gemini`, `opencode`, `goose`, `zed`.

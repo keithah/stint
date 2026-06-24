@@ -85,7 +85,9 @@ cost = input          * inputPrice
   `marginal_usd = 0`. The classification per agent is user-overridable via the
   `billing_prefs` API (Settings → AI billing): mark an agent `subscription`
   (marginal $0) or `api` (marginal = cost) regardless of what its adapter
-  recorded.
+  recorded. The summary surfaces the effective (post-override) `billing_type` on
+  each `by_agent` bucket so the dashboard badges from this ground truth instead
+  of inferring billing from the cost/marginal ratio.
 - **Web overrides:** the `custom_pricing` table/API (Settings) backs the override
   layer above for `usage_events`. Note this is distinct from the legacy
   `ai_cost_settings` (`ai_costs` API), which holds per-agent integer-cents rates

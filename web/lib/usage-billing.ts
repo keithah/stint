@@ -6,27 +6,29 @@ import type { UsageCurrentBlock, UsageSlice, UsageTotal } from "@/lib/usage-api"
 // equivalent cost that is actually billed marginally.
 export type EffectiveBilling = "subscription" | "api" | "mixed" | "free";
 
-// Classify a row's effective billing from its equivalent (cost_usd) vs
-// out-of-pocket (marginal_usd) cost.
+// Classify a row's effective billing. When the server stamped an authoritative
+// `billing_type` on the bucket we trust it directly; otherwise we fall back to
+// inferring from the equivalent (cost_usd) vs out-of-pocket (marginal_usd) cost.
 //   - free: no equivalent cost recorded.
 //   - subscription: marginal is a small fraction of equivalent (flat-rate plan).
 //   - api: marginal ≈ equivalent (metered, paid per call).
 //   - mixed: somewhere in between (e.g. a plan with overage).
-export function effectiveBilling(
-  row: Pick<UsageSlice, "cost_usd" | "marginal_usd">,
-  subscriptionMaxRatio = 0.15,
-  apiMinRatio = 0.85
-): EffectiveBilling {
+export function effectiveBilling(row: Pick<UsageSlice, "cost_usd" | "marginal_usd" | "billing_type">): EffectiveBilling {
   const cost = Math.max(0, row.cost_usd);
-  const marginal = Math.max(0, row.marginal_usd);
   if (cost <= 0) {
     return "free";
   }
+  // Authoritative server classification wins when present.
+  if (row.billing_type) {
+    return row.billing_type;
+  }
+  // Fallback inference from the out-of-pocket share of equivalent cost.
+  const marginal = Math.max(0, row.marginal_usd);
   const ratio = marginal / cost;
-  if (ratio <= subscriptionMaxRatio) {
+  if (ratio <= 0.15) {
     return "subscription";
   }
-  if (ratio >= apiMinRatio) {
+  if (ratio >= 0.85) {
     return "api";
   }
   return "mixed";
@@ -46,7 +48,7 @@ const badgeStyles: Record<EffectiveBilling, { label: string; className: string }
   free: { label: "Free", className: "border-line bg-white/5 text-zinc-400" }
 };
 
-export function billingBadge(row: Pick<UsageSlice, "cost_usd" | "marginal_usd">): BillingBadge {
+export function billingBadge(row: Pick<UsageSlice, "cost_usd" | "marginal_usd" | "billing_type">): BillingBadge {
   const kind = effectiveBilling(row);
   return { kind, ...badgeStyles[kind] };
 }
@@ -64,27 +66,21 @@ export function subscriptionCovered(total: Pick<UsageTotal, "cost_usd" | "margin
 }
 
 export type BlockProgress = {
-  // Fraction of the 5-hour block elapsed, clamped to [0, 1].
-  fraction: number;
   // Percentage 0–100 for direct width styling.
   percent: number;
   elapsedMinutes: number;
   remainingMinutes: number;
-  totalMinutes: number;
 };
 
 // 5-hour usage blocks are 300 minutes. Compute elapsed/remaining progress from
 // the reported elapsed_minutes, clamped so a stale/over-running block never
 // produces a >100% bar or negative remainder.
-export function blockProgress(block: Pick<UsageCurrentBlock, "elapsed_minutes">, totalMinutes = 300): BlockProgress {
-  const total = Math.max(1, totalMinutes);
+export function blockProgress(block: Pick<UsageCurrentBlock, "elapsed_minutes">): BlockProgress {
+  const total = 300;
   const elapsed = Math.min(total, Math.max(0, block.elapsed_minutes));
-  const fraction = elapsed / total;
   return {
-    fraction,
-    percent: fraction * 100,
+    percent: (elapsed / total) * 100,
     elapsedMinutes: Math.round(elapsed),
-    remainingMinutes: Math.round(total - elapsed),
-    totalMinutes: total
+    remainingMinutes: Math.round(total - elapsed)
   };
 }

@@ -1,6 +1,7 @@
 import { formatUSD, compactNumber } from "@/lib/number-format";
 import type { UsageSlice } from "@/lib/usage-api";
 import { billingBadge } from "@/lib/usage-billing";
+import { minimumVisiblePercent } from "@/lib/chart-percent";
 
 // A ranked cost breakdown with a proportion bar per row. Optionally clickable to
 // drive drill-down (agents), and optionally badging each row's effective billing
@@ -54,11 +55,11 @@ export function UsageBreakdown({
                   <span className="shrink-0 tabular-nums text-zinc-400">{formatUSD(row.cost_usd)}</span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded bg-white/5">
-                  <div className="h-full rounded bg-accent/70" style={{ width: `${Math.max(2, (row.cost_usd / max) * 100)}%` }} />
+                  <div className="h-full rounded bg-accent/70" style={{ width: `${minimumVisiblePercent((row.cost_usd / max) * 100, 2)}%` }} />
                 </div>
                 <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-600">
                   <span>{compactNumber(row.tokens)} tok · {row.event_count.toLocaleString()} events</span>
-                  {showBilling && badge.kind === "subscription" && row.cost_usd > row.marginal_usd ? (
+                  {showBilling && row.cost_usd > row.marginal_usd ? (
                     <span className="text-moss/80">{formatUSD(row.marginal_usd)} out-of-pocket</span>
                   ) : null}
                 </div>

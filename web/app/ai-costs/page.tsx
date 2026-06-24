@@ -55,22 +55,15 @@ function AICostsContent() {
   const [agent, setAgent] = useState<string | null>(null);
 
   const user = useQuery({ queryKey: ["me"], queryFn: me, retry: false });
-  // Near-real-time "today" feed off the shortest range, polled frequently.
-  const live = useQuery({
-    queryKey: ["usage-summary", "last_7_days", costMode, agent, "live"],
-    queryFn: () => usageSummary("last_7_days", costMode, agent ?? undefined),
-    retry: false,
-    refetchInterval: 45000
-  });
   const summary = useQuery({
     queryKey: ["usage-summary", range, costMode, agent],
     queryFn: () => usageSummary(range, costMode, agent ?? undefined),
     retry: false,
-    refetchInterval: 120000
+    refetchInterval: 60000
   });
   const blocks = useQuery({
-    queryKey: ["usage-blocks", costMode],
-    queryFn: () => usageBlocks("last_30_days", costMode),
+    queryKey: ["usage-blocks", costMode, agent],
+    queryFn: () => usageBlocks("last_30_days", costMode, agent ?? undefined),
     retry: false,
     refetchInterval: 60000
   });
@@ -78,7 +71,9 @@ function AICostsContent() {
   const data = summary.data?.data;
   const currentBlock = blocks.data?.data.current ?? null;
   const activeRange = rangeOptions.find((item) => item.value === range) ?? rangeOptions[0];
-  const liveToday = latestDay(live.data?.data.by_day ?? []);
+  // Today's cost/tokens come from the summary's by_day series (which includes
+  // today for the rolling ranges) — no separate poller needed.
+  const liveToday = latestDay(data?.by_day ?? []);
 
   if (user.isError) {
     return (
@@ -106,12 +101,12 @@ function AICostsContent() {
         todayCost={liveToday?.cost_usd ?? 0}
         todayTokens={liveToday?.tokens ?? 0}
         todayDate={liveToday?.date}
-        isUpdating={live.isFetching || summary.isFetching}
+        isUpdating={summary.isFetching}
         agent={agent}
         onClearAgent={() => setAgent(null)}
         onRefresh={() => {
           summary.refetch();
-          live.refetch();
+          blocks.refetch();
         }}
       />
 
