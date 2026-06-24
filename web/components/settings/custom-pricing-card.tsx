@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Save, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { deleteCustomPricing, listCustomPricing, upsertCustomPricing } from "@/lib/usage-api";
-import { customPricingError } from "@/app/settings/custom-pricing-validation";
+import { customPricingError } from "@/app/(console)/settings/custom-pricing-validation";
 
 export function CustomPricingCard() {
   const client = useQueryClient();
