@@ -10,6 +10,10 @@ const config: Config = {
         ink: "rgb(var(--surface) / <alpha-value>)",
         panel: "rgb(var(--surface-2) / <alpha-value>)",
         rail: "rgb(var(--rail) / <alpha-value>)",
+        pill: {
+          DEFAULT: "rgb(var(--pill) / <alpha-value>)",
+          line: "rgb(var(--pill-line) / <alpha-value>)"
+        },
         line: "rgb(var(--border) / <alpha-value>)",
         accent: "rgb(var(--accent) / <alpha-value>)",
         ember: "rgb(var(--ember) / <alpha-value>)",

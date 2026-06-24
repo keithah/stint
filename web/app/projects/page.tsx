@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowRight, Boxes, Clock3 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { PageHeader } from "@/components/ui";
 import { listProjects, statsForRange } from "@/lib/api";
 
 export default function ProjectsPage() {
@@ -21,13 +22,12 @@ function ProjectsContent() {
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
-      <header className="mb-8 border-b border-line pb-6">
-        <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
-          <Boxes size={14} /> Project activity
-        </div>
-        <h1 className="text-4xl font-semibold tracking-tight">Projects</h1>
-        <p className="mt-2 text-sm text-zinc-400">Recently seen projects with last heartbeat timestamps and 30-day totals.</p>
-      </header>
+      <PageHeader
+        icon={<Boxes size={14} />}
+        caption="Project activity"
+        title="Projects"
+        sub="Recently seen projects with last heartbeat timestamps and 30-day totals."
+      />
 
       <section className="overflow-hidden rounded border border-line bg-panel">
         <div className="grid grid-cols-[1.4fr_1fr_1fr_auto] gap-4 border-b border-line px-4 py-3 text-xs uppercase tracking-[0.16em] text-zinc-500">

@@ -11,7 +11,9 @@
      Direction B "calmer modern": softer surfaces, hairline borders. */
   --surface: 15 15 17;       /* page  #0f0f11 (off pure black) */
   --surface-2: 22 22 24;     /* panel #161618 */
-  --rail: 31 31 35;          /* inset #1f1f23 (segmented pill, insets) */
+  --rail: 36 36 36;          /* rail  #242424 (header/sidebar chrome) */
+  --pill: 31 31 35;          /* inset #1f1f23 (segmented pill bg) */
+  --pill-line: 46 46 52;     /* pill border #2e2e34 */
   --border: 38 38 43;        /* hairline #26262b */
   --accent: 0 180 216;       /* accent #00b4d8 — AI/cost + active control only */
   --ember: 249 115 22;       /* ember  #f97316 */
@@ -45,5 +47,5 @@ a {
 }
 
 ::selection {
-  background: rgba(0, 180, 216, 0.35);
+  background: rgb(var(--accent) / 0.35);
 }

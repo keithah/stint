@@ -12,7 +12,7 @@ import { UsageBreakdown } from "@/components/usage-breakdown";
 import { AuthGate, EmptyState, HeroHeader, SegmentedToggle, Skeleton, pillWrapperClass } from "@/components/ui";
 import { me, type StatsRange } from "@/lib/api";
 import { usageBlocks, usageSummary, type UsageCostMode, type UsageCurrentBlock, type UsageSummary } from "@/lib/usage-api";
-import { activityHeatmapClass } from "@/lib/activity-heatmap";
+import { activityHeatmapClass, activityHeatmapClassForLevel } from "@/lib/activity-heatmap";
 import { compactNumber, formatUSD } from "@/lib/number-format";
 import { rangeOptions, costModeOptions } from "@/lib/ranges";
 import { hasSubscriptionSavings, subscriptionCovered } from "@/lib/usage-billing";
@@ -282,7 +282,7 @@ function CostHeatmap({ data }: { data: UsageSummary }) {
         <div className="flex items-center gap-2 text-xs text-zinc-500">
           <span>Less</span>
           {[0, 1, 2, 3, 4].map((level) => (
-            <span key={level} className={`h-3 w-3 rounded-sm border ${activityHeatmapClass({ total_seconds: level }, 4)}`} />
+            <span key={level} className={`h-3 w-3 rounded-sm border ${activityHeatmapClassForLevel(level)}`} />
           ))}
           <span>More</span>
         </div>
@@ -366,6 +366,7 @@ function LiveHeader({
         value={formatUSD(todayCost)}
         accentValue
         freshness={isUpdating ? "Updating…" : "Live"}
+        freshnessActive={isUpdating}
         subline={
           <>
             {compactNumber(todayTokens)} tokens today{agent ? <> · <span className="text-accent">{agent}</span></> : <> across all agents</>}

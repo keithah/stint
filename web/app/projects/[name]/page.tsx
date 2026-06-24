@@ -11,7 +11,7 @@ import { StatCard } from "@/components/stat-card";
 import { listProgramLanguages, listProjectCommits, projectDetail, type StatsRange } from "@/lib/api";
 import { languageColorMap } from "@/lib/language-colors";
 import { rangeOptions } from "@/lib/ranges";
-import { SegmentedToggle, pillWrapperClass } from "@/components/ui";
+import { PageHeader, SegmentedToggle, pillWrapperClass } from "@/components/ui";
 
 export default function ProjectDetailPage() {
   return (
@@ -36,16 +36,13 @@ function ProjectDetailContent() {
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
-      <header className="mb-8 flex flex-col justify-between gap-4 border-b border-line pb-6 lg:flex-row lg:items-end">
-        <div>
-          <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
-            <Boxes size={14} /> Project detail
-          </div>
-          <h1 className="break-words text-4xl font-semibold tracking-tight">{name}</h1>
-          <p className="mt-2 text-sm text-zinc-400">{activeRange.label} of project-specific activity.</p>
-        </div>
-        <SegmentedToggle options={rangeOptions} value={range} onChange={setRange} variant="pill" className={pillWrapperClass} />
-      </header>
+      <PageHeader
+        icon={<Boxes size={14} />}
+        caption="Project detail"
+        title={name}
+        sub={`${activeRange.label} of project-specific activity.`}
+        actions={<SegmentedToggle options={rangeOptions} value={range} onChange={setRange} variant="pill" className={pillWrapperClass} />}
+      />
 
       <section className="grid gap-4 md:grid-cols-3">
         <StatCard label={`${activeRange.label} total`} value={data?.stats.human_readable_total ?? "0 secs"} detail="Project-filtered" />

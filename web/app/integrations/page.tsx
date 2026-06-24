@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Bot, Cable, Check, CheckCircle2, Clipboard, Code2, KeyRound, PlugZap, Plus, Radar, ShieldCheck, TerminalSquare } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { PageHeader } from "@/components/ui";
 import { createKey, listEditors, listKeys, listUserAgents, serverMeta, wakatimeAPIURL, type UserAgent } from "@/lib/api";
 
 export default function IntegrationsPage() {
@@ -47,18 +48,13 @@ function IntegrationsContent() {
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-6 lg:px-8">
-      <header className="mb-8 border-b border-line pb-6">
-        <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
-          <PlugZap size={14} /> Stint integrations
-        </div>
-        <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div>
-            <h1 className="text-4xl font-semibold tracking-tight text-white">Integrations</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">
-              Connect your editor and agents to Stint, then enrich activity with model, provider, token, and cost-aware AI telemetry.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
+      <PageHeader
+        icon={<PlugZap size={14} />}
+        caption="Stint integrations"
+        title="Integrations"
+        sub="Connect your editor and agents to Stint, then enrich activity with model, provider, token, and cost-aware AI telemetry."
+        actions={
+          <>
             <button
               className="inline-flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-ink hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
@@ -70,20 +66,20 @@ function IntegrationsContent() {
             <Link className="inline-flex w-fit items-center gap-2 rounded-md border border-line bg-panel px-4 py-2 text-sm text-zinc-100 hover:border-accent/50 hover:bg-white/5" href="/settings">
               <KeyRound size={16} /> Manage keys <ArrowRight size={15} />
             </Link>
+          </>
+        }
+      />
+      {latestKey ? (
+        <div className="mb-8 -mt-2 rounded border border-accent/35 bg-accent/10 p-4">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-accent">
+            <CheckCircle2 size={16} /> New key created
+          </div>
+          <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+            <code className="overflow-x-auto rounded border border-line bg-ink px-3 py-2 text-xs text-zinc-200">{latestKey}</code>
+            <CopyButton id="latest-key" label="Copy key" copied={copied === "latest-key"} onCopy={() => copyText("latest-key", latestKey)} />
           </div>
         </div>
-        {latestKey ? (
-          <div className="mt-6 rounded border border-accent/35 bg-accent/10 p-4">
-            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-accent">
-              <CheckCircle2 size={16} /> New key created
-            </div>
-            <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
-              <code className="overflow-x-auto rounded border border-line bg-ink px-3 py-2 text-xs text-zinc-200">{latestKey}</code>
-              <CopyButton id="latest-key" label="Copy key" copied={copied === "latest-key"} onCopy={() => copyText("latest-key", latestKey)} />
-            </div>
-          </div>
-        ) : null}
-      </header>
+      ) : null}
 
       <section className="mb-6 grid gap-4 lg:grid-cols-3">
         <StatusTile icon={Cable} label="Endpoint" value={apiURL} />

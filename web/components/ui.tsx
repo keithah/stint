@@ -23,22 +23,25 @@ export function EmptyState({ icon, title, hint, action }:
   );
 }
 
-export function Container({ children, size = "7xl", className = "" }:
-  { children: ReactNode; size?: "6xl" | "7xl"; className?: string }) {
-  const max = size === "6xl" ? "max-w-6xl" : "max-w-7xl";
-  return <div className={`mx-auto ${max} px-5 py-6 lg:px-8 ${className}`}>{children}</div>;
-}
-
-export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded border border-line bg-panel/95 p-5 shadow-[0_1px_0_rgba(255,255,255,0.04)] ${className}`}>{children}</div>;
-}
-
-export function HeaderReadout({ label, value }: { label: string; value: string }) {
+// Standard page header for the non-hero console pages: a muted caption (icon +
+// label, no cyan — accent discipline), the title, an optional subline, and an
+// optional right-aligned actions slot (range control, "Add" button, etc.).
+export function PageHeader({ icon, caption, title, sub, actions }:
+  { icon?: ReactNode; caption?: string; title: ReactNode; sub?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="min-w-36 rounded border border-line bg-ink px-3 py-2">
-      <div className="text-xs uppercase tracking-[0.14em] text-zinc-500">{label}</div>
-      <div className="mt-1 truncate text-lg font-semibold text-zinc-100">{value}</div>
-    </div>
+    <header className="mb-8 flex flex-col justify-between gap-4 border-b border-line pb-6 lg:flex-row lg:items-end">
+      <div className="min-w-0">
+        {caption ? (
+          <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
+            {icon}
+            <span>{caption}</span>
+          </div>
+        ) : null}
+        <h1 className="break-words text-4xl font-semibold tracking-tight">{title}</h1>
+        {sub ? <p className="mt-2 text-sm text-zinc-400">{sub}</p> : null}
+      </div>
+      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+    </header>
   );
 }
 
@@ -72,14 +75,17 @@ export function SegmentedToggle<T extends string>({ options, value, onChange, cl
   );
 }
 
-// Direction-B inset pill wrapper for SegmentedToggle variant="pill".
-export const pillWrapperClass = "inline-flex gap-1 rounded border border-[#2e2e34] bg-rail p-[3px]";
+// Direction-B inset pill wrapper for SegmentedToggle variant="pill". Surfaces
+// route through the pill tokens so the theme stays changeable in one place.
+export const pillWrapperClass = "inline-flex gap-1 rounded border border-pill-line bg-pill p-[3px]";
 
 // Direction-B hero header: a muted caption, the page's primary metric rendered
 // large, an optional plain-English subline, an optional freshness dot (color +
 // tooltip), and right-aligned controls. Cyan is reserved for the metric/accent.
-export function HeroHeader({ caption, value, accentValue = false, subline, freshness, controls }:
-  { caption: string; value: string; accentValue?: boolean; subline?: ReactNode; freshness?: string; controls?: ReactNode }) {
+// `freshnessActive` drives the dot's appearance: an accent pulse while data is
+// refreshing (the cue the old LiveDot gave), a steady moss dot when settled.
+export function HeroHeader({ caption, value, accentValue = false, subline, freshness, freshnessActive = false, controls }:
+  { caption: string; value: string; accentValue?: boolean; subline?: ReactNode; freshness?: string; freshnessActive?: boolean; controls?: ReactNode }) {
   return (
     <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
       <div className="min-w-0">
@@ -87,7 +93,7 @@ export function HeroHeader({ caption, value, accentValue = false, subline, fresh
           {caption}
           {freshness ? (
             <span className="inline-flex items-center" title={freshness} aria-label={freshness}>
-              <span className="h-1.5 w-1.5 rounded-full bg-moss" />
+              <span className={`h-1.5 w-1.5 rounded-full ${freshnessActive ? "animate-pulse bg-accent" : "bg-moss"}`} />
             </span>
           ) : null}
         </div>

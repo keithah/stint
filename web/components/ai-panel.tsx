@@ -138,7 +138,7 @@ function AgentsDonut({ agents }: { agents: AIMetrics["agents"] }) {
             <PieChart>
               <Pie data={rows} dataKey="value" nameKey="name" innerRadius={42} outerRadius={62} paddingAngle={3}>
                 {rows.map((row, index) => (
-                  <Cell key={row.name} fill={hasData ? fallbackPalette[index % fallbackPalette.length] : "#303030"} />
+                  <Cell key={row.name} fill={hasData ? fallbackPalette[index % fallbackPalette.length] : "#26262b"} />
                 ))}
               </Pie>
               <Tooltip contentStyle={{ background: "#0f1722", border: "1px solid #223040", borderRadius: 6 }} />
@@ -149,7 +149,7 @@ function AgentsDonut({ agents }: { agents: AIMetrics["agents"] }) {
           {rows.slice(0, 5).map((row, index) => (
             <div key={row.name} className="flex items-center justify-between gap-3 text-sm">
               <span className="flex min-w-0 items-center gap-2 text-zinc-300">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: hasData ? fallbackPalette[index % fallbackPalette.length] : "#303030" }} />
+                <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: hasData ? fallbackPalette[index % fallbackPalette.length] : "#26262b" }} />
                 <span className="truncate">{row.name}</span>
               </span>
               <span className="shrink-0 text-zinc-500">{row.label}</span>

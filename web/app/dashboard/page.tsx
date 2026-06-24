@@ -68,7 +68,7 @@ function DashboardContent() {
 				}}
 			/>
 
-      {stats.isLoading ? (
+      {stats.isLoading || status.isLoading || allTime.isLoading ? (
         <section className="grid gap-4 md:grid-cols-5" aria-busy="true" aria-label="Loading activity totals">
           {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[88px]" />)}
         </section>
@@ -266,6 +266,7 @@ function OpsStatusHeader({
         caption={`Coding activity · ${activeRange.label}`}
         value={data?.human_readable_total ?? "0 secs"}
         freshness={freshnessLabel(data)}
+        freshnessActive={Boolean(data) && !data?.is_up_to_date}
         subline={
           <>
             {todayText} today · averaging {data?.human_readable_daily_average ?? "0 secs"} a day · @{userName}

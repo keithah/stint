@@ -5,6 +5,7 @@ import { LogIn, Plus, Trash2, Trophy, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
+import { PageHeader } from "@/components/ui";
 import { addLeaderboardMember, createLeaderboard, deleteLeaderboard, leaderboardEntries, listLeaderboards, me, publicLeaders, removeLeaderboardMember, updateLeaderboard, type LeaderboardEntry, type LeaderboardMember, type StatsRange } from "@/lib/api";
 import { currentLeaderboardEntry, isCurrentLeaderboardUser } from "@/lib/leaderboard-current-user";
 import { leaderboardRangeIsValid, normalizeLeaderboardRangeInput } from "@/lib/leaderboard-ranges";
@@ -87,13 +88,12 @@ function LeaderboardsContent() {
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
-      <header className="mb-8 border-b border-line pb-6">
-        <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
-          <Trophy size={14} /> Rankings
-        </div>
-        <h1 className="text-4xl font-semibold tracking-tight">Leaderboards</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">Public rankings are open to everyone. Sign in to create private boards for teams, friends, and local competitions.</p>
-      </header>
+      <PageHeader
+        icon={<Trophy size={14} />}
+        caption="Rankings"
+        title="Leaderboards"
+        sub="Public rankings are open to everyone. Sign in to create private boards for teams, friends, and local competitions."
+      />
 
       {isLoggedIn ? (
         <section className="mb-5 rounded-md border border-line bg-panel p-5">

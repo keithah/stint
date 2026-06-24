@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, CalendarDays, Download, FileDown, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { PageHeader } from "@/components/ui";
 import { createDataDump, createExternalDuration, dataDumpDownloadURL, deleteExternalDurationsBulk, deleteHeartbeats, durationsForDay, heartbeatsForDay, listDataDumps, listExternalDurations, summaries, type DurationSlice } from "@/lib/api";
 import { dataDumpExpiryText, dataDumpIsDownloadable, hasPendingDumps } from "@/lib/data-dumps";
 
@@ -97,13 +98,12 @@ function ReportsContent() {
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
-      <header className="mb-8 border-b border-line pb-6">
-        <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
-          <FileDown size={14} /> Exports and external time
-        </div>
-        <h1 className="text-4xl font-semibold tracking-tight">Reports</h1>
-        <p className="mt-2 text-sm text-zinc-400">Generate data dumps and track manually supplied external durations.</p>
-      </header>
+      <PageHeader
+        icon={<FileDown size={14} />}
+        caption="Exports and external time"
+        title="Reports"
+        sub="Generate data dumps and track manually supplied external durations."
+      />
 
       <section className="mb-5 rounded border border-line bg-panel p-5">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">

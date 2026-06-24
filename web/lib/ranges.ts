@@ -14,7 +14,3 @@ export const costModeOptions: ReadonlyArray<{ value: UsageCostMode; label: strin
   { value: "calculate", label: "Calculate" },
   { value: "display", label: "Display" }
 ];
-
-export function rangeLabel(range: StatsRange): string {
-  return rangeOptions.find((o) => o.value === range)?.label ?? rangeOptions[0].label;
-}

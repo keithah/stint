@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Goal as GoalIcon, PauseCircle, Pencil, Plus, Power, Save, Trash2, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
+import { PageHeader } from "@/components/ui";
 import { createGoal, deleteGoal, listGoals, updateGoal, type Goal, type GoalPayload, type GoalProgress } from "@/lib/api";
 import { boundedPercent } from "@/lib/chart-percent";
 
@@ -66,18 +67,17 @@ function GoalsContent() {
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
-      <header className="mb-8 flex flex-col justify-between gap-4 border-b border-line pb-6 sm:flex-row sm:items-end">
-        <div>
-          <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
-            <GoalIcon size={14} /> Personal targets
-          </div>
-          <h1 className="text-4xl font-semibold tracking-tight">Goals</h1>
-          <p className="mt-2 text-sm text-zinc-400">Track daily or weekly coding targets against real heartbeat durations.</p>
-        </div>
-        <button className="inline-flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-sm font-medium text-ink" onClick={() => setCreateModalOpen(true)}>
-          <Plus size={16} /> Create goal
-        </button>
-      </header>
+      <PageHeader
+        icon={<GoalIcon size={14} />}
+        caption="Personal targets"
+        title="Goals"
+        sub="Track daily or weekly coding targets against real heartbeat durations."
+        actions={
+          <button className="inline-flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-sm font-medium text-ink" onClick={() => setCreateModalOpen(true)}>
+            <Plus size={16} /> Create goal
+          </button>
+        }
+      />
 
       {createModalOpen ? (
         <GoalModal mode="create" title="Create goal" onClose={() => setCreateModalOpen(false)}>
