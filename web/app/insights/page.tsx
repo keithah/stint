@@ -78,7 +78,7 @@ function InsightsContent() {
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
       <header className="mb-8 flex flex-col justify-between gap-4 border-b border-line pb-6 lg:flex-row lg:items-end">
         <div>
-          <div className="mb-3 inline-flex items-center gap-2 rounded border border-accent/30 bg-accent/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-accent">
+          <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
             <BarChart3 size={14} /> Breakdown explorer
           </div>
           <h1 className="text-4xl font-semibold tracking-tight">Insights</h1>
@@ -130,7 +130,7 @@ function InsightsContent() {
         </div>
       </section>
 
-      <section className="mt-5 rounded border border-line bg-panel p-5">
+      <section className="mt-6 rounded border border-line bg-panel p-5">
         <ActivityHeatmap days={stats.data?.data.days ?? []} />
         <div className="mb-4 mt-6 flex items-center gap-2 text-sm font-medium text-zinc-300">
           <CalendarDays size={16} /> Daily buckets
