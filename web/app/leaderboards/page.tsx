@@ -88,7 +88,7 @@ function LeaderboardsContent() {
   return (
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
       <header className="mb-8 border-b border-line pb-6">
-        <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-accent/30 bg-accent/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-accent">
+        <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
           <Trophy size={14} /> Rankings
         </div>
         <h1 className="text-4xl font-semibold tracking-tight">Leaderboards</h1>
@@ -207,7 +207,7 @@ function LeaderboardsContent() {
             </div>
             <h2 className="font-medium">Private boards require a session</h2>
             <p className="mt-2 text-sm leading-6 text-zinc-400">Public leaders stay visible without login. Connect GitHub to create private leaderboards and add members.</p>
-            <Link className="mt-5 inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-ink" href="/login">
+            <Link className="mt-6 inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-ink" href="/login">
               Login <LogIn size={15} />
             </Link>
           </div>
