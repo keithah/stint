@@ -4,6 +4,19 @@
 
 :root {
   color-scheme: dark;
+
+  /* Core palette as space-separated RGB channels so Tailwind's /opacity
+     modifiers keep working: tailwind.config maps each color to
+     rgb(var(--token) / <alpha-value>). Change the theme here, once. */
+  --surface: 13 13 13;       /* ink    #0d0d0d */
+  --surface-2: 23 23 23;     /* panel  #171717 */
+  --rail: 36 36 36;          /* rail   #242424 */
+  --border: 48 48 48;        /* line   #303030 */
+  --accent: 0 180 216;       /* accent #00b4d8 */
+  --ember: 249 115 22;       /* ember  #f97316 */
+  --moss: 132 204 22;        /* moss   #84cc16 */
+  --text: 232 232 232;       /* body   #e8e8e8 */
+  --text-muted: 161 161 170; /* zinc-400 #a1a1aa */
 }
 
 * {
@@ -15,15 +28,22 @@ body {
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(180deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    #0d0d0d;
+    rgb(var(--surface));
   background-size: 48px 48px;
-  color: #e8e8e8;
+  color: rgb(var(--text));
   font-family: Geist, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Keyboard focus ring (a11y). Pointer interactions don't trigger :focus-visible,
+   so this only shows for keyboard/AT users. */
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
 }
 
 ::selection {

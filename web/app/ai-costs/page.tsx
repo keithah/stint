@@ -9,7 +9,7 @@ import { StatCard } from "@/components/stat-card";
 import { TokenTypeBar } from "@/components/token-type-bar";
 import { UsageBlockPanel } from "@/components/usage-block-panel";
 import { UsageBreakdown } from "@/components/usage-breakdown";
-import { AuthGate, SegmentedToggle } from "@/components/ui";
+import { AuthGate, EmptyState, SegmentedToggle, Skeleton } from "@/components/ui";
 import { me, type StatsRange } from "@/lib/api";
 import { usageBlocks, usageSummary, type UsageCostMode, type UsageCurrentBlock, type UsageSummary } from "@/lib/usage-api";
 import { activityHeatmapClass } from "@/lib/activity-heatmap";
@@ -92,21 +92,25 @@ function AICostsContent() {
       ) : null}
 
       {summary.isLoading ? (
-        <div className="mt-5 rounded border border-dashed border-line bg-panel/70 p-8 text-center text-sm text-zinc-500">
-          Loading usage…
+        <div className="mt-5 space-y-5" aria-busy="true" aria-label="Loading usage">
+          <div className="grid gap-4 md:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
+          </div>
+          <Skeleton className="h-44" />
         </div>
       ) : null}
 
       {data && isEmptySummary(data) && !summary.isLoading ? (
-        <div className="mt-5 rounded border border-dashed border-line bg-panel/70 p-8 text-center">
-          <div className="text-base font-medium text-zinc-200">No AI usage yet</div>
-          <p className="mt-2 text-sm text-zinc-500">
-            {agent ? (
+        <div className="mt-5">
+          <EmptyState
+            icon={<Wallet size={20} />}
+            title="No AI usage yet"
+            hint={agent ? (
               <>No usage recorded for <span className="text-zinc-300">{agent}</span> in this range.</>
             ) : (
               <>Run <code className="rounded bg-ink px-1.5 py-0.5 text-zinc-300">stint-collect</code> to start recording agent usage events.</>
             )}
-          </p>
+          />
         </div>
       ) : null}
 
@@ -275,18 +279,28 @@ function CostHeatmap({ data }: { data: UsageSummary }) {
     <div className="ops-chart-panel rounded border border-line bg-panel/95 p-4 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="text-sm font-medium text-zinc-300">Cross-agent day heatmap</div>
-        <div className="text-xs text-zinc-500">Color by cost</div>
+        <div className="flex items-center gap-2 text-xs text-zinc-500">
+          <span>Less</span>
+          {[0, 1, 2, 3, 4].map((level) => (
+            <span key={level} className={`h-3 w-3 rounded-sm border ${activityHeatmapClass({ total_seconds: level }, 4)}`} />
+          ))}
+          <span>More</span>
+        </div>
       </div>
       {days.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
-          {days.map((day) => (
-            <div
-              key={day.date}
-              // Reuse the activity-heatmap colour ramp, scaled to cost in cents.
-              className={`h-5 w-5 rounded-sm border ${activityHeatmapClass({ total_seconds: Math.round(day.cost_usd * 100) }, Math.round(maxCost * 100))}`}
-              title={`${day.date}: ${formatUSD(day.cost_usd)} · ${compactNumber(day.tokens)} tokens`}
-            />
-          ))}
+          {days.map((day) => {
+            const cellTitle = `${day.date}: ${formatUSD(day.cost_usd)} · ${compactNumber(day.tokens)} tokens`;
+            return (
+              <div
+                key={day.date}
+                // Reuse the activity-heatmap colour ramp, scaled to cost in cents.
+                className={`h-5 w-5 rounded-sm border ${activityHeatmapClass({ total_seconds: Math.round(day.cost_usd * 100) }, Math.round(maxCost * 100))}`}
+                title={cellTitle}
+                aria-label={cellTitle}
+              />
+            );
+          })}
         </div>
       ) : (
         <p className="text-sm text-zinc-500">No daily usage in this range.</p>

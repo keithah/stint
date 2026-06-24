@@ -3,6 +3,26 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import type { ReactNode } from "react";
 
+// Loading placeholder. aria-hidden so screen readers don't announce the
+// shimmer; the live region / final content carries the real semantics.
+export function Skeleton({ className = "" }: { className?: string }) {
+  return <div aria-hidden="true" className={`animate-pulse rounded bg-white/5 ${className}`} />;
+}
+
+// Consistent empty state: a dashed panel with an icon, title, hint, and an
+// optional call-to-action. Replaces the one-off dashed divs scattered per page.
+export function EmptyState({ icon, title, hint, action }:
+  { icon?: ReactNode; title: string; hint?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded border border-dashed border-line bg-panel/70 px-6 py-10 text-center">
+      {icon ? <div className="flex h-10 w-10 items-center justify-center rounded bg-white/5 text-zinc-400">{icon}</div> : null}
+      <div className="text-sm font-medium text-zinc-200">{title}</div>
+      {hint ? <p className="max-w-sm text-sm leading-6 text-zinc-500">{hint}</p> : null}
+      {action ? <div className="mt-1">{action}</div> : null}
+    </div>
+  );
+}
+
 export function Container({ children, size = "7xl", className = "" }:
   { children: ReactNode; size?: "6xl" | "7xl"; className?: string }) {
   const max = size === "6xl" ? "max-w-6xl" : "max-w-7xl";

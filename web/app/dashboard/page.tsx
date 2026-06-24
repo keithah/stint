@@ -9,7 +9,7 @@ import { AIPanel } from "@/components/ai-panel";
 import { ActivityBars, AIHumanByDay, HourlyTimeline, ProjectStackedArea, SliceBars, SliceDonut, WeekdayHeatmap } from "@/components/dashboard-charts";
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
-import { AuthGate, HeaderReadout, SegmentedToggle } from "@/components/ui";
+import { AuthGate, EmptyState, HeaderReadout, SegmentedToggle, Skeleton } from "@/components/ui";
 import { allTimeSinceToday, listProgramLanguages, me, statsForRange, statusBarToday, type AIStat, type Stats, type StatsRange, wakatimeAPIURL } from "@/lib/api";
 import { languageColorMap } from "@/lib/language-colors";
 import { rangeOptions } from "@/lib/ranges";
@@ -68,13 +68,19 @@ function DashboardContent() {
 				}}
 			/>
 
-      <section className="grid gap-4 md:grid-cols-5">
-        <StatCard label={activeRange.label} value={data?.human_readable_total ?? "0 secs"} detail={user.data?.data.github_username ?? "Waiting for session"} />
-        <StatCard label="Today" value={status.data?.data.grand_total_text ?? "0 secs"} detail={todayDetail(status.data?.data.project, status.data?.data.language)} />
-        <StatCard label="Daily average" value={data?.human_readable_daily_average ?? "0 secs"} detail={`${data?.days?.length ?? 0} calendar days`} />
-        <StatCard label="Best day" value={data?.best_day?.text ?? "0 secs"} detail={data?.best_day?.date ?? "No activity yet"} />
-        <StatCard label="All time" value={allTime.data?.data.text ?? "0 secs"} detail="Since first heartbeat" />
-      </section>
+      {stats.isLoading ? (
+        <section className="grid gap-4 md:grid-cols-5" aria-busy="true" aria-label="Loading activity totals">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[88px]" />)}
+        </section>
+      ) : (
+        <section className="grid gap-4 md:grid-cols-5">
+          <StatCard label={activeRange.label} value={data?.human_readable_total ?? "0 secs"} detail={user.data?.data.github_username ?? "Waiting for session"} />
+          <StatCard label="Today" value={status.data?.data.grand_total_text ?? "0 secs"} detail={todayDetail(status.data?.data.project, status.data?.data.language)} />
+          <StatCard label="Daily average" value={data?.human_readable_daily_average ?? "0 secs"} detail={`${data?.days?.length ?? 0} calendar days`} />
+          <StatCard label="Best day" value={data?.best_day?.text ?? "0 secs"} detail={data?.best_day?.date ?? "No activity yet"} />
+          <StatCard label="All time" value={allTime.data?.data.text ?? "0 secs"} detail="Since first heartbeat" />
+        </section>
+      )}
 
       <section className="mt-5 rounded border border-line bg-panel p-5">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -344,7 +350,7 @@ function ProjectAIGrid({ rows }: { rows: AIStat[] }) {
           ))}
         </div>
       ) : (
-        <div className="rounded border border-dashed border-line bg-panel/70 p-5 text-sm text-zinc-500">Send heartbeats with project data to populate the project grid.</div>
+        <EmptyState icon={<Bot size={20} />} title="No project activity yet" hint="Send heartbeats with project data to populate the project grid." />
       )}
     </section>
   );
