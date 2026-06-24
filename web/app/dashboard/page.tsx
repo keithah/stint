@@ -7,21 +7,20 @@ import type { ReactNode } from "react";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { AIPanel } from "@/components/ai-panel";
 import { ActivityBars, AIHumanByDay, HourlyTimeline, ProjectStackedArea, SliceBars, SliceDonut, WeekdayHeatmap } from "@/components/dashboard-charts";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
+import { AuthGate, HeaderReadout, SegmentedToggle } from "@/components/ui";
 import { allTimeSinceToday, listProgramLanguages, me, statsForRange, statusBarToday, type AIStat, type Stats, type StatsRange, wakatimeAPIURL } from "@/lib/api";
 import { languageColorMap } from "@/lib/language-colors";
+import { rangeOptions } from "@/lib/ranges";
 import { compactNumber, formatCents } from "@/lib/number-format";
 import { ONBOARDING_STORAGE_KEY, shouldShowOnboarding } from "@/lib/onboarding-state";
 
 export default function DashboardPage() {
   return (
-    <Providers>
-      <Shell>
-        <DashboardContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <DashboardContent />
+    </AppShell>
   );
 }
 
@@ -45,17 +44,7 @@ function DashboardContent() {
 	const showOnboarding = Boolean(user.data?.data) && stats.isSuccess && shouldShowOnboarding(data?.total_seconds, onboardingDismissed);
 
 	if (user.isError) {
-    return (
-      <div className="grid min-h-screen place-items-center px-6">
-        <div className="max-w-md rounded border border-line bg-panel p-6">
-          <h1 className="text-xl font-semibold">Login required</h1>
-          <p className="mt-2 text-sm text-zinc-400">Create a session before viewing activity.</p>
-          <Link className="mt-5 inline-flex items-center gap-2 rounded bg-accent px-4 py-2 font-medium text-ink" href="/login">
-            Login <ArrowRight size={16} />
-          </Link>
-        </div>
-      </div>
-    );
+    return <AuthGate message="Create a session before viewing activity." />;
   }
 
 	return (
@@ -248,14 +237,6 @@ function serverWakaTimeAPIURL() {
 	return "/api/v1";
 }
 
-const rangeOptions: Array<{ value: StatsRange; label: string }> = [
-  { value: "last_7_days", label: "7 days" },
-  { value: "last_30_days", label: "30 days" },
-  { value: "last_6_months", label: "6 months" },
-  { value: "last_year", label: "Year" },
-  { value: "all_time", label: "All time" }
-];
-
 function OpsStatusHeader({
   activeRange,
   data,
@@ -296,17 +277,7 @@ function OpsStatusHeader({
           </div>
         </div>
         <div className="flex flex-col justify-between gap-4 p-5 lg:min-w-80">
-          <div className="grid grid-cols-2 gap-2">
-            {rangeOptions.map((option) => (
-              <button
-                key={option.value}
-                className={`rounded border px-3 py-2 text-sm transition ${range === option.value ? "border-accent bg-accent text-ink" : "border-line bg-ink text-zinc-300 hover:border-zinc-500"}`}
-                onClick={() => setRange(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedToggle options={rangeOptions} value={range} onChange={setRange} className="grid grid-cols-2 gap-2" />
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
               className="inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
@@ -321,15 +292,6 @@ function OpsStatusHeader({
         </div>
       </div>
     </header>
-  );
-}
-
-function HeaderReadout({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-36 rounded border border-line bg-ink px-3 py-2">
-      <div className="text-xs uppercase tracking-[0.14em] text-zinc-500">{label}</div>
-      <div className="mt-1 truncate text-lg font-semibold text-zinc-100">{value}</div>
-    </div>
   );
 }
 

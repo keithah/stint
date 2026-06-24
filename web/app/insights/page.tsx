@@ -3,8 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, CalendarDays } from "lucide-react";
 import { useState } from "react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
 import { activityHeatmapClass, activityHeatmapTitle } from "@/lib/activity-heatmap";
 import {
   insight,
@@ -54,11 +53,9 @@ type DailyAverageInsightValue = {
 
 export default function InsightsPage() {
   return (
-    <Providers>
-      <Shell>
-        <InsightsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <InsightsContent />
+    </AppShell>
   );
 }
 

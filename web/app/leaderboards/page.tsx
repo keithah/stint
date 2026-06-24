@@ -4,8 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LogIn, Plus, Trash2, Trophy, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
 import { addLeaderboardMember, createLeaderboard, deleteLeaderboard, leaderboardEntries, listLeaderboards, me, publicLeaders, removeLeaderboardMember, updateLeaderboard, type LeaderboardEntry, type LeaderboardMember, type StatsRange } from "@/lib/api";
 import { currentLeaderboardEntry, isCurrentLeaderboardUser } from "@/lib/leaderboard-current-user";
 import { leaderboardRangeIsValid, normalizeLeaderboardRangeInput } from "@/lib/leaderboard-ranges";
@@ -15,11 +14,9 @@ const publicCountryOptions = ["", "US", "CA", "GB", "DE", "FR", "IN", "BR", "AU"
 
 export default function LeaderboardsPage() {
   return (
-    <Providers>
-      <Shell>
-        <LeaderboardsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <LeaderboardsContent />
+    </AppShell>
   );
 }
 

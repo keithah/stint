@@ -3,8 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, CalendarDays, Download, FileDown, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
 import { createDataDump, createExternalDuration, dataDumpDownloadURL, deleteExternalDurationsBulk, deleteHeartbeats, durationsForDay, heartbeatsForDay, listDataDumps, listExternalDurations, summaries, type DurationSlice } from "@/lib/api";
 import { dataDumpExpiryText, dataDumpIsDownloadable, hasPendingDumps } from "@/lib/data-dumps";
 
@@ -23,11 +22,9 @@ const durationSlices: Array<{ value: DurationSlice; label: string }> = [
 
 export default function ReportsPage() {
   return (
-    <Providers>
-      <Shell>
-        <ReportsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <ReportsContent />
+    </AppShell>
   );
 }
 

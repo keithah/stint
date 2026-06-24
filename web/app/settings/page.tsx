@@ -1,8 +1,7 @@
 "use client";
 
 import { KeyRound } from "lucide-react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
 import { AICostsCard } from "@/components/settings/ai-costs-card";
 import { AccountCard } from "@/components/settings/account-card";
 import { ApiKeysCard } from "@/components/settings/api-keys-card";
@@ -21,11 +20,9 @@ import { WakaTimeImportCard } from "@/components/settings/wakatime-import-card";
 
 export default function SettingsPage() {
   return (
-    <Providers>
-      <Shell>
-        <SettingsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <SettingsContent />
+    </AppShell>
   );
 }
 

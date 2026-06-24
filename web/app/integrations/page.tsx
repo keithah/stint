@@ -4,17 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowRight, Bot, Cable, Check, CheckCircle2, Clipboard, Code2, KeyRound, PlugZap, Plus, Radar, ShieldCheck, TerminalSquare } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
 import { createKey, listEditors, listKeys, listUserAgents, serverMeta, wakatimeAPIURL, type UserAgent } from "@/lib/api";
 
 export default function IntegrationsPage() {
   return (
-    <Providers>
-      <Shell>
-        <IntegrationsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <IntegrationsContent />
+    </AppShell>
   );
 }
 

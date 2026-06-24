@@ -3,8 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Goal as GoalIcon, PauseCircle, Pencil, Plus, Power, Save, Trash2, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
 import { createGoal, deleteGoal, listGoals, updateGoal, type Goal, type GoalPayload, type GoalProgress } from "@/lib/api";
 import { boundedPercent } from "@/lib/chart-percent";
 
@@ -29,11 +28,9 @@ type GoalDraft = {
 
 export default function GoalsPage() {
   return (
-    <Providers>
-      <Shell>
-        <GoalsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <GoalsContent />
+    </AppShell>
   );
 }
 

@@ -4,16 +4,17 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Coins, Database, Flame, RefreshCw, Sparkles, Wallet, X, Zap } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
 import { TokenTypeBar } from "@/components/token-type-bar";
 import { UsageBlockPanel } from "@/components/usage-block-panel";
 import { UsageBreakdown } from "@/components/usage-breakdown";
+import { AuthGate, SegmentedToggle } from "@/components/ui";
 import { me, type StatsRange } from "@/lib/api";
 import { usageBlocks, usageSummary, type UsageCostMode, type UsageCurrentBlock, type UsageSummary } from "@/lib/usage-api";
 import { activityHeatmapClass } from "@/lib/activity-heatmap";
 import { compactNumber, formatUSD } from "@/lib/number-format";
+import { rangeOptions, costModeOptions } from "@/lib/ranges";
 import { hasSubscriptionSavings, subscriptionCovered } from "@/lib/usage-billing";
 import {
   cacheEfficiency,
@@ -25,27 +26,11 @@ import {
   todayVsAverage
 } from "@/lib/usage-insights";
 
-const rangeOptions: Array<{ value: StatsRange; label: string }> = [
-  { value: "last_7_days", label: "7 days" },
-  { value: "last_30_days", label: "30 days" },
-  { value: "last_6_months", label: "6 months" },
-  { value: "last_year", label: "Year" },
-  { value: "all_time", label: "All time" }
-];
-
-const costModeOptions: Array<{ value: UsageCostMode; label: string }> = [
-  { value: "auto", label: "Auto" },
-  { value: "calculate", label: "Calculate" },
-  { value: "display", label: "Display" }
-];
-
 export default function AICostsPage() {
   return (
-    <Providers>
-      <Shell>
-        <AICostsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <AICostsContent />
+    </AppShell>
   );
 }
 
@@ -76,17 +61,7 @@ function AICostsContent() {
   const liveToday = latestDay(data?.by_day ?? []);
 
   if (user.isError) {
-    return (
-      <div className="grid min-h-screen place-items-center px-6">
-        <div className="max-w-md rounded border border-line bg-panel p-6">
-          <h1 className="text-xl font-semibold">Login required</h1>
-          <p className="mt-2 text-sm text-zinc-400">Create a session before viewing AI costs.</p>
-          <Link className="mt-5 inline-flex items-center gap-2 rounded bg-accent px-4 py-2 font-medium text-ink" href="/login">
-            Login <ArrowRight size={16} />
-          </Link>
-        </div>
-      </div>
-    );
+    return <AuthGate message="Create a session before viewing AI costs." />;
   }
 
   return (
@@ -408,29 +383,15 @@ function LiveHeader({
           </div>
         </div>
         <div className="flex flex-col justify-between gap-4 p-5 lg:min-w-80">
-          <div className="grid grid-cols-2 gap-2">
-            {rangeOptions.map((option) => (
-              <button
-                key={option.value}
-                className={`rounded border px-3 py-2 text-sm transition ${range === option.value ? "border-accent bg-accent text-ink" : "border-line bg-ink text-zinc-300 hover:border-zinc-500"}`}
-                onClick={() => setRange(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {costModeOptions.map((option) => (
-              <button
-                key={option.value}
-                className={`rounded border px-3 py-2 text-xs transition ${costMode === option.value ? "border-accent bg-accent text-ink" : "border-line bg-ink text-zinc-300 hover:border-zinc-500"}`}
-                onClick={() => setCostMode(option.value)}
-                title={`Cost mode: ${option.label}`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedToggle options={rangeOptions} value={range} onChange={setRange} className="grid grid-cols-2 gap-2" />
+          <SegmentedToggle
+            options={costModeOptions}
+            value={costMode}
+            onChange={setCostMode}
+            size="xs"
+            className="grid grid-cols-3 gap-2"
+            optionTitle={(option) => `Cost mode: ${option.label}`}
+          />
           <button
             className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
             onClick={onRefresh}

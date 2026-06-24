@@ -3,17 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowRight, Boxes, Clock3 } from "lucide-react";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
 import { listProjects, statsForRange } from "@/lib/api";
 
 export default function ProjectsPage() {
   return (
-    <Providers>
-      <Shell>
-        <ProjectsContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <ProjectsContent />
+    </AppShell>
   );
 }
 

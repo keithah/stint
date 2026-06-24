@@ -6,19 +6,17 @@ import { Boxes, ChevronLeft, ChevronRight, ExternalLink, GitCommitHorizontal } f
 import { useMemo, useState } from "react";
 import { AIPanel } from "@/components/ai-panel";
 import { ActivityBars, SliceDonut } from "@/components/dashboard-charts";
-import { Providers } from "@/components/providers";
-import { Shell } from "@/components/shell";
+import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
 import { listProgramLanguages, listProjectCommits, projectDetail, type StatsRange } from "@/lib/api";
 import { languageColorMap } from "@/lib/language-colors";
+import { rangeOptions } from "@/lib/ranges";
 
 export default function ProjectDetailPage() {
   return (
-    <Providers>
-      <Shell>
-        <ProjectDetailContent />
-      </Shell>
-    </Providers>
+    <AppShell>
+      <ProjectDetailContent />
+    </AppShell>
   );
 }
 
@@ -159,10 +157,3 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
-const rangeOptions: Array<{ value: StatsRange; label: string }> = [
-  { value: "last_7_days", label: "7 days" },
-  { value: "last_30_days", label: "30 days" },
-  { value: "last_6_months", label: "6 months" },
-  { value: "last_year", label: "Year" },
-  { value: "all_time", label: "All time" }
-];
