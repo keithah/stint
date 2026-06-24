@@ -31,6 +31,7 @@ import (
 	"github.com/keithah/stint/internal/importer"
 	"github.com/keithah/stint/internal/jobs"
 	"github.com/keithah/stint/internal/pricing"
+	"github.com/keithah/stint/internal/pricingrefresh"
 	"github.com/keithah/stint/internal/services"
 	"github.com/keithah/stint/internal/usagestats"
 	"github.com/labstack/echo/v4"
@@ -121,6 +122,11 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 		pricingEngine = nil
 	}
 	server := &Server{Config: cfg, Store: store, OAuth: oauthConfig, Limiter: limiter, FallbackLimiter: apimw.NewMemoryRateLimiter(), StatusCache: statusCache, LeaderboardCache: leaderboardCache, Jobs: jobClient, Pricing: pricingEngine}
+	// Keep the API's pricing engine in sync with the weekly refresh so the AI
+	// cost meter reflects the latest upstream prices without a redeploy.
+	if pricingEngine != nil && store != nil {
+		go pricingrefresh.Refresher{Store: store, Engine: pricingEngine}.Run(context.Background(), 30*time.Minute)
+	}
 
 	e.GET("/healthz", server.health)
 	e.GET("/healthz/ingestion", server.ingestionHealth)
@@ -168,6 +174,8 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 	current.GET("/custom_pricing", server.listCustomPricing, requireScope(scopeReadStats), readLimit)
 	current.PUT("/custom_pricing", server.upsertCustomPricing, requireLocalAccountAccess)
 	current.DELETE("/custom_pricing/:model", server.deleteCustomPricing, requireLocalAccountAccess)
+	current.GET("/pricing/sources", server.listPricingSources, requireScope(scopeReadStats), readLimit)
+	current.GET("/pricing/models", server.listPricingModels, requireScope(scopeReadStats), readLimit)
 	current.GET("/billing_prefs", server.listBillingPrefs, requireScope(scopeReadStats), readLimit)
 	current.PUT("/billing_prefs", server.upsertBillingPref, requireLocalAccountAccess)
 	current.DELETE("/billing_prefs/:agent", server.deleteBillingPref, requireLocalAccountAccess)
@@ -495,6 +503,8 @@ func openAPIPaths() map[string]any {
 		put("Upsert a custom AI pricing override", "ai", true),
 	)
 	add("/api/v1/users/current/custom_pricing/{model}", del("Delete a custom AI pricing override", "ai", http.StatusOK, true))
+	add("/api/v1/users/current/pricing/sources", get("List AI price sources and freshness", "ai", true))
+	add("/api/v1/users/current/pricing/models", get("List resolved per-model AI prices", "ai", true))
 	add("/api/v1/users/current/billing_prefs",
 		get("List per-agent billing-mode overrides", "ai", true),
 		put("Upsert a per-agent billing-mode override", "ai", true),

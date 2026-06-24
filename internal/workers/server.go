@@ -9,6 +9,7 @@ import (
 	"github.com/keithah/stint/internal/config"
 	"github.com/keithah/stint/internal/db"
 	"github.com/keithah/stint/internal/jobs"
+	"github.com/keithah/stint/internal/pricingrefresh"
 )
 
 const goalsEvaluateScheduleSpec = "@hourly"
@@ -22,6 +23,11 @@ func Run(ctx context.Context, cfg config.Config, store *db.Store) error {
 	mux := asynq.NewServeMux()
 	stats := StatsWorker{Store: store}
 	mux.HandleFunc(jobs.TypeStatsRecompute, stats.HandleStatsRecomputeTask)
+	// Keep the worker's shared pricing engine in sync with the weekly refresh so
+	// cost baked into the stats cache uses up-to-date prices.
+	if eng := stats.pricingEngine(); eng != nil {
+		go pricingrefresh.Refresher{Store: store, Engine: eng}.Run(ctx, 30*time.Minute)
+	}
 	dumps := DumpWorker{Store: store, Config: cfg}
 	mux.HandleFunc(jobs.TypeDataDumpProcess, dumps.HandleDataDumpProcessTask)
 	customRules := CustomRulesWorker{Store: store}
@@ -38,6 +44,8 @@ func Run(ctx context.Context, cfg config.Config, store *db.Store) error {
 	mux.HandleFunc(jobs.TypeLeaderboardUpdate, leaderboard.HandleLeaderboardUpdateTask)
 	goals := GoalsWorker{Store: store}
 	mux.HandleFunc(jobs.TypeGoalsEvaluate, goals.HandleGoalsEvaluateTask)
+	pricingRefresh := PricingWorker{Store: store}
+	mux.HandleFunc(jobs.TypePricingRefresh, pricingRefresh.HandlePricingRefreshTask)
 
 	scheduler := asynq.NewScheduler(opt, &asynq.SchedulerOpts{Location: time.UTC})
 	hasScheduledTasks := false
@@ -62,6 +70,14 @@ func Run(ctx context.Context, cfg config.Config, store *db.Store) error {
 		return err
 	}
 	if _, err := scheduler.Register("@weekly", heartbeatsTask, asynq.Queue("default"), asynq.MaxRetry(3)); err != nil {
+		return err
+	}
+	hasScheduledTasks = true
+	pricingTask, err := jobs.NewPricingRefreshTask()
+	if err != nil {
+		return err
+	}
+	if _, err := scheduler.Register("@weekly", pricingTask, asynq.Queue("default"), asynq.MaxRetry(3)); err != nil {
 		return err
 	}
 	hasScheduledTasks = true

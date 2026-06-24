@@ -6,14 +6,27 @@
 package pricing
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/keithah/stint/internal/usage"
+)
+
+// Upstream price sources, refreshed by the weekly pricing job. LiteLLM is the
+// primary cache-accurate table; OpenRouter is the broad fallback. Both are
+// public (no key required).
+const (
+	LiteLLMURL    = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
+	OpenRouterURL = "https://openrouter.ai/api/v1/models"
 )
 
 //go:embed data/litellm_prices.json
@@ -66,15 +79,22 @@ type Result struct {
 	Source string
 }
 
+// engineData is the immutable lookup state swapped atomically on reload, so a
+// weekly price refresh can replace the tables under live readers without locks.
+type engineData struct {
+	table    map[string]ModelPrice
+	fallback map[string]ModelPrice
+	aliases  map[string]string
+}
+
 // Engine prices events against a model table with optional overrides. Lookups
 // resolve in priority order: user overrides → LiteLLM table (cache-accurate,
 // ccusage parity) → OpenRouter fallback (broad coverage of proxy/free/new
-// models) → unpriced.
+// models) → unpriced. The base table lives behind an atomic pointer shared by
+// all WithOverrides clones, so Reload propagates to every in-flight engine.
 type Engine struct {
-	table     map[string]ModelPrice
-	fallback  map[string]ModelPrice
+	data      *atomic.Pointer[engineData]
 	overrides map[string]ModelPrice
-	aliases   map[string]string
 }
 
 // NewFromBundled builds an engine from the embedded offline snapshots: LiteLLM
@@ -88,33 +108,63 @@ func NewFromBundled() (*Engine, error) {
 	if err != nil {
 		fallback = map[string]ModelPrice{} // fallback is best-effort; never fatal
 	}
-	return &Engine{table: table, fallback: fallback, overrides: map[string]ModelPrice{}, aliases: defaultAliases()}, nil
+	data := &atomic.Pointer[engineData]{}
+	data.Store(&engineData{table: table, fallback: fallback, aliases: defaultAliases()})
+	return &Engine{data: data, overrides: map[string]ModelPrice{}}, nil
 }
 
-// SetFallbackFromOpenRouter replaces the OpenRouter fallback table from a fresh
-// `GET /api/v1/models` response body (for a scheduled refresh). A parse failure
-// leaves the current fallback intact.
-func (e *Engine) SetFallbackFromOpenRouter(data []byte) error {
-	fallback, err := parseOpenRouter(data)
-	if err != nil {
-		return err
+// Reload atomically swaps the price tables from fresh upstream snapshots. A nil
+// slice leaves that layer unchanged; an OpenRouter parse failure is non-fatal
+// (keeps the current fallback). Safe to call concurrently with pricing.
+func (e *Engine) Reload(litellm, openrouter []byte) error {
+	cur := e.data.Load()
+	table := cur.table
+	if litellm != nil {
+		t, err := parseLiteLLM(litellm)
+		if err != nil {
+			return err
+		}
+		table = t
 	}
-	e.fallback = fallback
+	fallback := cur.fallback
+	if openrouter != nil {
+		if f, err := parseOpenRouter(openrouter); err == nil {
+			fallback = f
+		}
+	}
+	e.data.Store(&engineData{table: table, fallback: fallback, aliases: cur.aliases})
 	return nil
 }
 
-// New builds an engine from a caller-provided LiteLLM JSON snapshot (e.g. a
-// freshly refreshed download), falling back to nothing if it fails to parse.
-func New(snapshot []byte) (*Engine, error) {
-	table, err := parseLiteLLM(snapshot)
-	if err != nil {
-		return nil, err
-	}
-	return &Engine{table: table, overrides: map[string]ModelPrice{}, aliases: defaultAliases()}, nil
+// ModelPriceEntry is one row of the resolved price table, tagged with its
+// source layer, for the settings model-rate viewer.
+type ModelPriceEntry struct {
+	Model  string
+	Source string // "litellm" | "openrouter"
+	Price  ModelPrice
 }
 
-// SetOverrides installs user custom pricing for private/proxied/unknown models.
-// Override keys are matched after normalization and win over the base table.
+// Entries returns every known model price (LiteLLM table first, then OpenRouter
+// fallback entries the table does not already cover) for display. Order is
+// unspecified; callers sort/filter.
+func (e *Engine) Entries() []ModelPriceEntry {
+	d := e.data.Load()
+	out := make([]ModelPriceEntry, 0, len(d.table)+len(d.fallback))
+	for model, price := range d.table {
+		out = append(out, ModelPriceEntry{Model: model, Source: "litellm", Price: price})
+	}
+	for model, price := range d.fallback {
+		if _, ok := d.table[model]; ok {
+			continue
+		}
+		out = append(out, ModelPriceEntry{Model: model, Source: "openrouter", Price: price})
+	}
+	return out
+}
+
+// SetOverrides installs user custom pricing on this engine for private/proxied/
+// unknown models. Override keys are matched after normalization and win over the
+// base table. Mutates only this engine's overrides, not the shared base table.
 func (e *Engine) SetOverrides(overrides map[string]ModelPrice) {
 	e.overrides = map[string]ModelPrice{}
 	for model, price := range overrides {
@@ -122,15 +172,64 @@ func (e *Engine) SetOverrides(overrides map[string]ModelPrice) {
 	}
 }
 
-// WithOverrides returns a shallow copy of the engine that shares the base price
-// table and aliases but carries its own overrides map. Use this for per-request
-// custom pricing so the shared engine is never mutated across requests.
+// WithOverrides returns a shallow copy of the engine that shares the atomic base
+// table but carries its own overrides map. Use this for per-request custom
+// pricing so the shared engine is never mutated across requests; the clone still
+// observes Reload because it shares the same atomic pointer.
 func (e *Engine) WithOverrides(overrides map[string]ModelPrice) *Engine {
-	clone := &Engine{table: e.table, fallback: e.fallback, aliases: e.aliases, overrides: map[string]ModelPrice{}}
+	clone := &Engine{data: e.data, overrides: map[string]ModelPrice{}}
 	for model, price := range overrides {
 		clone.overrides[Normalize(model)] = price
 	}
 	return clone
+}
+
+// FetchLiteLLM downloads the current LiteLLM price table. Caller validates by
+// parsing before persisting.
+func FetchLiteLLM(ctx context.Context, client *http.Client) ([]byte, error) {
+	return fetch(ctx, client, LiteLLMURL)
+}
+
+// FetchOpenRouter downloads the current OpenRouter model catalog.
+func FetchOpenRouter(ctx context.Context, client *http.Client) ([]byte, error) {
+	return fetch(ctx, client, OpenRouterURL)
+}
+
+func fetch(ctx context.Context, client *http.Client, url string) ([]byte, error) {
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch %s: status %d", url, resp.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+}
+
+// CountLiteLLM and CountOpenRouter validate a snapshot by parsing it and return
+// the number of priced models (0, err on invalid JSON).
+func CountLiteLLM(data []byte) (int, error) {
+	t, err := parseLiteLLM(data)
+	if err != nil {
+		return 0, err
+	}
+	return len(t), nil
+}
+
+func CountOpenRouter(data []byte) (int, error) {
+	f, err := parseOpenRouter(data)
+	if err != nil {
+		return 0, err
+	}
+	return len(f), nil
 }
 
 var dateSuffix = regexp.MustCompile(`-20\d{6}$`)
@@ -165,6 +264,7 @@ func Normalize(model string) string {
 // lookup resolves a raw model string to a price, trying (in order) overrides,
 // exact table hit, normalized hit, alias, and date-stripped normalized hit.
 func (e *Engine) lookup(model string) (ModelPrice, bool) {
+	d := e.data.Load()
 	norm := Normalize(model)
 	if price, ok := e.overrides[norm]; ok {
 		return price, true
@@ -173,30 +273,30 @@ func (e *Engine) lookup(model string) (ModelPrice, bool) {
 	// ships region-prefixed keys (e.g. "us.anthropic.claude-...") with their own
 	// region-specific pricing. Probing raw first preserves that price before
 	// Normalize strips the prefix and collapses it to the base model. Do not remove.
-	if price, ok := e.table[strings.ToLower(strings.TrimSpace(model))]; ok {
+	if price, ok := d.table[strings.ToLower(strings.TrimSpace(model))]; ok {
 		return price, true
 	}
-	if price, ok := e.table[norm]; ok {
+	if price, ok := d.table[norm]; ok {
 		return price, true
 	}
-	if canonical, ok := e.aliases[norm]; ok {
-		if price, ok := e.table[canonical]; ok {
+	if canonical, ok := d.aliases[norm]; ok {
+		if price, ok := d.table[canonical]; ok {
 			return price, true
 		}
 	}
 	if stripped := dateSuffix.ReplaceAllString(norm, ""); stripped != norm {
-		if price, ok := e.table[stripped]; ok {
+		if price, ok := d.table[stripped]; ok {
 			return price, true
 		}
-		if canonical, ok := e.aliases[stripped]; ok {
-			if price, ok := e.table[canonical]; ok {
+		if canonical, ok := d.aliases[stripped]; ok {
+			if price, ok := d.table[canonical]; ok {
 				return price, true
 			}
 		}
 	}
 	// OpenRouter fallback: broad coverage (proxy/free/new models) that LiteLLM
 	// may lack. Consulted only after LiteLLM so cache-accurate prices win.
-	if price, ok := e.fallback[norm]; ok {
+	if price, ok := d.fallback[norm]; ok {
 		return price, true
 	}
 	return ModelPrice{}, false

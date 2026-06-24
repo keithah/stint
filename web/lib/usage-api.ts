@@ -146,6 +146,39 @@ export async function deleteCustomPricing(model: string) {
   return request<void>(`/api/v1/users/current/custom_pricing/${encodeURIComponent(model)}`, { method: "DELETE" });
 }
 
+// PricingSource describes one upstream price table (LiteLLM, OpenRouter) with a
+// link to its site and when it was last refreshed by the weekly job.
+export type PricingSource = {
+  source: string;
+  label: string;
+  url: string;
+  site_url: string;
+  model_count: number;
+  status: "ok" | "error" | "bundled";
+  error?: string;
+  fetched_at?: string;
+};
+
+// PricingModel is one model's resolved rate (per-million USD) and whether the
+// user has overridden it.
+export type PricingModel = {
+  model: string;
+  source: string;
+  provider?: string;
+  input_per_million_usd: number;
+  output_per_million_usd: number;
+  cache_read_per_million_usd: number;
+  overridden: boolean;
+};
+
+export async function listPricingSources() {
+  return request<{ data: PricingSource[] }>("/api/v1/users/current/pricing/sources");
+}
+
+export async function listPricingModels() {
+  return request<{ data: PricingModel[] }>("/api/v1/users/current/pricing/models");
+}
+
 // BillingPref is a per-agent billing-mode override: declare an agent as flat-rate
 // subscription (marginal cost $0) or metered api (marginal = equivalent-API cost),
 // overriding the billing_type the collecting adapter stamped on stored events.

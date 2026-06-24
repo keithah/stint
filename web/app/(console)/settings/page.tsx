@@ -14,6 +14,7 @@ import { DiagnosticsCard } from "@/components/settings/diagnostics-card";
 import { EditorsCard } from "@/components/settings/editors-card";
 import { GitHubAccountCard } from "@/components/settings/github-account-card";
 import { OAuthAppsCard } from "@/components/settings/oauth-apps-card";
+import { PricingSourcesCard } from "@/components/settings/pricing-sources-card";
 import { ProfileCard } from "@/components/settings/profile-card";
 import { ShareTokensCard } from "@/components/settings/share-tokens-card";
 import { WakaTimeImportCard } from "@/components/settings/wakatime-import-card";
@@ -45,6 +46,7 @@ function SettingsContent() {
       <ShareTokensCard />
       <WakaTimeImportCard />
       <AICostsCard />
+      <PricingSourcesCard />
       <CustomPricingCard />
       <BillingPrefsCard />
       <CustomRulesCard />

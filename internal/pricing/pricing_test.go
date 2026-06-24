@@ -62,6 +62,29 @@ func TestUncachedMirrorsProvidedCost(t *testing.T) {
 	}
 }
 
+// Reload swaps the base table atomically and propagates to WithOverrides clones
+// (they share the same atomic pointer). Entries reflects the reloaded table.
+func TestReloadPropagatesToClones(t *testing.T) {
+	e := engine(t)
+	clone := e.WithOverrides(nil)
+	snapshot := []byte(`{"made-up-model-xyz":{"input_cost_per_token":1e-6,"output_cost_per_token":2e-6,"litellm_provider":"test"}}`)
+	if err := e.Reload(snapshot, []byte(`{"data":[]}`)); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	// The clone, sharing the atomic table, now sees the reloaded model.
+	if !clone.Has("made-up-model-xyz") {
+		t.Fatal("clone should observe reloaded table")
+	}
+	// And the old bundled model is gone (table was replaced, not merged).
+	if clone.Has("claude-sonnet-4-5") {
+		t.Fatal("reload should replace the table, not merge")
+	}
+	entries := e.Entries()
+	if len(entries) != 1 || entries[0].Model != "made-up-model-xyz" || entries[0].Source != "litellm" {
+		t.Fatalf("unexpected entries: %+v", entries)
+	}
+}
+
 func TestNormalizeAndRegionalDatedLookup(t *testing.T) {
 	e := engine(t)
 	if Normalize("us.anthropic.claude-sonnet-4-5-20250929") != "claude-sonnet-4-5-20250929" {
