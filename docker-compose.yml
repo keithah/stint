@@ -118,6 +118,33 @@ services:
     depends_on:
       - api
 
+  # Continuous local AI-usage ingestion. Opt-in:
+  #   docker compose --profile collector up -d collector
+  # Reads the dev's agent data from a read-only mount of the host home
+  # (HOME=/host-home, so adapters' ~/.<agent> default paths resolve), normalizes
+  # it, and posts to the api service on a --watch loop. Configure via STINT_COLLECT_*
+  # in .env (api key, host path, uid/gid, interval).
+  collector:
+    image: stint-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - collector
+    entrypoint: ["/stint-collect"]
+    command: ["--watch", "--interval", "${STINT_COLLECT_INTERVAL:-5m}"]
+    user: "${STINT_COLLECT_UID:-1000}:${STINT_COLLECT_GID:-1000}"
+    environment:
+      HOME: /host-home
+      STINT_API_URL: ${STINT_COLLECT_API_URL:-http://api:8080/api/v1}
+      STINT_API_KEY: ${STINT_COLLECT_API_KEY:-}
+      STINT_STATE_PATH: /state/collector-state.json
+    volumes:
+      - ${STINT_COLLECT_HOME:-${HOME}}:/host-home:ro
+      - ${STINT_COLLECT_STATE_DIR:-./.collector-state}:/state
+    depends_on:
+      - api
+
   caddy:
     image: caddy:2-alpine
     profiles:

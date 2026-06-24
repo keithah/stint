@@ -104,8 +104,11 @@ export type UsageEvent = {
   timestamp: string;
 };
 
-export async function usageSummary(range: StatsRange, costMode: UsageCostMode = "auto") {
+export async function usageSummary(range: StatsRange, costMode: UsageCostMode = "auto", agent?: string) {
   const query = new URLSearchParams({ range, cost_mode: costMode });
+  if (agent) {
+    query.set("agent", agent);
+  }
   return request<{ data: UsageSummary }>(`/api/v1/users/current/usage_events/summary?${query.toString()}`);
 }
 

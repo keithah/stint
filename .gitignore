@@ -16,3 +16,5 @@ tmp/
 # AI usage collector binary
 /stint-collect
 /collect
+
+/.collector-state/

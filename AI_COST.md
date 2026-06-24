@@ -43,7 +43,15 @@ Three decoupled layers — adding an agent never touches pricing or UI:
 **eventId / dedup:** `messageId+requestId` when both exist, else `messageId`/
 `requestId` alone, else a hash of `(agent, sessionId, timestamp, model, token
 shape)`. Dedup happens both in the collector and at ingest (`ON CONFLICT (user_id,
-event_id) DO NOTHING`), so re-scanning or re-posting never double-counts.
+event_id) DO UPDATE` upsert), so re-scanning or re-posting is idempotent.
+
+> **Operational note:** for agents that lack provider ids (e.g. Codex), the
+> eventId is content-derived, so it is *version-sensitive*: if an adapter's
+> token mapping changes, previously-stored rows become orphans and a re-ingest
+> inserts fresh ones under new ids — doubling that agent's data. After changing
+> eventId-affecting adapter logic, `TRUNCATE usage_events` and re-ingest once
+> (the data is fully reconstructible from the agent files). Giving Codex a stable
+> per-turn requestId would remove this fragility — tracked follow-up.
 
 ## Pricing formula
 
