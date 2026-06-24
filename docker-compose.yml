@@ -118,6 +118,65 @@ services:
     depends_on:
       - api
 
+  # Continuous local AI-usage ingestion. Opt-in:
+  #   docker compose --profile collector up -d collector
+  # Reads the dev's agent data from read-only mounts of just the per-agent data
+  # roots under the host home (HOME=/host-home, so adapters' ~/.<agent> default
+  # paths resolve), normalizes it, and posts to the api service on a --watch loop.
+  # Configure via STINT_COLLECT_* in .env (api key, host path, uid/gid, interval).
+  #
+  # STINT_COLLECT_HOME MUST be set to your absolute home path in .env. The
+  # ${STINT_COLLECT_HOME:-${HOME}} shell-default below only fills in when HOME is
+  # exported in the shell that invokes `docker compose`; .env file values are NOT
+  # shell-expanded by Compose, so a .env-only setup must set STINT_COLLECT_HOME.
+  #
+  # Each agent dir is mounted individually (instead of the whole home) so secrets
+  # like ~/.ssh, ~/.aws and ~/.netrc are never exposed to the collector. Only the
+  # dirs the *implemented* adapters read are mounted by default; uncomment a line
+  # as its adapter lands (and the dir exists — a missing bind source breaks `up`).
+  # See cmd/collect/README.md and AI_COST.md for the per-agent path table.
+  collector:
+    image: stint-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - collector
+    entrypoint: ["/stint-collect"]
+    command: ["--watch", "--interval", "${STINT_COLLECT_INTERVAL:-5m}"]
+    user: "${STINT_COLLECT_UID:-1000}:${STINT_COLLECT_GID:-1000}"
+    environment:
+      HOME: /host-home
+      STINT_API_URL: ${STINT_COLLECT_API_URL:-http://api:8080/api/v1}
+      STINT_API_KEY: ${STINT_COLLECT_API_KEY:-}
+      STINT_STATE_PATH: /state/collector-state.json
+    volumes:
+      # Per-agent data roots, read-only. Narrow on purpose (no whole-home mount).
+      # Dirs for the implemented adapters (Claude/Codex/Gemini, and OpenCode/Goose/
+      # Zed under .local/share). All must exist on the host or `up` fails.
+      - ${STINT_COLLECT_HOME:-${HOME}}/.claude:/host-home/.claude:ro
+      - ${STINT_COLLECT_HOME:-${HOME}}/.codex:/host-home/.codex:ro
+      - ${STINT_COLLECT_HOME:-${HOME}}/.gemini:/host-home/.gemini:ro
+      - ${STINT_COLLECT_HOME:-${HOME}}/.local/share:/host-home/.local/share:ro
+      # Uncomment per agent as its adapter ships AND the dir exists on your host
+      # (.config/Code and .local/share are broader than the dot-dirs above):
+      # - ${STINT_COLLECT_HOME:-${HOME}}/.cursor:/host-home/.cursor:ro
+      # - ${STINT_COLLECT_HOME:-${HOME}}/.copilot:/host-home/.copilot:ro
+      # - ${STINT_COLLECT_HOME:-${HOME}}/.qwen:/host-home/.qwen:ro
+      # - ${STINT_COLLECT_HOME:-${HOME}}/.kimi:/host-home/.kimi:ro
+      # - ${STINT_COLLECT_HOME:-${HOME}}/.kiro:/host-home/.kiro:ro
+      # - ${STINT_COLLECT_HOME:-${HOME}}/.factory:/host-home/.factory:ro
+      # - ${STINT_COLLECT_HOME:-${HOME}}/.hermes:/host-home/.hermes:ro
+      # - ${STINT_COLLECT_HOME:-${HOME}}/.openclaw:/host-home/.openclaw:ro
+      # - ${STINT_COLLECT_HOME:-${HOME}}/.pi:/host-home/.pi:ro
+      # - ${STINT_COLLECT_HOME:-${HOME}}/.config/Code:/host-home/.config/Code:ro
+      # State dir MUST be writable by STINT_COLLECT_UID (the collector runs as that
+      # uid). The committed ./.collector-state dir avoids Docker auto-creating it as
+      # root; otherwise state never persists and every restart re-scans/re-posts.
+      - ${STINT_COLLECT_STATE_DIR:-./.collector-state}:/state
+    depends_on:
+      - api
+
   caddy:
     image: caddy:2-alpine
     profiles:

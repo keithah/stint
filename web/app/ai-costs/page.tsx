@@ -2,16 +2,19 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Coins, Database, Flame, RefreshCw, Sparkles, Zap } from "lucide-react";
+import { AlertTriangle, ArrowRight, Coins, Database, Flame, RefreshCw, Sparkles, Wallet, X, Zap } from "lucide-react";
 import { useMemo, useState } from "react";
-import { SliceDonut } from "@/components/dashboard-charts";
 import { Providers } from "@/components/providers";
 import { Shell } from "@/components/shell";
 import { StatCard } from "@/components/stat-card";
-import { me, type SliceTotal, type StatsRange } from "@/lib/api";
-import { usageBlocks, usageSummary, type UsageCostMode, type UsageCurrentBlock, type UsageSlice, type UsageSummary } from "@/lib/usage-api";
+import { TokenTypeBar } from "@/components/token-type-bar";
+import { UsageBlockPanel } from "@/components/usage-block-panel";
+import { UsageBreakdown } from "@/components/usage-breakdown";
+import { me, type StatsRange } from "@/lib/api";
+import { usageBlocks, usageSummary, type UsageCostMode, type UsageCurrentBlock, type UsageSummary } from "@/lib/usage-api";
 import { activityHeatmapClass } from "@/lib/activity-heatmap";
 import { compactNumber, formatUSD } from "@/lib/number-format";
+import { hasSubscriptionSavings, subscriptionCovered } from "@/lib/usage-billing";
 import {
   cacheEfficiency,
   cacheSavingsEstimate,
@@ -49,24 +52,18 @@ export default function AICostsPage() {
 function AICostsContent() {
   const [range, setRange] = useState<StatsRange>("last_30_days");
   const [costMode, setCostMode] = useState<UsageCostMode>("auto");
+  const [agent, setAgent] = useState<string | null>(null);
 
   const user = useQuery({ queryKey: ["me"], queryFn: me, retry: false });
-  // Near-real-time "today" feed off the shortest range, polled frequently.
-  const live = useQuery({
-    queryKey: ["usage-summary", "last_7_days", costMode, "live"],
-    queryFn: () => usageSummary("last_7_days", costMode),
-    retry: false,
-    refetchInterval: 45000
-  });
   const summary = useQuery({
-    queryKey: ["usage-summary", range, costMode],
-    queryFn: () => usageSummary(range, costMode),
+    queryKey: ["usage-summary", range, costMode, agent],
+    queryFn: () => usageSummary(range, costMode, agent ?? undefined),
     retry: false,
-    refetchInterval: 120000
+    refetchInterval: 60000
   });
   const blocks = useQuery({
-    queryKey: ["usage-blocks", costMode],
-    queryFn: () => usageBlocks("last_30_days", costMode),
+    queryKey: ["usage-blocks", costMode, agent],
+    queryFn: () => usageBlocks("last_30_days", costMode, agent ?? undefined),
     retry: false,
     refetchInterval: 60000
   });
@@ -74,7 +71,9 @@ function AICostsContent() {
   const data = summary.data?.data;
   const currentBlock = blocks.data?.data.current ?? null;
   const activeRange = rangeOptions.find((item) => item.value === range) ?? rangeOptions[0];
-  const liveToday = latestDay(live.data?.data.by_day ?? []);
+  // Today's cost/tokens come from the summary's by_day series (which includes
+  // today for the rolling ranges) — no separate poller needed.
+  const liveToday = latestDay(data?.by_day ?? []);
 
   if (user.isError) {
     return (
@@ -102,9 +101,12 @@ function AICostsContent() {
         todayCost={liveToday?.cost_usd ?? 0}
         todayTokens={liveToday?.tokens ?? 0}
         todayDate={liveToday?.date}
+        isUpdating={summary.isFetching}
+        agent={agent}
+        onClearAgent={() => setAgent(null)}
         onRefresh={() => {
           summary.refetch();
-          live.refetch();
+          blocks.refetch();
         }}
       />
 
@@ -124,17 +126,35 @@ function AICostsContent() {
         <div className="mt-5 rounded border border-dashed border-line bg-panel/70 p-8 text-center">
           <div className="text-base font-medium text-zinc-200">No AI usage yet</div>
           <p className="mt-2 text-sm text-zinc-500">
-            Run <code className="rounded bg-ink px-1.5 py-0.5 text-zinc-300">stint-collect</code> to start recording agent usage events.
+            {agent ? (
+              <>No usage recorded for <span className="text-zinc-300">{agent}</span> in this range.</>
+            ) : (
+              <>Run <code className="rounded bg-ink px-1.5 py-0.5 text-zinc-300">stint-collect</code> to start recording agent usage events.</>
+            )}
           </p>
         </div>
       ) : null}
 
-      {data && !isEmptySummary(data) ? <SummaryBody data={data} activeRange={activeRange} currentBlock={currentBlock} /> : null}
+      {data && !isEmptySummary(data) ? (
+        <SummaryBody data={data} activeRange={activeRange} currentBlock={currentBlock} agent={agent} onSelectAgent={setAgent} />
+      ) : null}
     </div>
   );
 }
 
-function SummaryBody({ data, activeRange, currentBlock }: { data: UsageSummary; activeRange: { value: StatsRange; label: string }; currentBlock: UsageCurrentBlock | null }) {
+function SummaryBody({
+  data,
+  activeRange,
+  currentBlock,
+  agent,
+  onSelectAgent
+}: {
+  data: UsageSummary;
+  activeRange: { value: StatsRange; label: string };
+  currentBlock: UsageCurrentBlock | null;
+  agent: string | null;
+  onSelectAgent: (name: string | null) => void;
+}) {
   const total = data.total;
   const eff = useMemo(() => cacheEfficiency(total), [total]);
   const savings = useMemo(() => cacheSavingsEstimate(total), [total]);
@@ -142,18 +162,10 @@ function SummaryBody({ data, activeRange, currentBlock }: { data: UsageSummary; 
   const reasoning = useMemo(() => reasoningShare(total), [total]);
   const burn = useMemo(() => todayVsAverage(data.by_day), [data.by_day]);
   const perProject = useMemo(() => costPerProjectPerDay(data.by_project, data.by_day.length), [data.by_project, data.by_day.length]);
-  const hasSubscription = Math.abs(total.cost_usd - total.marginal_usd) > 0.005;
+  const subscription = hasSubscriptionSavings(total);
 
-  const tokenTypeRows: SliceTotal[] = useMemo(
-    () => [
-      { name: "Input (fresh)", total_seconds: total.input_tokens, text: compactNumber(total.input_tokens) },
-      { name: "Output", total_seconds: total.output_tokens, text: compactNumber(total.output_tokens) },
-      { name: "Cache create", total_seconds: total.cache_create_tokens, text: compactNumber(total.cache_create_tokens) },
-      { name: "Cache read", total_seconds: total.cache_read_tokens, text: compactNumber(total.cache_read_tokens) },
-      { name: "Reasoning", total_seconds: total.reasoning_tokens, text: compactNumber(total.reasoning_tokens) }
-    ].filter((row) => row.total_seconds > 0),
-    [total]
-  );
+  // Toggle the agent filter: clicking the already-selected agent clears it.
+  const toggleAgent = (name: string) => onSelectAgent(agent === name ? null : name);
 
   return (
     <>
@@ -172,25 +184,56 @@ function SummaryBody({ data, activeRange, currentBlock }: { data: UsageSummary; 
         </div>
       ) : null}
 
+      {subscription ? (
+        <section className="mt-5 rounded border border-moss/30 bg-moss/[0.06] p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 text-moss"><Wallet size={18} /></span>
+              <div>
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="text-2xl font-semibold tracking-tight text-zinc-50">{formatUSD(total.cost_usd)}</span>
+                  <span className="text-sm text-zinc-400">equivalent API value</span>
+                  <span className="text-zinc-600">·</span>
+                  <span className="text-2xl font-semibold tracking-tight text-moss">{formatUSD(total.marginal_usd)}</span>
+                  <span className="text-sm text-zinc-400">out-of-pocket</span>
+                </div>
+                <p className="mt-1.5 max-w-2xl text-xs leading-5 text-zinc-500">
+                  Subscription-billed agents cover <span className="text-moss">{formatUSD(subscriptionCovered(total))}</span> of metered-API-equivalent
+                  usage at no marginal cost. Out-of-pocket is what you actually pay for this range.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section className="mt-5 grid gap-4 md:grid-cols-4">
-        <StatCard label={`${activeRange.label} cost`} value={formatUSD(total.cost_usd)} detail={hasSubscription ? `${formatUSD(total.marginal_usd)} marginal (subscription)` : `${total.event_count.toLocaleString()} events`} />
+        <StatCard
+          label={`${activeRange.label} cost`}
+          value={formatUSD(total.cost_usd)}
+          detail={subscription ? `${formatUSD(total.marginal_usd)} out-of-pocket` : `${total.event_count.toLocaleString()} events`}
+        />
         <StatCard label="Tokens" value={compactNumber(totalTokens(total))} detail={`${total.event_count.toLocaleString()} events`} />
         <StatCard label="Cache hit ratio" value={`${(eff.cacheHitRatio * 100).toFixed(1)}%`} detail={eff.hasData ? `${compactNumber(eff.cacheReadTokens)} cached vs ${compactNumber(eff.freshInputTokens)} fresh` : "No input data"} />
         <StatCard label="Reasoning share" value={`${(reasoning * 100).toFixed(1)}%`} detail={`${compactNumber(total.reasoning_tokens)} reasoning tokens`} />
       </section>
 
       <section className="mt-5 grid gap-5 lg:grid-cols-3">
-        <UsageDonut title="By agent" rows={data.by_agent} />
-        <UsageDonut title="By model" rows={data.by_model} />
-        <UsageDonut title="By project" rows={data.by_project} />
+        <UsageBreakdown title="By agent" rows={data.by_agent} showBilling onSelect={toggleAgent} selected={agent} />
+        <UsageBreakdown title="By model" rows={data.by_model} />
+        <UsageBreakdown title="By project" rows={data.by_project} />
       </section>
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-[1fr_1fr]">
-        <SliceDonut title="Token type mix" rows={tokenTypeRows} />
+      <section className="mt-5 grid gap-5 lg:grid-cols-[1fr_1fr] xl:grid-cols-[1.4fr_1fr]">
+        <TokenTypeBar total={total} />
+        <UsageBlockPanel block={currentBlock} />
+      </section>
+
+      <section className="mt-5">
         <CostHeatmap data={data} />
       </section>
 
-      <section className="mt-5 grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
+      <section className="mt-5 grid gap-5 lg:grid-cols-3">
         <InsightCard icon={<Database size={16} />} title="Cache efficiency">
           <Metric label="Cache hit ratio" value={`${(eff.cacheHitRatio * 100).toFixed(1)}%`} />
           <Metric label="Estimated savings" value={`~${(savings.savingsRatio * 100).toFixed(1)}% of input cost`} />
@@ -225,22 +268,6 @@ function SummaryBody({ data, activeRange, currentBlock }: { data: UsageSummary; 
             </>
           ) : (
             <p className="text-xs text-zinc-500">Not enough days to compute a burn-rate baseline yet.</p>
-          )}
-        </InsightCard>
-
-        <InsightCard icon={<Flame size={16} />} title="Current 5-hour block">
-          {currentBlock && currentBlock.is_active ? (
-            <>
-              <Metric label="Spent this block" value={formatUSD(currentBlock.cost_usd)} />
-              <Metric label="Burn rate" value={`${formatUSD(currentBlock.burn_rate_cost_per_hour)}/hr · ${Math.round(currentBlock.burn_rate_tokens_per_min).toLocaleString()} tok/min`} />
-              <Metric label="Projected (block end)" value={formatUSD(currentBlock.projected_block_cost_usd)} />
-              <Metric label="Projected today" value={formatUSD(currentBlock.projected_day_cost_usd)} />
-              <p className="mt-2 text-xs leading-5 text-zinc-600">
-                Block ends {new Date(currentBlock.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {currentBlock.elapsed_minutes} min elapsed
-              </p>
-            </>
-          ) : (
-            <p className="text-xs text-zinc-500">No active 5-hour block — start coding to begin one.</p>
           )}
         </InsightCard>
       </section>
@@ -293,15 +320,6 @@ function CostHeatmap({ data }: { data: UsageSummary }) {
   );
 }
 
-function UsageDonut({ title, rows }: { title: string; rows: UsageSlice[] }) {
-  // Map cost-bearing slices onto the shared SliceDonut shape (cost in cents so
-  // integer rounding stays meaningful for small dollar amounts).
-  const sliceRows: SliceTotal[] = rows
-    .map((row) => ({ name: row.name, total_seconds: Math.round(row.cost_usd * 100), text: formatUSD(row.cost_usd) }))
-    .filter((row) => row.total_seconds > 0);
-  return <SliceDonut title={title} rows={sliceRows} />;
-}
-
 function InsightCard({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
     <div className="rounded border border-line bg-panel/95 p-4 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
@@ -333,6 +351,9 @@ function LiveHeader({
   todayCost,
   todayTokens,
   todayDate,
+  isUpdating,
+  agent,
+  onClearAgent,
   onRefresh
 }: {
   activeRange: { value: StatsRange; label: string };
@@ -344,6 +365,9 @@ function LiveHeader({
   todayCost: number;
   todayTokens: number;
   todayDate?: string;
+  isUpdating: boolean;
+  agent: string | null;
+  onClearAgent: () => void;
   onRefresh: () => void;
 }) {
   return (
@@ -356,16 +380,31 @@ function LiveHeader({
             </span>
             <span className="rounded border border-line bg-ink px-2.5 py-1 text-xs text-zinc-500">cost mode: {costMode}</span>
             {data ? <span className="rounded border border-line bg-ink px-2.5 py-1 text-xs text-zinc-500">{data.total.event_count.toLocaleString()} events</span> : null}
+            {agent ? (
+              <button
+                onClick={onClearAgent}
+                className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent transition hover:bg-accent/20"
+                title="Clear agent filter"
+              >
+                Filtered: {agent} <X size={13} />
+              </button>
+            ) : null}
           </div>
           <div className="grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-zinc-50">Unified AI cost</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-                Cross-agent spend, tokens, cache efficiency, and burn rate.
+              <div className="flex items-center gap-2">
+                <span className="text-xs uppercase tracking-[0.16em] text-zinc-500">{todayDate ? `Today · ${todayDate.slice(5)}` : "Today"}</span>
+                <LiveDot active={isUpdating} />
+              </div>
+              <h1 className="mt-2 text-4xl font-semibold tracking-tight text-zinc-50">{formatUSD(todayCost)}</h1>
+              <p className="mt-1.5 text-sm text-zinc-400">
+                {compactNumber(todayTokens)} tokens today{agent ? <> · <span className="text-accent">{agent}</span></> : <> across all agents</>}
               </p>
             </div>
-            <HeaderReadout label={todayDate ? `Today (${todayDate.slice(5)})` : "Today"} value={formatUSD(todayCost)} />
-            <HeaderReadout label="Today tokens" value={compactNumber(todayTokens)} />
+            <div className="hidden md:block md:self-stretch md:border-l md:border-line" aria-hidden />
+            <div className="max-w-xs text-sm leading-6 text-zinc-500">
+              Cross-agent spend, tokens, cache efficiency, and burn rate over your selected range.
+            </div>
           </div>
         </div>
         <div className="flex flex-col justify-between gap-4 p-5 lg:min-w-80">
@@ -396,7 +435,7 @@ function LiveHeader({
             className="inline-flex items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
             onClick={onRefresh}
           >
-            <RefreshCw size={15} /> Refresh
+            <RefreshCw size={15} className={isUpdating ? "animate-spin" : ""} /> Refresh
           </button>
         </div>
       </div>
@@ -405,12 +444,12 @@ function LiveHeader({
   );
 }
 
-function HeaderReadout({ label, value }: { label: string; value: string }) {
+function LiveDot({ active }: { active: boolean }) {
   return (
-    <div className="min-w-36 rounded border border-line bg-ink px-3 py-2">
-      <div className="text-xs uppercase tracking-[0.14em] text-zinc-500">{label}</div>
-      <div className="mt-1 truncate text-lg font-semibold text-zinc-100">{value}</div>
-    </div>
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-ink px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-zinc-500">
+      <span className={`h-1.5 w-1.5 rounded-full ${active ? "animate-pulse bg-accent" : "bg-moss"}`} />
+      {active ? "Updating" : "Live"}
+    </span>
   );
 }
 

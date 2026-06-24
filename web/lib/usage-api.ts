@@ -33,6 +33,9 @@ export type UsageSlice = {
   marginal_usd: number;
   tokens: number;
   event_count: number;
+  // Authoritative billing classification stamped by the server on by_agent
+  // buckets. Absent on by_model/by_project buckets (and older payloads).
+  billing_type?: "api" | "subscription" | "mixed";
 };
 
 export type UsageDay = {
@@ -104,13 +107,19 @@ export type UsageEvent = {
   timestamp: string;
 };
 
-export async function usageSummary(range: StatsRange, costMode: UsageCostMode = "auto") {
+export async function usageSummary(range: StatsRange, costMode: UsageCostMode = "auto", agent?: string) {
   const query = new URLSearchParams({ range, cost_mode: costMode });
+  if (agent) {
+    query.set("agent", agent);
+  }
   return request<{ data: UsageSummary }>(`/api/v1/users/current/usage_events/summary?${query.toString()}`);
 }
 
-export async function usageBlocks(range: StatsRange, costMode: UsageCostMode = "auto") {
+export async function usageBlocks(range: StatsRange, costMode: UsageCostMode = "auto", agent?: string) {
   const query = new URLSearchParams({ range, cost_mode: costMode });
+  if (agent) {
+    query.set("agent", agent);
+  }
   return request<{ data: UsageBlocks }>(`/api/v1/users/current/usage_events/blocks?${query.toString()}`);
 }
 

@@ -16,3 +16,8 @@ tmp/
 # AI usage collector binary
 /stint-collect
 /collect
+
+# Keep the collector state dir (committed so Docker doesn't auto-create it as
+# root and break the uid-1000 collector), but ignore the actual scan state.
+/.collector-state/*
+!/.collector-state/.gitkeep
