@@ -30,7 +30,7 @@ function SettingsContent() {
   return (
     <div className="mx-auto max-w-5xl px-5 py-6 lg:px-8">
       <header className="mb-8 border-b border-line pb-6">
-        <div className="mb-3 inline-flex items-center gap-2 rounded border border-accent/30 bg-accent/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-accent">
+        <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
           <KeyRound size={14} /> Stint config
         </div>
         <h1 className="text-4xl font-semibold tracking-tight">Settings</h1>
