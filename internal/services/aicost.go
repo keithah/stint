@@ -55,61 +55,63 @@ func AICostWindow(now time.Time, rangeName string) (start, end time.Time, ok boo
 // Unmapped fallback: an Agents row whose name the engine never produces (e.g.
 // "openai"/"pro"/"Unknown") keeps its existing heartbeat estimate rather than
 // being zeroed — its spend is small and folded into the mapped rows.
-func ApplyUsageEventCosts(m *AIMetrics, toolGroups []usagestats.Group, engine *pricing.Engine, windowEnd time.Time) {
-	if m == nil || engine == nil || len(toolGroups) == 0 {
+func ApplyUsageEventCosts(m *AIMetrics, groups []usagestats.Group, engine *pricing.Engine, windowEnd time.Time) {
+	if m == nil || engine == nil || len(groups) == 0 {
 		return
 	}
-	agentGroups := make([]usagestats.Group, len(toolGroups))
-	toolTokens := map[string]*AIToolCost{}
-	for i, g := range toolGroups {
-		ag := g
-		ag.Agent = HeartbeatAgentForModel(g.Model)
-		agentGroups[i] = ag
+	// Price each event once, then bucket the same priced slice under both
+	// taxonomies: by usage tool (g.Agent) and by mapped heartbeat agent. The
+	// USD is identical across taxonomies — only the bucket key differs.
+	priced := usagestats.PriceGroups(groups, engine, pricing.ModeCalculate)
+	byTool := usagestats.BucketCents(priced, func(g usagestats.Group) string { return g.Agent }, windowEnd)
+	byAgent := usagestats.BucketCents(priced, func(g usagestats.Group) string { return HeartbeatAgentForModel(g.Model) }, windowEnd)
 
-		t := toolTokens[g.Agent]
-		if t == nil {
-			t = &AIToolCost{Name: g.Agent}
-			toolTokens[g.Agent] = t
-		}
-		t.InputTokens += g.Input
-		t.OutputTokens += g.Output
-		t.CacheReadTokens += g.CacheRead
-	}
-
-	toolCosts := usagestats.AICostsFromGroups(toolGroups, engine, pricing.ModeCalculate, windowEnd)
-	agentCosts := usagestats.AICostsFromGroups(agentGroups, engine, pricing.ModeCalculate, windowEnd)
-
-	m.EstimatedCostCents = toolCosts.TotalCents
+	m.EstimatedCostCents = byTool.TotalCents
 	for i := range m.Agents {
-		if c, ok := agentCosts.ByAgentCents[m.Agents[i].Name]; ok {
+		if c, ok := byAgent.ByKeyCents[m.Agents[i].Name]; ok {
 			m.Agents[i].EstimatedCostCents = c
 		}
 		// else: leave the heartbeat estimate already on the row (unmapped fallback).
 	}
 	for i := range m.Days {
-		if c, ok := toolCosts.ByDayCents[m.Days[i].Name]; ok {
+		if c, ok := byTool.ByDayCents[m.Days[i].Name]; ok {
 			m.Days[i].EstimatedCostCents = c
 		}
 	}
-	m.Costs = periodsFromCosts(agentCosts)
+	m.Costs = periodsFromCosts(byAgent)
+	m.ToolCosts = toolCosts(priced, byTool.ByKeyCents)
+}
 
-	tools := make([]AIToolCost, 0, len(toolTokens))
-	for name, t := range toolTokens {
-		t.CostCents = toolCosts.ByAgentCents[name]
-		tools = append(tools, *t)
-	}
-	sort.Slice(tools, func(i, j int) bool {
-		if tools[i].CostCents != tools[j].CostCents {
-			return tools[i].CostCents > tools[j].CostCents
+// toolCosts builds the per-tool breakdown (cost + token mix) from the priced
+// groups, sorted by spend descending.
+func toolCosts(priced []usagestats.GroupCost, costByTool map[string]int) []AIToolCost {
+	tokens := map[string]*AIToolCost{}
+	for _, c := range priced {
+		t := tokens[c.Group.Agent]
+		if t == nil {
+			t = &AIToolCost{Name: c.Group.Agent, CostCents: costByTool[c.Group.Agent]}
+			tokens[c.Group.Agent] = t
 		}
-		return tools[i].Name < tools[j].Name
+		t.InputTokens += c.Group.Input
+		t.OutputTokens += c.Group.Output
+		t.CacheReadTokens += c.Group.CacheRead
+	}
+	out := make([]AIToolCost, 0, len(tokens))
+	for _, t := range tokens {
+		out = append(out, *t)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CostCents != out[j].CostCents {
+			return out[i].CostCents > out[j].CostCents
+		}
+		return out[i].Name < out[j].Name
 	})
-	m.ToolCosts = tools
+	return out
 }
 
 func periodsFromCosts(costs usagestats.AICostCents) []AICostPeriod {
-	periods := make([]AICostPeriod, 0, len(costs.PeriodByAgent))
-	for agent, p := range costs.PeriodByAgent {
+	periods := make([]AICostPeriod, 0, len(costs.PeriodByKey))
+	for agent, p := range costs.PeriodByKey {
 		periods = append(periods, AICostPeriod{
 			Agent:        agent,
 			DailyCents:   p.Daily,

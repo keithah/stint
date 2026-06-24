@@ -7,11 +7,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/keithah/stint/internal/aicostbake"
 	"github.com/keithah/stint/internal/db"
 	"github.com/keithah/stint/internal/jobs"
 	"github.com/keithah/stint/internal/pricing"
 	"github.com/keithah/stint/internal/services"
-	"github.com/keithah/stint/internal/usagestats"
 )
 
 type StatsWorker struct {
@@ -38,30 +38,6 @@ func (w StatsWorker) pricingEngine() *pricing.Engine {
 		workerPricingShared, _ = pricing.NewFromBundled()
 	})
 	return workerPricingShared
-}
-
-// bakeAICosts replaces stats.AI cost fields with cache-aware list prices computed
-// from usage_events, so the value written to the stats cache already reflects
-// actual API cost (mirrors the API's compute path). No-op when pricing or usage
-// events are unavailable.
-func (w StatsWorker) bakeAICosts(ctx context.Context, userID uuid.UUID, loc *time.Location, rangeName string, stats *services.Stats) {
-	engine := w.pricingEngine()
-	if engine == nil || stats == nil {
-		return
-	}
-	start, end, ok := services.AICostWindow(time.Now().In(loc), rangeName)
-	if !ok {
-		return
-	}
-	aggs, err := w.Store.UsageAggregatesBetween(ctx, userID, start, end, "", loc.String())
-	if err != nil || len(aggs) == 0 {
-		return
-	}
-	groups := make([]usagestats.Group, 0, len(aggs))
-	for _, a := range aggs {
-		groups = append(groups, a.StatsGroup())
-	}
-	services.ApplyUsageEventCosts(&stats.AI, groups, engine, end)
 }
 
 func (w StatsWorker) RecomputeLast7Days(ctx context.Context, userID uuid.UUID, timeoutMinutes int, writesOnly bool) (services.Stats, error) {
@@ -94,7 +70,7 @@ func (w StatsWorker) RecomputeRange(ctx context.Context, userID uuid.UUID, range
 		if err != nil {
 			return services.Stats{}, err
 		}
-		w.bakeAICosts(ctx, userID, location, rangeName, &stats)
+		aicostbake.Bake(ctx, w.Store, w.pricingEngine(), userID, location, rangeName, &stats)
 		if err := w.Store.UpsertStatsCache(ctx, userID, rangeName, stats); err != nil {
 			return services.Stats{}, err
 		}
@@ -121,7 +97,7 @@ func (w StatsWorker) RecomputeRange(ctx context.Context, userID uuid.UUID, range
 	if err != nil {
 		return services.Stats{}, err
 	}
-	w.bakeAICosts(ctx, userID, location, rangeName, &stats)
+	aicostbake.Bake(ctx, w.Store, w.pricingEngine(), userID, location, rangeName, &stats)
 	if err := w.Store.UpsertStatsCache(ctx, userID, rangeName, stats); err != nil {
 		return services.Stats{}, err
 	}

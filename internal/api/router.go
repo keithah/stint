@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/keithah/stint/internal/aicostbake"
 	apimw "github.com/keithah/stint/internal/api/middleware"
 	"github.com/keithah/stint/internal/auth"
 	"github.com/keithah/stint/internal/cache"
@@ -33,7 +34,6 @@ import (
 	"github.com/keithah/stint/internal/pricing"
 	"github.com/keithah/stint/internal/pricingrefresh"
 	"github.com/keithah/stint/internal/services"
-	"github.com/keithah/stint/internal/usagestats"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/oauth2"
@@ -2761,31 +2761,6 @@ func (s *Server) statsForResponse(ctx context.Context, user db.User, rangeName s
 	return s.computeFreshStatsForRange(ctx, user, rangeName)
 }
 
-// bakeAICosts replaces the AI cost fields on stats with the metered-API-equivalent
-// cost computed from usage_events by the pricing engine (cache reads/writes priced
-// correctly, not as fresh input), using actual list prices — never subscription or
-// custom-rate discounts. Called on the compute path so the result is stored in the
-// stats cache, not recomputed per request. No-op when pricing is unavailable or the
-// window has no usage events (the legacy heartbeat estimate stands).
-func (s *Server) bakeAICosts(ctx context.Context, user db.User, rangeName string, stats *services.Stats) {
-	if s.Pricing == nil || stats == nil {
-		return
-	}
-	start, end, ok := services.AICostWindow(time.Now().In(userLocation(user)), rangeName)
-	if !ok {
-		return
-	}
-	aggs, err := s.Store.UsageAggregatesBetween(ctx, user.ID, start, end, "", userLocation(user).String())
-	if err != nil || len(aggs) == 0 {
-		return
-	}
-	groups := make([]usagestats.Group, 0, len(aggs))
-	for _, a := range aggs {
-		groups = append(groups, a.StatsGroup())
-	}
-	services.ApplyUsageEventCosts(&stats.AI, groups, s.Pricing, end)
-}
-
 func (s *Server) computeStatsForRange(ctx context.Context, user db.User, rangeName string) (services.Stats, error) {
 	cached, found, err := s.Store.StatsCache(ctx, user.ID, rangeName)
 	if err != nil {
@@ -2813,7 +2788,7 @@ func (s *Server) computeFreshStatsForRange(ctx context.Context, user db.User, ra
 			return services.Stats{}, err
 		}
 		stats := services.ComputeAllTimeStatsWithExternalDurationsAndAICosts(heartbeats, toServiceExternalDurations(externalRows), time.Duration(user.TimeoutMinutes)*time.Minute, costs)
-		s.bakeAICosts(ctx, user, rangeName, &stats)
+		aicostbake.Bake(ctx, s.Store, s.Pricing, user.ID, userLocation(user), rangeName, &stats)
 		if err := s.Store.UpsertStatsCache(ctx, user.ID, rangeName, stats); err != nil {
 			return services.Stats{}, err
 		}
@@ -2842,7 +2817,7 @@ func (s *Server) computeFreshStatsForRange(ctx context.Context, user db.User, ra
 	if err != nil {
 		return services.Stats{}, err
 	}
-	s.bakeAICosts(ctx, user, rangeName, &stats)
+	aicostbake.Bake(ctx, s.Store, s.Pricing, user.ID, userLocation(user), rangeName, &stats)
 	if err := s.Store.UpsertStatsCache(ctx, user.ID, rangeName, stats); err != nil {
 		return services.Stats{}, err
 	}

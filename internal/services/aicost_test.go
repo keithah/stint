@@ -18,8 +18,8 @@ func TestApplyUsageEventCostsUnmappedFallback(t *testing.T) {
 	windowEnd := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
 	m := &AIMetrics{
 		Agents: []AIStat{
-			{Name: "gpt", EstimatedCostCents: 999},     // mapped -> overwritten
-			{Name: "Unknown", EstimatedCostCents: 42},   // unmapped -> kept
+			{Name: "gpt", EstimatedCostCents: 999},    // mapped -> overwritten
+			{Name: "Unknown", EstimatedCostCents: 42}, // unmapped -> kept
 		},
 	}
 	groups := []usagestats.Group{

@@ -14,12 +14,12 @@ import (
 
 // Totals are the aggregate cost/token figures across all events in the window.
 type Totals struct {
-	CostUSD           float64 `json:"cost_usd"`
-	MarginalUSD       float64 `json:"marginal_usd"`
+	CostUSD     float64 `json:"cost_usd"`
+	MarginalUSD float64 `json:"marginal_usd"`
 	// UncachedCostUSD is what these tokens would cost with no prompt caching
 	// (cache reads/writes priced at the full input rate). The gap to CostUSD is
 	// the savings caching delivered — and why naive trackers over-report cost.
-	UncachedCostUSD float64 `json:"uncached_cost_usd"`
+	UncachedCostUSD   float64 `json:"uncached_cost_usd"`
 	EventCount        int     `json:"event_count"`
 	InputTokens       int     `json:"input_tokens"`
 	OutputTokens      int     `json:"output_tokens"`
