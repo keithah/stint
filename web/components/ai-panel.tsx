@@ -109,6 +109,10 @@ function AgentBreakdown({
   // cost. "agent" = heartbeat taxonomy (gpt/anthropic), keeps line counts with
   // cost mapped up. Default to "tool" since it is the precise, cache-aware view.
   const [groupBy, setGroupBy] = useState<"tool" | "agent">("tool");
+  // Coalesce: a stats path that didn't bake AI cost (public/share) can omit these
+  // arrays, and the API may serialize an empty Go slice as null.
+  const agentRows = agents ?? [];
+  const toolRows = toolCosts ?? [];
   return (
     <div className="rounded-md border border-line bg-ink p-4">
       <div className="flex items-start justify-between gap-4">
@@ -131,7 +135,7 @@ function AgentBreakdown({
       </div>
       <div className="mt-4 divide-y divide-line">
         {groupBy === "agent"
-          ? (agents.length ? agents : [emptyAgent()]).slice(0, 6).map((agent) => (
+          ? (agentRows.length ? agentRows : [emptyAgent()]).slice(0, 6).map((agent) => (
               <div key={agent.name} className="grid grid-cols-[1fr_96px_84px] gap-3 py-3 text-sm">
                 <span className="truncate font-medium text-zinc-100">{agent.name}</span>
                 <span className="text-right text-zinc-400">{compactNumber(agent.ai_line_changes)} lines</span>
@@ -141,7 +145,7 @@ function AgentBreakdown({
                 </span>
               </div>
             ))
-          : (toolCosts.length ? toolCosts : [{ name: "No usage", cost_cents: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0 }]).slice(0, 6).map((tool) => (
+          : (toolRows.length ? toolRows : [{ name: "No usage", cost_cents: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0 }]).slice(0, 6).map((tool) => (
               <div key={tool.name} className="grid grid-cols-[1fr_84px] gap-3 py-3 text-sm">
                 <span className="truncate font-medium text-zinc-100">{tool.name}</span>
                 <span className="text-right text-zinc-500">{formatCents(tool.cost_cents)}</span>

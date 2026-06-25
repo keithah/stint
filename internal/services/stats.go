@@ -484,6 +484,11 @@ func computeAIMetrics(heartbeats []Heartbeat, durations []Duration, start time.T
 	metrics.Agents = sortedAIStats(agentTotals)
 	metrics.Days = orderedDayAIStats(dayTotals, start, days)
 	metrics.Costs = sortedAICostPeriods(costPeriods, costs)
+	// Default to an empty (non-nil) slice so the field never serializes as JSON
+	// null: ToolCosts is only populated when a usage_events bake runs, and a null
+	// would crash clients that read its length. Stats paths that don't bake (e.g.
+	// public/share) thus still emit [] rather than null.
+	metrics.ToolCosts = []AIToolCost{}
 	return metrics
 }
 

@@ -4080,6 +4080,7 @@ func (s *Server) publicStats(ctx context.Context, user db.User, rangeName string
 			return services.Stats{}, err
 		}
 		stats := services.ComputeAllTimeStatsWithExternalDurationsAndAICosts(heartbeats, toServiceExternalDurations(externalRows), time.Duration(user.TimeoutMinutes)*time.Minute, costs)
+		aicostbake.Bake(ctx, s.Store, s.Pricing, user.ID, userLocation(user), rangeName, &stats)
 		return s.applyPublicStatsPermissions(ctx, user, stats)
 	}
 	now := time.Now().In(userLocation(user))
@@ -4107,6 +4108,7 @@ func (s *Server) publicStats(ctx context.Context, user db.User, rangeName string
 	if err != nil {
 		return services.Stats{}, err
 	}
+	aicostbake.Bake(ctx, s.Store, s.Pricing, user.ID, userLocation(user), rangeName, &stats)
 	return s.applyPublicStatsPermissions(ctx, user, stats)
 }
 
