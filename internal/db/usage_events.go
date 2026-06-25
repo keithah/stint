@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -148,10 +149,10 @@ func (a UsageAggregate) StatsGroup() usagestats.Group {
 
 // UsageAggregatesBetween returns usage events in [start, end) summed into
 // homogeneous pricing groups. The day is bucketed with (ts AT TIME ZONE $tz)::date
-// in the user's IANA timezone (tz). When agent != "" the filter is applied in
-// SQL so it uses the (user_id, agent, ts) index rather than loading and
-// discarding rows in Go.
-func (s *Store) UsageAggregatesBetween(ctx context.Context, userID uuid.UUID, start, end time.Time, agent, tz string) ([]UsageAggregate, error) {
+// in the user's IANA timezone (tz). A non-empty agent and/or project narrows the
+// rows in SQL (agent uses the (user_id, agent, ts) index); project scopes the
+// result to one project (e.g. the per-project AI cost panel).
+func (s *Store) UsageAggregatesBetween(ctx context.Context, userID uuid.UUID, start, end time.Time, agent, project, tz string) ([]UsageAggregate, error) {
 	if tz == "" {
 		tz = "UTC"
 	}
@@ -167,8 +168,12 @@ func (s *Store) UsageAggregatesBetween(ctx context.Context, userID uuid.UUID, st
 		WHERE user_id = $1 AND ts >= $2 AND ts < $3`
 	args := []any{userID, start, end, tz}
 	if agent != "" {
-		query += ` AND agent = $5`
 		args = append(args, agent)
+		query += fmt.Sprintf(" AND agent = $%d", len(args))
+	}
+	if project != "" {
+		args = append(args, project)
+		query += fmt.Sprintf(" AND coalesce(project, '') = $%d", len(args))
 	}
 	query += ` GROUP BY 1, 2, 3, 4, 5, 6`
 

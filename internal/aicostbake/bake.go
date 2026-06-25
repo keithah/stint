@@ -17,9 +17,24 @@ import (
 )
 
 // Bake overwrites stats.AI cost fields with the metered-API-equivalent cost for
-// the user's usage events in the given stats range. No-op when pricing is
+// all of the user's usage events in the given stats range. No-op when pricing is
 // unavailable or the window has no usage events (the heartbeat estimate stands).
 func Bake(ctx context.Context, store *db.Store, engine *pricing.Engine, userID uuid.UUID, loc *time.Location, rangeName string, stats *services.Stats) {
+	bake(ctx, store, engine, userID, loc, rangeName, "", stats)
+}
+
+// BakeProject is like Bake but scopes the cost to a single project, for the
+// per-project AI panel (whose heartbeat-derived metrics are already
+// project-filtered). An empty project would price the whole account, so callers
+// must pass a real project name.
+func BakeProject(ctx context.Context, store *db.Store, engine *pricing.Engine, userID uuid.UUID, loc *time.Location, rangeName, project string, stats *services.Stats) {
+	if project == "" {
+		return
+	}
+	bake(ctx, store, engine, userID, loc, rangeName, project, stats)
+}
+
+func bake(ctx context.Context, store *db.Store, engine *pricing.Engine, userID uuid.UUID, loc *time.Location, rangeName, project string, stats *services.Stats) {
 	if store == nil || engine == nil || stats == nil {
 		return
 	}
@@ -27,7 +42,7 @@ func Bake(ctx context.Context, store *db.Store, engine *pricing.Engine, userID u
 	if !ok {
 		return
 	}
-	aggs, err := store.UsageAggregatesBetween(ctx, userID, start, end, "", loc.String())
+	aggs, err := store.UsageAggregatesBetween(ctx, userID, start, end, "", project, loc.String())
 	if err != nil || len(aggs) == 0 {
 		return
 	}

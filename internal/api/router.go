@@ -3203,6 +3203,7 @@ func (s *Server) projectDetail(c echo.Context) error {
 			return c.JSON(http.StatusBadRequest, errorBody(err.Error()))
 		}
 	}
+	aicostbake.BakeProject(c.Request().Context(), s.Store, s.Pricing, user.ID, userLocation(user), rangeName, project.Name, &stats)
 	return c.JSON(http.StatusOK, map[string]any{"data": map[string]any{"project": project, "stats": stats}})
 }
 

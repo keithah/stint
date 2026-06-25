@@ -72,7 +72,7 @@ func (s *Server) usageEventsSummary(c echo.Context) error {
 	}
 	mode := usageCostMode(c)
 
-	aggs, err := s.Store.UsageAggregatesBetween(c.Request().Context(), user.ID, start, end, c.QueryParam("agent"), userLocation(user).String())
+	aggs, err := s.Store.UsageAggregatesBetween(c.Request().Context(), user.ID, start, end, c.QueryParam("agent"), "", userLocation(user).String())
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
