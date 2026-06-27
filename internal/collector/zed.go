@@ -181,7 +181,7 @@ func scanZedDB(path string, state *State, events *[]usage.Event, report *ScanRep
 		return
 	}
 
-	rows, err := db.Query("SELECT " + col + " FROM " + table)
+	rows, err := db.Query("SELECT " + sqliteQuoteIdent(col) + " FROM " + sqliteQuoteIdent(table))
 	if err != nil {
 		report.Errors++
 		return

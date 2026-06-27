@@ -13,5 +13,5 @@ assert.match(source, /mutationFn: \(\) => deleteHeartbeats\(heartbeatDate, selec
 assert.match(source, /Raw heartbeats/);
 assert.match(source, /selectedHeartbeatIDs\.includes\(heartbeat\.id\)/);
 assert.match(source, /deleteSelectedHeartbeats\.mutate\(\)/);
-assert.match(packageJSON, /lib\/heartbeats-api\.test\.ts/);
-assert.match(packageJSON, /app\/\(console\)\/reports\/raw-heartbeats\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

@@ -2,6 +2,9 @@ package workers
 
 import (
 	"context"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -19,9 +22,17 @@ func Run(ctx context.Context, cfg config.Config, store *db.Store) error {
 	if err != nil {
 		return err
 	}
-	server := asynq.NewServer(opt, asynq.Config{Concurrency: 5})
+	server := asynq.NewServer(opt, asynq.Config{
+		Concurrency: workerConcurrency(),
+		Queues: map[string]int{
+			jobs.QueueCritical:    6,
+			jobs.QueueDefault:     4,
+			jobs.QueueMaintenance: 2,
+			jobs.QueueBulk:        1,
+		},
+	})
 	mux := asynq.NewServeMux()
-	stats := StatsWorker{Store: store}
+	stats := NewStatsWorker(store, nil)
 	mux.HandleFunc(jobs.TypeStatsRecompute, stats.HandleStatsRecomputeTask)
 	// Keep the worker's shared pricing engine in sync with the weekly refresh so
 	// cost baked into the stats cache uses up-to-date prices.
@@ -53,7 +64,7 @@ func Run(ctx context.Context, cfg config.Config, store *db.Store) error {
 	if err != nil {
 		return err
 	}
-	if _, err := scheduler.Register(goalsEvaluateScheduleSpec, goalsTask, asynq.Queue("default"), asynq.MaxRetry(3)); err != nil {
+	if _, err := scheduler.Register(goalsEvaluateScheduleSpec, goalsTask, asynq.Queue(jobs.QueueMaintenance), asynq.MaxRetry(3)); err != nil {
 		return err
 	}
 	hasScheduledTasks = true
@@ -61,7 +72,7 @@ func Run(ctx context.Context, cfg config.Config, store *db.Store) error {
 	if err != nil {
 		return err
 	}
-	if _, err := scheduler.Register("@hourly", leaderboardTask, asynq.Queue("default"), asynq.MaxRetry(3)); err != nil {
+	if _, err := scheduler.Register("@hourly", leaderboardTask, asynq.Queue(jobs.QueueDefault), asynq.MaxRetry(3)); err != nil {
 		return err
 	}
 	hasScheduledTasks = true
@@ -69,7 +80,7 @@ func Run(ctx context.Context, cfg config.Config, store *db.Store) error {
 	if err != nil {
 		return err
 	}
-	if _, err := scheduler.Register("@weekly", heartbeatsTask, asynq.Queue("default"), asynq.MaxRetry(3)); err != nil {
+	if _, err := scheduler.Register("@weekly", heartbeatsTask, asynq.Queue(jobs.QueueMaintenance), asynq.MaxRetry(3)); err != nil {
 		return err
 	}
 	hasScheduledTasks = true
@@ -77,7 +88,7 @@ func Run(ctx context.Context, cfg config.Config, store *db.Store) error {
 	if err != nil {
 		return err
 	}
-	if _, err := scheduler.Register("@weekly", pricingTask, asynq.Queue("default"), asynq.MaxRetry(3)); err != nil {
+	if _, err := scheduler.Register("@weekly", pricingTask, asynq.Queue(jobs.QueueMaintenance), asynq.MaxRetry(3)); err != nil {
 		return err
 	}
 	hasScheduledTasks = true
@@ -103,4 +114,16 @@ func Run(ctx context.Context, cfg config.Config, store *db.Store) error {
 		}
 		return err
 	}
+}
+
+func workerConcurrency() int {
+	raw := strings.TrimSpace(os.Getenv("STINT_WORKER_CONCURRENCY"))
+	if raw == "" {
+		return 10
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 1 {
+		return 10
+	}
+	return value
 }

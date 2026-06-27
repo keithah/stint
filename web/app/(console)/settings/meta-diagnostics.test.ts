@@ -14,5 +14,5 @@ assert.match(source, /Server diagnostics/);
 assert.match(source, /meta\.data\?\.data\.api_url/);
 assert.match(source, /meta\.data\?\.data\.hostname/);
 assert.match(source, /meta\.data\?\.data\.ip/);
-assert.match(packageJSON, /lib\/meta-api\.test\.ts/);
-assert.match(packageJSON, /app\/\(console\)\/settings\/meta-diagnostics\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

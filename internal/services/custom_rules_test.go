@@ -132,6 +132,19 @@ func TestApplyCustomRulesMatchesRegex(t *testing.T) {
 	}
 }
 
+func TestPrepareCustomRulesRejectsInvalidRegex(t *testing.T) {
+	_, err := PrepareCustomRules([]CustomRule{{
+		Action:      "delete",
+		Source:      "entity",
+		Operation:   "regex",
+		SourceValue: "[",
+		Priority:    1,
+	}})
+	if err == nil {
+		t.Fatal("expected invalid regex to be rejected during preparation")
+	}
+}
+
 func withCustomRule(input CustomRule, mutate func(*CustomRule)) CustomRule {
 	input.Destinations = append([]CustomRuleDestination(nil), input.Destinations...)
 	mutate(&input)

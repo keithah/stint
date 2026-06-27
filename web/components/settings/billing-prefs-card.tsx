@@ -12,7 +12,7 @@ const BILLING_LABELS: Record<BillingPref["billing_type"], string> = {
 
 export function BillingPrefsCard() {
   const client = useQueryClient();
-  const billingPrefs = useQuery({ queryKey: ["billing-prefs"], queryFn: listBillingPrefs, retry: false });
+  const billingPrefs = useQuery({ queryKey: ["billing-prefs"], queryFn: listBillingPrefs, });
   const [agent, setAgent] = useState("claude-code");
   const [billingType, setBillingType] = useState<BillingPref["billing_type"]>("subscription");
   const canSave = agent.trim() !== "";

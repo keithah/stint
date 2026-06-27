@@ -37,4 +37,4 @@ assert.match(source, /<DailyRows rows=\{dayRows\}/);
 assert.match(source, /<HourlyRows rows=\{hourRows\}/);
 assert.match(source, /<BestDayInsight day=\{bestDay\}/);
 assert.match(source, /<DailyAverageInsight average=\{dailyAverage\}/);
-assert.match(packageJSON, /app\/\(console\)\/insights\/breakdown-coverage\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

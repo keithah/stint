@@ -199,19 +199,61 @@ func fetch(ctx context.Context, client *http.Client, url string) ([]byte, error)
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			if attempt < 2 {
+				if waitErr := waitPricingRetry(ctx, attempt); waitErr != nil {
+					return nil, waitErr
+				}
+				continue
+			}
+			return nil, err
+		}
+		body, readErr := readPricingResponse(resp, url)
+		if readErr == nil {
+			return body, nil
+		}
+		lastErr = readErr
+		if attempt < 2 && isTransientPricingStatus(resp.StatusCode) {
+			if waitErr := waitPricingRetry(ctx, attempt); waitErr != nil {
+				return nil, waitErr
+			}
+			continue
+		}
+		return nil, readErr
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
+	return nil, lastErr
+}
+
+func readPricingResponse(resp *http.Response, url string) ([]byte, error) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch %s: status %d", url, resp.StatusCode)
 	}
 	return io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+}
+
+func isTransientPricingStatus(status int) bool {
+	return status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status >= 500
+}
+
+func waitPricingRetry(ctx context.Context, attempt int) error {
+	delay := time.Duration(attempt+1) * 200 * time.Millisecond
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // CountLiteLLM and CountOpenRouter validate a snapshot by parsing it and return

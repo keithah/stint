@@ -20,6 +20,8 @@ type MemoryLeaderboardCache struct {
 	entries map[string]memoryLeaderboardEntry
 }
 
+const maxMemoryLeaderboardEntries = 128
+
 type memoryLeaderboardEntry struct {
 	entries   []services.LeaderboardEntry
 	expiresAt time.Time
@@ -46,8 +48,36 @@ func (c *MemoryLeaderboardCache) Get(_ context.Context, rangeName string) ([]ser
 func (c *MemoryLeaderboardCache) Set(_ context.Context, rangeName string, entries []services.LeaderboardEntry, ttl time.Duration) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.entries[rangeName] = memoryLeaderboardEntry{entries: append([]services.LeaderboardEntry(nil), entries...), expiresAt: time.Now().Add(ttl)}
+	now := time.Now()
+	c.sweepExpired(now)
+	c.evictOldestIfFull()
+	c.entries[rangeName] = memoryLeaderboardEntry{entries: append([]services.LeaderboardEntry(nil), entries...), expiresAt: now.Add(ttl)}
 	return nil
+}
+
+func (c *MemoryLeaderboardCache) sweepExpired(now time.Time) {
+	for key, entry := range c.entries {
+		if now.After(entry.expiresAt) {
+			delete(c.entries, key)
+		}
+	}
+}
+
+func (c *MemoryLeaderboardCache) evictOldestIfFull() {
+	if len(c.entries) < maxMemoryLeaderboardEntries {
+		return
+	}
+	var oldestKey string
+	var oldest time.Time
+	for key, entry := range c.entries {
+		if oldestKey == "" || entry.expiresAt.Before(oldest) {
+			oldestKey = key
+			oldest = entry.expiresAt
+		}
+	}
+	if oldestKey != "" {
+		delete(c.entries, oldestKey)
+	}
 }
 
 type RedisLeaderboardCache struct {
@@ -83,6 +113,10 @@ func (c *RedisLeaderboardCache) Set(ctx context.Context, rangeName string, entri
 		return err
 	}
 	return c.client.Set(ctx, leaderboardKey(rangeName), raw, ttl).Err()
+}
+
+func (c *RedisLeaderboardCache) Close() error {
+	return c.client.Close()
 }
 
 func leaderboardKey(rangeName string) string {

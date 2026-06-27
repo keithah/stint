@@ -7,4 +7,4 @@ const packageJSON = readFileSync("package.json", "utf8");
 assert.match(source, /import \{ boundedPercent \} from "@\/lib\/chart-percent";/);
 assert.match(source, /style=\{\{ width: `\$\{boundedPercent\(item\.percent\)\}%` \}\}/);
 assert.doesNotMatch(source, /style=\{\{ width: `\$\{item\.percent\}%` \}\}/);
-assert.match(packageJSON, /app\/\(console\)\/goals\/goal-progress\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

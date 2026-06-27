@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -13,6 +14,10 @@ type Config struct {
 	BaseURL                 string
 	WebBaseURL              string
 	DatabaseURL             string
+	DBMaxConns              int32
+	DBMinConns              int32
+	DBMaxConnLifetime       time.Duration
+	DBMaxConnIdleTime       time.Duration
 	RedisURL                string
 	GitHubClientID          string
 	GitHubClientSecret      string
@@ -49,6 +54,10 @@ func Load() Config {
 		BaseURL:                 baseURL,
 		WebBaseURL:              getenv("WEB_BASE_URL", "http://localhost:3000"),
 		DatabaseURL:             getenv("DATABASE_URL", "postgres://stint:stint@localhost:5432/stint?sslmode=disable"),
+		DBMaxConns:              getenvInt32("STINT_DB_MAX_CONNS", 16),
+		DBMinConns:              getenvInt32("STINT_DB_MIN_CONNS", 0),
+		DBMaxConnLifetime:       getenvDuration("STINT_DB_MAX_CONN_LIFETIME", time.Hour),
+		DBMaxConnIdleTime:       getenvDuration("STINT_DB_MAX_CONN_IDLE_TIME", 15*time.Minute),
 		RedisURL:                getenv("REDIS_URL", "redis://localhost:6379"),
 		GitHubClientID:          os.Getenv("GITHUB_CLIENT_ID"),
 		GitHubClientSecret:      os.Getenv("GITHUB_CLIENT_SECRET"),
@@ -98,6 +107,30 @@ func getenvInt(key string, fallback int) int {
 	}
 	parsed, err := strconv.Atoi(value)
 	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func getenvInt32(key string, fallback int32) int32 {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 32)
+	if err != nil || parsed < 0 {
+		return fallback
+	}
+	return int32(parsed)
+}
+
+func getenvDuration(key string, fallback time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil || parsed < 0 {
 		return fallback
 	}
 	return parsed

@@ -10,5 +10,5 @@ assert.match(source, /const signOut = useMutation/);
 assert.match(source, /mutationFn: logout/);
 assert.match(source, /window\.location\.href = "\/login"/);
 assert.match(source, /<LogOut size=\{16\} \/> Sign out/);
-assert.match(packageJSON, /lib\/auth-api\.test\.ts/);
-assert.match(packageJSON, /app\/\(console\)\/settings\/logout-button\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

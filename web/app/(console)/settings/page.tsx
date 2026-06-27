@@ -18,6 +18,7 @@ import { PricingSourcesCard } from "@/components/settings/pricing-sources-card";
 import { ProfileCard } from "@/components/settings/profile-card";
 import { ShareTokensCard } from "@/components/settings/share-tokens-card";
 import { WakaTimeImportCard } from "@/components/settings/wakatime-import-card";
+import { useJobEvents } from "@/lib/job-events";
 
 export default function SettingsPage() {
   return (
@@ -26,6 +27,8 @@ export default function SettingsPage() {
 }
 
 function SettingsContent() {
+  useJobEvents();
+
   return (
     <div className="mx-auto max-w-5xl px-5 py-6 lg:px-8">
       <PageHeader

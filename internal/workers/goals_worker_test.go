@@ -1,9 +1,11 @@
 package workers
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/keithah/stint/internal/db"
 	"github.com/keithah/stint/internal/jobs"
 	"github.com/keithah/stint/internal/services"
@@ -62,4 +64,71 @@ func TestShouldEvaluateGoalUserForManualTaskIgnoresLocalMidnight(t *testing.T) {
 	if !shouldEvaluateGoalUserForTask(payload, db.User{Timezone: "UTC"}, now) {
 		t.Fatal("expected manual goals evaluation to evaluate all users")
 	}
+}
+
+func TestGoalsWorkerLoadsHistoryOncePerUser(t *testing.T) {
+	userID := uuid.New()
+	store := &countingGoalsStore{
+		users: []db.User{{
+			ID:             userID,
+			Timezone:       "UTC",
+			TimeoutMinutes: 15,
+		}},
+		goals: []db.Goal{
+			{ID: uuid.New(), Title: "Daily", Delta: "day", Seconds: 60, IsEnabled: true},
+			{ID: uuid.New(), Title: "Weekly", Delta: "week", Seconds: 120, IsEnabled: true},
+		},
+	}
+	worker := GoalsWorker{Store: store}
+
+	evaluated, err := worker.Evaluate(context.Background(), time.Date(2026, 6, 25, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("Evaluate returned error: %v", err)
+	}
+	if evaluated != 2 {
+		t.Fatalf("expected 2 evaluated goals, got %d", evaluated)
+	}
+	if store.heartbeatsBetweenCalls != 1 {
+		t.Fatalf("expected one bounded heartbeat load per user, got %d", store.heartbeatsBetweenCalls)
+	}
+	if store.externalDurationsBetweenCalls != 1 {
+		t.Fatalf("expected one bounded external duration load per user, got %d", store.externalDurationsBetweenCalls)
+	}
+}
+
+type countingGoalsStore struct {
+	users                         []db.User
+	goals                         []db.Goal
+	heartbeatsBetweenCalls        int
+	externalDurationsBetweenCalls int
+}
+
+func (s *countingGoalsStore) ListUsers(context.Context) ([]db.User, error) {
+	return s.users, nil
+}
+
+func (s *countingGoalsStore) ListGoals(context.Context, uuid.UUID) ([]db.Goal, error) {
+	return s.goals, nil
+}
+
+func (s *countingGoalsStore) AllHeartbeats(context.Context, uuid.UUID) ([]services.Heartbeat, error) {
+	return nil, nil
+}
+
+func (s *countingGoalsStore) HeartbeatsBetween(context.Context, uuid.UUID, float64, float64) ([]services.Heartbeat, error) {
+	s.heartbeatsBetweenCalls++
+	return nil, nil
+}
+
+func (s *countingGoalsStore) ListExternalDurations(context.Context, uuid.UUID) ([]db.ExternalDuration, error) {
+	return nil, nil
+}
+
+func (s *countingGoalsStore) ExternalDurationsBetween(context.Context, uuid.UUID, time.Time, time.Time) ([]db.ExternalDuration, error) {
+	s.externalDurationsBetweenCalls++
+	return nil, nil
+}
+
+func (s *countingGoalsStore) UpsertGoalEvaluation(context.Context, uuid.UUID, db.Goal, services.GoalProgress, time.Time, time.Time) (db.GoalEvaluation, error) {
+	return db.GoalEvaluation{}, nil
 }

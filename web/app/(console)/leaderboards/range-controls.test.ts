@@ -10,5 +10,5 @@ assert.match(source, /value="all_time"/);
 assert.match(source, /Create custom range/);
 assert.match(source, /Edit custom range/);
 assert.match(source, /placeholder="YYYY or YYYY-MM"/);
-assert.match(packageJSON, /lib\/leaderboard-ranges\.test\.ts/);
-assert.match(packageJSON, /app\/\(console\)\/leaderboards\/range-controls\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

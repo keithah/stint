@@ -3,6 +3,7 @@ package workers
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -27,8 +28,17 @@ func (w PricingWorker) HandlePricingRefreshTask(ctx context.Context, _ *asynq.Ta
 	// Both sources are refreshed independently; one failing must not block the
 	// other. Errors are recorded per source and the task still succeeds so the
 	// scheduler does not retry-storm on a flaky upstream.
-	w.refresh(ctx, client, "litellm", pricing.LiteLLMURL, pricing.FetchLiteLLM, pricing.CountLiteLLM)
-	w.refresh(ctx, client, "openrouter", pricing.OpenRouterURL, pricing.FetchOpenRouter, pricing.CountOpenRouter)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		w.refresh(ctx, client, "litellm", pricing.LiteLLMURL, pricing.FetchLiteLLM, pricing.CountLiteLLM)
+	}()
+	go func() {
+		defer wg.Done()
+		w.refresh(ctx, client, "openrouter", pricing.OpenRouterURL, pricing.FetchOpenRouter, pricing.CountOpenRouter)
+	}()
+	wg.Wait()
 	return nil
 }
 

@@ -27,6 +27,10 @@ func VerifyOAuthSecret(hash, value string) bool {
 	return VerifyAPIKey(hash, value)
 }
 
+func VerifyOAuthSecretDetailed(hash, value string) VerifyResult {
+	return VerifyAPIKeyDetailed(hash, value)
+}
+
 func generateSecret(prefix string, n int) (string, string, string, error) {
 	bytes := make([]byte, n)
 	if _, err := rand.Read(bytes); err != nil {

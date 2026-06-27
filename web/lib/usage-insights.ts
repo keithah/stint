@@ -22,22 +22,6 @@ export function cacheEfficiency(total: Pick<UsageTotal, "cache_read_tokens" | "i
   };
 }
 
-// Estimated savings from cache reads. Anthropic-style pricing reads cache at
-// ~10% of fresh input cost, so each cached token avoids ~90% of its fresh cost.
-// We express savings as a token-weighted multiple of fresh-input value.
-export function cacheSavingsEstimate(
-  total: Pick<UsageTotal, "cache_read_tokens" | "input_tokens">,
-  cacheDiscount = 0.9
-): { savedTokenEquivalent: number; savingsRatio: number } {
-  const cacheReadTokens = Math.max(0, total.cache_read_tokens);
-  const billable = Math.max(0, total.input_tokens) + cacheReadTokens;
-  const savedTokenEquivalent = cacheReadTokens * cacheDiscount;
-  return {
-    savedTokenEquivalent,
-    savingsRatio: billable > 0 ? savedTokenEquivalent / billable : 0
-  };
-}
-
 // Real dollar savings from prompt caching, using the server-computed
 // uncached-equivalent cost (every input-side token at the full input rate).
 // savedUSD = uncached - actual; savingsRatio is that saving as a fraction of the

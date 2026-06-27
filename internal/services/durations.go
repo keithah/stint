@@ -7,15 +7,24 @@ import (
 )
 
 func ComputeDurations(heartbeats []Heartbeat, timeout time.Duration, sliceBy string) []Duration {
+	return ComputeDurationsFromSorted(SortedHeartbeats(heartbeats), timeout, sliceBy)
+}
+
+func SortedHeartbeats(heartbeats []Heartbeat) []Heartbeat {
 	if len(heartbeats) == 0 {
 		return nil
 	}
-
 	items := append([]Heartbeat(nil), heartbeats...)
 	sort.SliceStable(items, func(i, j int) bool {
 		return items[i].Time < items[j].Time
 	})
+	return items
+}
 
+func ComputeDurationsFromSorted(items []Heartbeat, timeout time.Duration, sliceBy string) []Duration {
+	if len(items) == 0 {
+		return nil
+	}
 	grouped := map[string][]Duration{}
 	for i, heartbeat := range items {
 		seconds := 0
@@ -31,7 +40,7 @@ func ComputeDurations(heartbeats []Heartbeat, timeout time.Duration, sliceBy str
 			}
 		}
 		for _, name := range sliceNames(heartbeat, sliceBy) {
-			grouped[name] = append(grouped[name], durationRow(name, sliceBy, heartbeat.Time, seconds))
+			grouped[name] = append(grouped[name], durationRowForHeartbeat(name, sliceBy, heartbeat, seconds))
 		}
 	}
 
@@ -43,7 +52,7 @@ func ComputeDurations(heartbeats []Heartbeat, timeout time.Duration, sliceBy str
 
 	var durations []Duration
 	for _, name := range names {
-		durations = append(durations, mergeAdjacentDurations(grouped[name], timeout)...)
+		durations = append(durations, mergeAdjacentDurationsFromSorted(grouped[name])...)
 	}
 
 	sort.SliceStable(durations, func(i, j int) bool {
@@ -55,13 +64,10 @@ func ComputeDurations(heartbeats []Heartbeat, timeout time.Duration, sliceBy str
 	return durations
 }
 
-func mergeAdjacentDurations(items []Duration, timeout time.Duration) []Duration {
+func mergeAdjacentDurationsFromSorted(items []Duration) []Duration {
 	if len(items) == 0 {
 		return nil
 	}
-	sort.SliceStable(items, func(i, j int) bool {
-		return items[i].Time < items[j].Time
-	})
 	out := []Duration{items[0]}
 	for _, item := range items[1:] {
 		last := &out[len(out)-1]
@@ -69,6 +75,7 @@ func mergeAdjacentDurations(items []Duration, timeout time.Duration) []Duration 
 		gap := time.Duration((item.Time - lastEnd) * float64(time.Second))
 		if gap <= 0 {
 			last.DurationSeconds = int(item.Time - last.Time + float64(item.DurationSeconds))
+			mergeDurationAI(last, item)
 			continue
 		}
 		out = append(out, item)
@@ -159,5 +166,116 @@ func durationRow(name, sliceBy string, start float64, seconds int) Duration {
 	} else {
 		row.Project = name
 	}
+	row.AIAgentCosts = map[string]float64{}
 	return row
+}
+
+func durationRowForHeartbeat(name, sliceBy string, heartbeat Heartbeat, seconds int) Duration {
+	row := durationRow(name, sliceBy, heartbeat.Time, seconds)
+	applyHeartbeatAIToDuration(&row, heartbeat)
+	return row
+}
+
+func applyHeartbeatAIToDuration(row *Duration, heartbeat Heartbeat) {
+	if !hasAIFields(heartbeat) {
+		return
+	}
+	row.isAI = true
+	row.AIAdditions = valueOrZero(heartbeat.AILineChanges)
+	row.HumanAdditions = valueOrZero(heartbeat.HumanLineChanges)
+	row.AIInputTokens = valueOrZero(heartbeat.AIInputTokens)
+	row.AIOutputTokens = valueOrZero(heartbeat.AIOutputTokens)
+	agent := aiAttributionName(heartbeat)
+	if row.AIAgentCosts == nil {
+		row.AIAgentCosts = map[string]float64{}
+	}
+	row.AIAgentCosts[agent] += 0
+
+	promptLength := valueOrZero(heartbeat.AIPromptLength)
+	if promptLength <= 0 {
+		recomputeDurationPromptStats(row)
+		return
+	}
+	row.AIPromptLengthSum = promptLength
+	row.AIPromptEventsTotal = 1
+	if heartbeat.AISession == "" {
+		recomputeDurationPromptStats(row)
+		return
+	}
+	row.AISessions = 1
+	row.aiPromptEventsBySession = map[string]int{heartbeat.AISession: 1}
+	row.aiPromptLengthTotalsBySession = map[string]int{heartbeat.AISession: promptLength}
+	recomputeDurationPromptStats(row)
+}
+
+func mergeDurationAI(dst *Duration, src Duration) {
+	dst.isAI = dst.isAI || src.isAI
+	dst.AIAdditions += src.AIAdditions
+	dst.AIDeletions += src.AIDeletions
+	dst.HumanAdditions += src.HumanAdditions
+	dst.HumanDeletions += src.HumanDeletions
+	dst.AIInputTokens += src.AIInputTokens
+	dst.AIOutputTokens += src.AIOutputTokens
+	dst.AIPromptLengthSum += src.AIPromptLengthSum
+	dst.AIPromptEventsTotal += src.AIPromptEventsTotal
+	if dst.AIAgentCosts == nil {
+		dst.AIAgentCosts = map[string]float64{}
+	}
+	for agent, cost := range src.AIAgentCosts {
+		dst.AIAgentCosts[agent] += cost
+	}
+	if len(src.aiPromptEventsBySession) > 0 {
+		if dst.aiPromptEventsBySession == nil {
+			dst.aiPromptEventsBySession = map[string]int{}
+		}
+		for session, events := range src.aiPromptEventsBySession {
+			dst.aiPromptEventsBySession[session] += events
+		}
+	}
+	if len(src.aiPromptLengthTotalsBySession) > 0 {
+		if dst.aiPromptLengthTotalsBySession == nil {
+			dst.aiPromptLengthTotalsBySession = map[string]int{}
+		}
+		for session, length := range src.aiPromptLengthTotalsBySession {
+			dst.aiPromptLengthTotalsBySession[session] += length
+		}
+	}
+	recomputeDurationPromptStats(dst)
+}
+
+func recomputeDurationPromptStats(row *Duration) {
+	if row.AIPromptEventsTotal > 0 {
+		row.AIPromptLengthAvg = row.AIPromptLengthSum / row.AIPromptEventsTotal
+	} else {
+		row.AIPromptLengthAvg = 0
+	}
+
+	sessionPromptEvents := make([]int, 0, len(row.aiPromptEventsBySession))
+	sessionPromptLengths := make([]int, 0, len(row.aiPromptLengthTotalsBySession))
+	for _, events := range row.aiPromptEventsBySession {
+		sessionPromptEvents = append(sessionPromptEvents, events)
+	}
+	for _, length := range row.aiPromptLengthTotalsBySession {
+		sessionPromptLengths = append(sessionPromptLengths, length)
+	}
+	row.AISessions = len(row.aiPromptEventsBySession)
+	if row.AISessions == 0 {
+		row.AIPromptLengthAvgPerSession = 0
+		row.AIPromptLengthMedianPerSession = 0
+		row.AIPromptEventsAvgPerSession = 0
+		row.AIPromptEventsMedianPerSession = 0
+		return
+	}
+	row.AIPromptLengthAvgPerSession = sumInts(sessionPromptLengths) / row.AISessions
+	row.AIPromptLengthMedianPerSession = medianInt(sessionPromptLengths)
+	row.AIPromptEventsAvgPerSession = sumInts(sessionPromptEvents) / row.AISessions
+	row.AIPromptEventsMedianPerSession = medianInt(sessionPromptEvents)
+}
+
+func sumInts(values []int) int {
+	total := 0
+	for _, value := range values {
+		total += value
+	}
+	return total
 }

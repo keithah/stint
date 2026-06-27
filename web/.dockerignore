@@ -1,3 +1,11 @@
 .next
 node_modules
 npm-debug.log
+coverage
+*.log
+.env
+.env.*
+README.md
+**/*.test.ts
+**/*.test.tsx
+tsconfig.test.json

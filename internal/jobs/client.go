@@ -12,6 +12,13 @@ import (
 
 var ErrQueueUnavailable = errors.New("job queue is unavailable")
 
+const (
+	QueueCritical    = "critical"
+	QueueDefault     = "default"
+	QueueMaintenance = "maintenance"
+	QueueBulk        = "bulk"
+)
+
 type Client interface {
 	EnqueueStatsRecompute(ctx context.Context, userID uuid.UUID, ranges []string) error
 	EnqueueDataDumpProcess(ctx context.Context, userID, dumpID uuid.UUID) error
@@ -26,7 +33,7 @@ type Client interface {
 type NoopClient struct{}
 
 func (NoopClient) EnqueueStatsRecompute(context.Context, uuid.UUID, []string) error {
-	return nil
+	return ErrQueueUnavailable
 }
 
 func (NoopClient) EnqueueDataDumpProcess(context.Context, uuid.UUID, uuid.UUID) error {
@@ -74,7 +81,7 @@ func (c *AsynqClient) EnqueueStatsRecompute(ctx context.Context, userID uuid.UUI
 	if err != nil {
 		return err
 	}
-	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue("default"), asynq.MaxRetry(3))
+	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue(QueueDefault), asynq.MaxRetry(3))
 	return err
 }
 
@@ -83,7 +90,7 @@ func (c *AsynqClient) EnqueueDataDumpProcess(ctx context.Context, userID, dumpID
 	if err != nil {
 		return err
 	}
-	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue("default"), asynq.MaxRetry(3))
+	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue(QueueBulk), asynq.MaxRetry(3))
 	return err
 }
 
@@ -92,7 +99,7 @@ func (c *AsynqClient) EnqueueCustomRulesApply(ctx context.Context, userID uuid.U
 	if err != nil {
 		return err
 	}
-	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue("default"), asynq.MaxRetry(3))
+	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue(QueueBulk), asynq.MaxRetry(3))
 	return err
 }
 
@@ -101,7 +108,7 @@ func (c *AsynqClient) EnqueueWakaTimeImport(ctx context.Context, userID uuid.UUI
 	if err != nil {
 		return err
 	}
-	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue("default"), asynq.MaxRetry(3))
+	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue(QueueBulk), asynq.MaxRetry(3))
 	return err
 }
 
@@ -110,7 +117,7 @@ func (c *AsynqClient) EnqueueHeartbeatsPurge(ctx context.Context, retentionDays 
 	if err != nil {
 		return err
 	}
-	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue("default"), asynq.MaxRetry(3))
+	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue(QueueMaintenance), asynq.MaxRetry(3))
 	return err
 }
 
@@ -119,7 +126,7 @@ func (c *AsynqClient) EnqueueLeaderboardUpdate(ctx context.Context, rangeName st
 	if err != nil {
 		return err
 	}
-	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue("default"), asynq.MaxRetry(3))
+	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue(QueueDefault), asynq.MaxRetry(3))
 	return err
 }
 
@@ -128,7 +135,7 @@ func (c *AsynqClient) EnqueueGoalsEvaluate(ctx context.Context, now time.Time) e
 	if err != nil {
 		return err
 	}
-	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue("default"), asynq.MaxRetry(3))
+	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue(QueueMaintenance), asynq.MaxRetry(3))
 	return err
 }
 

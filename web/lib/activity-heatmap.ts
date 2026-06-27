@@ -25,9 +25,6 @@ export function activityHeatmapClass(day: Pick<ActivityHeatmapDay, "total_second
   return levelClasses[activityHeatmapLevel(day, maxSeconds)];
 }
 
-// Number of discrete ramp levels (0 = empty … HEATMAP_LEVELS-1 = hottest).
-export const HEATMAP_LEVELS = levelClasses.length;
-
 // Class for a specific ramp level, for an accurate Less→More legend. Going
 // through activityHeatmapClass with synthetic seconds skips level 1 and repeats
 // the top level (activityHeatmapLevel floors then adds 1), so legends use this.

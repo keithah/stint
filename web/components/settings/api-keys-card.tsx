@@ -9,7 +9,7 @@ import { noopSubscribe, serverWakaTimeAPIURL } from "@/components/settings/share
 
 export function ApiKeysCard() {
   const client = useQueryClient();
-  const user = useQuery({ queryKey: ["me"], queryFn: me, retry: false });
+  const user = useQuery({ queryKey: ["me"], queryFn: me, });
   const [latestKey, setLatestKey] = useState("");
   const [name, setName] = useState("Workstation");
   const [keyScopes, setKeyScopes] = useState("");

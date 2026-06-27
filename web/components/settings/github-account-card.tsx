@@ -6,10 +6,9 @@ import { logout, me } from "@/lib/api";
 import { SecondaryButton } from "@/components/ui";
 
 export function GitHubAccountCard() {
-  const user = useQuery({ queryKey: ["me"], queryFn: me, retry: false });
-  const publicOrigin = typeof window === "undefined" ? "" : window.location.origin;
+  const user = useQuery({ queryKey: ["me"], queryFn: me, });
   const publicHandle = (user.data?.data.public_username?.trim() || user.data?.data.github_username || "username").replace(/^@/, "");
-  const publicProfileURL = `${publicOrigin}/@${publicHandle}`;
+  const publicProfilePath = `/@${publicHandle}`;
   const signOut = useMutation({
     mutationFn: logout,
     onSuccess: () => {
@@ -22,7 +21,7 @@ export function GitHubAccountCard() {
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex min-w-0 items-center gap-4">
           <a
-            href={publicProfileURL}
+            href={publicProfilePath}
             target="_blank"
             rel="noreferrer"
             title="View your public profile"

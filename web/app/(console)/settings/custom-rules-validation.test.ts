@@ -9,4 +9,4 @@ assert.match(source, /source_value: ruleSourceValue\.trim\(\)/);
 assert.match(source, /destination_value: ruleDestinationValue\.trim\(\)/);
 assert.match(source, /onChange=\{\(event\) => setRulePriority\(Math\.max\(1, Number\(event\.target\.value\) \|\| 1\)\)\}/);
 assert.match(source, /disabled=\{saveRule\.isPending \|\| !canSaveCustomRule\}/);
-assert.match(packageJSON, /app\/\(console\)\/settings\/custom-rules-validation\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

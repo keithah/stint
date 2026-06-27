@@ -1,7 +1,6 @@
 package collector
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,14 +122,8 @@ func scanCrushFile(path string, state *State, events *[]usage.Event, report *Sca
 		return
 	}
 
-	b, err := os.ReadFile(path)
-	if err != nil {
-		report.Errors++
-		return
-	}
-
 	var sess crushSession
-	if err := json.Unmarshal(b, &sess); err != nil {
+	if err := decodeJSONFile(path, &sess); err != nil {
 		report.Errors++
 		report.LinesSkipped++
 		// Record the cursor so an unparseable file is not retried every scan.

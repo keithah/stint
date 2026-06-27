@@ -36,19 +36,21 @@ function AICostsContent() {
   const [costMode, setCostMode] = useState<UsageCostMode>("auto");
   const [agent, setAgent] = useState<string | null>(null);
 
-  const user = useQuery({ queryKey: ["me"], queryFn: me, retry: false });
-  const summary = useQuery({
-    queryKey: ["usage-summary", range, costMode, agent],
-    queryFn: () => usageSummary(range, costMode, agent ?? undefined),
-    retry: false,
-    refetchInterval: 60000
-  });
-  const blocks = useQuery({
-    queryKey: ["usage-blocks", costMode, agent],
-    queryFn: () => usageBlocks("last_30_days", costMode, agent ?? undefined),
-    retry: false,
-    refetchInterval: 60000
-  });
+  const user = useQuery({ queryKey: ["me"], queryFn: me, });
+	  const summary = useQuery({
+	    queryKey: ["usage-summary", range, costMode, agent],
+	    queryFn: () => usageSummary(range, costMode, agent ?? undefined),
+	    staleTime: 60000,
+	    refetchOnWindowFocus: true,
+	    refetchIntervalInBackground: false
+	  });
+	  const blocks = useQuery({
+	    queryKey: ["usage-blocks", costMode, agent],
+	    queryFn: () => usageBlocks("last_30_days", costMode, agent ?? undefined),
+	    staleTime: 60000,
+	    refetchOnWindowFocus: true,
+	    refetchIntervalInBackground: false
+	  });
 
   const data = summary.data?.data;
   const currentBlock = blocks.data?.data.current ?? null;
@@ -298,7 +300,8 @@ function SummaryBody({
 }
 
 function CostHeatmap({ data }: { data: UsageSummary }) {
-  const days = data.by_day;
+  const allDays = data.by_day;
+  const days = allDays.slice(-365);
   const maxCost = Math.max(1, ...days.map((day) => day.cost_usd));
   return (
     <div className="ops-chart-panel rounded border border-line bg-panel/95 p-4 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
@@ -313,20 +316,23 @@ function CostHeatmap({ data }: { data: UsageSummary }) {
         </div>
       </div>
       {days.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {days.map((day) => {
-            const cellTitle = `${day.date}: ${formatUSD(day.cost_usd)} · ${compactNumber(day.tokens)} tokens`;
-            return (
-              <div
-                key={day.date}
-                // Reuse the activity-heatmap colour ramp, scaled to cost in cents.
-                className={`h-5 w-5 rounded-sm border ${activityHeatmapClass({ total_seconds: Math.round(day.cost_usd * 100) }, Math.round(maxCost * 100))}`}
-                title={cellTitle}
-                aria-label={cellTitle}
-              />
-            );
-          })}
-        </div>
+        <>
+          {allDays.length > days.length ? <p className="mb-3 text-xs text-zinc-500">Showing latest {days.length} days.</p> : null}
+          <div className="flex flex-wrap gap-1.5">
+            {days.map((day) => {
+              const cellTitle = `${day.date}: ${formatUSD(day.cost_usd)} · ${compactNumber(day.tokens)} tokens`;
+              return (
+                <div
+                  key={day.date}
+                  // Reuse the activity-heatmap colour ramp, scaled to cost in cents.
+                  className={`h-5 w-5 rounded-sm border ${activityHeatmapClass({ total_seconds: Math.round(day.cost_usd * 100) }, Math.round(maxCost * 100))}`}
+                  title={cellTitle}
+                  aria-label={cellTitle}
+                />
+              );
+            })}
+          </div>
+        </>
       ) : (
         <p className="text-sm text-zinc-500">No daily usage in this range.</p>
       )}

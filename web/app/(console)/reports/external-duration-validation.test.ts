@@ -10,4 +10,4 @@ assert.match(source, /project: externalProject\.trim\(\) \|\| undefined/);
 assert.match(source, /language: externalLanguage\.trim\(\) \|\| undefined/);
 assert.match(source, /onChange=\{\(event\) => setExternalMinutes\(Math\.max\(1, Number\(event\.target\.value\) \|\| 1\)\)\}/);
 assert.match(source, /disabled=\{createExternal\.isPending \|\| !canCreateExternalDuration\}/);
-assert.match(packageJSON, /app\/\(console\)\/reports\/external-duration-validation\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

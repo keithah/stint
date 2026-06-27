@@ -6,7 +6,7 @@ import { serverMeta, wakatimeAPIURL } from "@/lib/api";
 import { Diagnostic, noopSubscribe, serverWakaTimeAPIURL } from "@/components/settings/shared";
 
 export function DiagnosticsCard() {
-  const meta = useQuery({ queryKey: ["server-meta"], queryFn: serverMeta, retry: false, staleTime: 60000 });
+  const meta = useQuery({ queryKey: ["server-meta"], queryFn: serverMeta, staleTime: 60000 });
   const apiURL = useSyncExternalStore(noopSubscribe, wakatimeAPIURL, serverWakaTimeAPIURL);
 
   return (

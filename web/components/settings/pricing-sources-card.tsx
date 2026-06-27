@@ -23,8 +23,8 @@ function fmtRate(perMillion: number): string {
 }
 
 export function PricingSourcesCard() {
-  const sources = useQuery({ queryKey: ["pricing-sources"], queryFn: listPricingSources, retry: false });
-  const models = useQuery({ queryKey: ["pricing-models"], queryFn: listPricingModels, retry: false });
+  const sources = useQuery({ queryKey: ["pricing-sources"], queryFn: listPricingSources, });
+  const models = useQuery({ queryKey: ["pricing-models"], queryFn: listPricingModels, });
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(() => {

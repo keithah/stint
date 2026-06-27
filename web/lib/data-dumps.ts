@@ -33,7 +33,7 @@ export function hasPendingDumps(data: { data: DataDump[] } | undefined) {
   return (data?.data ?? []).some((dump) => !isTerminalDumpStatus(dump.status));
 }
 
-export function isCompletedDump(status: string) {
+function isCompletedDump(status: string) {
   return status.toLowerCase() === "completed";
 }
 

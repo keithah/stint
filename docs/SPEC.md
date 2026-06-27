@@ -61,7 +61,7 @@ A drop-in replacement for WakaTime's backend + dashboard. Any IDE plugin (wakati
 ### API Keys
 - Users can generate named API keys from Settings
 - Keys are UUID-format strings so `wakatime-cli` accepts them before sending a request
-- Stored as bcrypt hash in DB; only the full key is shown once at creation
+- Stored as a versioned SHA-256 token hash in DB; legacy bcrypt hashes verify once and are lazily upgraded
 - Keys support the same scopes as WakaTime OAuth tokens
 - Accept via:
   - `Authorization: Basic base64(api_key:)` (wakatime-cli default)
@@ -457,6 +457,7 @@ email
 | DELETE | `/api/v1/users/current/leaderboards/:board` | Delete leaderboard |
 | POST | `/api/v1/users/current/leaderboards/:board/members` | Add leaderboard member |
 | DELETE | `/api/v1/users/current/leaderboards/:board/members/:user` | Remove leaderboard member |
+| GET | `/api/v1/users/current/events` | Server-sent job progress invalidation events |
 
 #### Machine Names
 | Method | Path | Description |

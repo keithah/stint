@@ -53,7 +53,7 @@ export function UsageBlockPanel({ block }: { block: UsageCurrentBlock | null }) 
           <span>ends {endLabel} · {progress.remainingMinutes} min left</span>
         </div>
         <div className="h-2.5 overflow-hidden rounded-full bg-white/5" role="progressbar" aria-valuenow={Math.round(progress.percent)} aria-valuemin={0} aria-valuemax={100}>
-          <div className="h-full rounded-full bg-accent transition-[width] duration-700" style={{ width: `${progress.percent}%` }} />
+          <div className="h-full origin-left rounded-full bg-accent transition-transform duration-700" style={{ transform: `scaleX(${progress.percent / 100})` }} />
         </div>
       </div>
 

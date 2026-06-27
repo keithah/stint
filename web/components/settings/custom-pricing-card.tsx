@@ -8,7 +8,7 @@ import { customPricingError } from "@/app/(console)/settings/custom-pricing-vali
 
 export function CustomPricingCard() {
   const client = useQueryClient();
-  const customPricing = useQuery({ queryKey: ["custom-pricing"], queryFn: listCustomPricing, retry: false });
+  const customPricing = useQuery({ queryKey: ["custom-pricing"], queryFn: listCustomPricing, });
   const [priceModel, setPriceModel] = useState("opencode/big-pickle");
   const [priceInput, setPriceInput] = useState(0);
   const [priceOutput, setPriceOutput] = useState(0);

@@ -109,6 +109,42 @@ func TestClientPostNon2xx(t *testing.T) {
 	}
 }
 
+func TestClientPostRetriesTransientServerErrors(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = io.WriteString(w, `temporary`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"data":{"received":1,"inserted":1}}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "k")
+	c.RetryBaseDelay = 1
+	ev := usage.Event{Agent: "claude", MessageID: "m", InputTokens: 1}
+	ev.EnsureID()
+	res, err := c.Post(context.Background(), []usage.Event{ev})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+	if res.Inserted != 1 {
+		t.Fatalf("inserted = %d, want 1", res.Inserted)
+	}
+}
+
+func TestClientUsesTimeoutHTTPClientWhenNoneProvided(t *testing.T) {
+	c := NewClient("http://example.test", "k")
+	if got := c.httpClient().Timeout; got <= 0 {
+		t.Fatalf("expected fallback HTTP client to have a timeout, got %s", got)
+	}
+}
+
 func itoa(n int) string {
 	if n == 0 {
 		return "0"

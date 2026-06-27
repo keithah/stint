@@ -51,14 +51,15 @@ func ComputeStatsForRangeWithExternalDurationsAndAICosts(heartbeats []Heartbeat,
 		}
 	}
 
-	projectDurations := append(ComputeDurations(inRange, timeout, "project"), ExternalDurationsInWindow(external, "project", window.Start, window.End)...)
-	languageDurations := append(ComputeDurations(inRange, timeout, "language"), ExternalDurationsInWindow(external, "language", window.Start, window.End)...)
-	editorDurations := ComputeDurations(inRange, timeout, "editor")
-	osDurations := ComputeDurations(inRange, timeout, "operating_system")
-	machineDurations := ComputeDurations(inRange, timeout, "machine")
-	categoryDurations := append(ComputeDurations(inRange, timeout, "category"), ExternalDurationsInWindow(external, "category", window.Start, window.End)...)
-	branchDurations := append(ComputeDurations(inRange, timeout, "branch"), ExternalDurationsInWindow(external, "branch", window.Start, window.End)...)
-	dependencyDurations := ComputeDurations(inRange, timeout, "dependencies")
+	sortedInRange := SortedHeartbeats(inRange)
+	projectDurations := append(ComputeDurationsFromSorted(sortedInRange, timeout, "project"), ExternalDurationsInWindow(external, "project", window.Start, window.End)...)
+	languageDurations := append(ComputeDurationsFromSorted(sortedInRange, timeout, "language"), ExternalDurationsInWindow(external, "language", window.Start, window.End)...)
+	editorDurations := ComputeDurationsFromSorted(sortedInRange, timeout, "editor")
+	osDurations := ComputeDurationsFromSorted(sortedInRange, timeout, "operating_system")
+	machineDurations := ComputeDurationsFromSorted(sortedInRange, timeout, "machine")
+	categoryDurations := append(ComputeDurationsFromSorted(sortedInRange, timeout, "category"), ExternalDurationsInWindow(external, "category", window.Start, window.End)...)
+	branchDurations := append(ComputeDurationsFromSorted(sortedInRange, timeout, "branch"), ExternalDurationsInWindow(external, "branch", window.Start, window.End)...)
+	dependencyDurations := ComputeDurationsFromSorted(sortedInRange, timeout, "dependencies")
 	total := sumDurations(projectDurations)
 
 	dayTotals := map[string]int{}
@@ -389,6 +390,8 @@ func computeAIMetrics(heartbeats []Heartbeat, durations []Duration, start time.T
 	agentSessions := map[string]map[string]struct{}{}
 	daySessions := map[string]map[string]struct{}{}
 	promptLengths := []int{}
+	promptEventsBySession := map[string]int{}
+	promptLengthTotalsBySession := map[string]int{}
 	windowEnd := start.AddDate(0, 0, days)
 	dailyStart := windowEnd.AddDate(0, 0, -1)
 	weeklyStart := windowEnd.AddDate(0, 0, -7)
@@ -396,6 +399,9 @@ func computeAIMetrics(heartbeats []Heartbeat, durations []Duration, start time.T
 
 	aiSecondsByDay := map[string]int{}
 	for _, duration := range durations {
+		if !duration.isAI {
+			continue
+		}
 		day := time.Unix(int64(duration.Time), 0).In(start.Location()).Format("2006-01-02")
 		aiSecondsByDay[day] += duration.DurationSeconds
 	}
@@ -409,6 +415,10 @@ func computeAIMetrics(heartbeats []Heartbeat, durations []Duration, start time.T
 		metrics.AIPromptLength += promptLength
 		if promptLength > 0 {
 			promptLengths = append(promptLengths, promptLength)
+			if heartbeat.AISession != "" {
+				promptEventsBySession[heartbeat.AISession]++
+				promptLengthTotalsBySession[heartbeat.AISession] += promptLength
+			}
 		}
 		if heartbeat.AISession != "" {
 			sessions[heartbeat.AISession] = struct{}{}
@@ -444,6 +454,8 @@ func computeAIMetrics(heartbeats []Heartbeat, durations []Duration, start time.T
 		metrics.MedianPromptLength = medianInt(promptLengths)
 	}
 	metrics.SessionCount = len(sessions)
+	metrics.AISessions = metrics.SessionCount
+	applyWakaTimeAIAliases(&metrics, promptEventsBySession, promptLengthTotalsBySession)
 
 	for day, seconds := range aiSecondsByDay {
 		stat := dayTotals[day]
@@ -482,6 +494,7 @@ func computeAIMetrics(heartbeats []Heartbeat, durations []Duration, start time.T
 	}
 
 	metrics.Agents = sortedAIStats(agentTotals)
+	applyWakaTimeAgentAliases(&metrics)
 	metrics.Days = orderedDayAIStats(dayTotals, start, days)
 	metrics.Costs = sortedAICostPeriods(costPeriods, costs)
 	// Default to an empty (non-nil) slice so the field never serializes as JSON
@@ -572,6 +585,9 @@ func computeProjectAIMetrics(heartbeats []Heartbeat, durations []Duration, costs
 	projectCosts := map[string]map[string]*aiCostTokenTotals{}
 
 	for _, duration := range durations {
+		if !duration.isAI {
+			continue
+		}
 		stat := projectTotals[duration.Name]
 		if stat == nil {
 			stat = &AIStat{Name: duration.Name}
@@ -728,8 +744,54 @@ func orderedDayAIStats(totals map[string]*AIStat, start time.Time, days int) []A
 }
 
 func hasAIFields(heartbeat Heartbeat) bool {
+	if strings.EqualFold(strings.TrimSpace(heartbeat.Category), "ai coding") {
+		return true
+	}
 	return heartbeat.AILineChanges != nil || heartbeat.HumanLineChanges != nil || heartbeat.AIInputTokens != nil ||
 		heartbeat.AIOutputTokens != nil || heartbeat.AIPromptLength != nil || heartbeat.AISession != ""
+}
+
+func applyWakaTimeAIAliases(metrics *AIMetrics, promptEventsBySession, promptLengthTotalsBySession map[string]int) {
+	metrics.AIAdditions = metrics.AILineChanges
+	metrics.AIDeletions = 0
+	metrics.HumanAdditions = metrics.HumanLineChanges
+	metrics.HumanDeletions = 0
+	metrics.AILineChangesTotal = metrics.AILineChanges
+	metrics.AIPromptLengthAvg = metrics.AveragePromptLength
+	metrics.AIPromptLengthSum = metrics.AIPromptLength
+	metrics.AIPromptEventsTotal = metrics.PromptCount
+
+	sessionCount := len(promptEventsBySession)
+	if sessionCount == 0 {
+		return
+	}
+	eventCounts := make([]int, 0, sessionCount)
+	lengthTotals := make([]int, 0, sessionCount)
+	for session, events := range promptEventsBySession {
+		eventCounts = append(eventCounts, events)
+		lengthTotals = append(lengthTotals, promptLengthTotalsBySession[session])
+	}
+	metrics.AIPromptEventsAvgPerSession = sumInts(eventCounts) / sessionCount
+	metrics.AIPromptEventsMedianPerSession = medianInt(eventCounts)
+	metrics.AIPromptLengthAvgPerSession = sumInts(lengthTotals) / sessionCount
+	metrics.AIPromptLengthMedianPerSession = medianInt(lengthTotals)
+}
+
+func applyWakaTimeAgentAliases(metrics *AIMetrics) {
+	metrics.AIAgentLineChanges = map[string]int{}
+	metrics.AIAgentCosts = map[string]float64{}
+	metrics.AIAgentBreakdown = make([]AIAgentBreakdown, 0, len(metrics.Agents))
+	for _, agent := range metrics.Agents {
+		cost := float64(agent.EstimatedCostCents) / 100
+		metrics.AIAgentLineChanges[agent.Name] = agent.AILineChanges
+		metrics.AIAgentCosts[agent.Name] = cost
+		metrics.AIAgentTotalCost += cost
+		metrics.AIAgentBreakdown = append(metrics.AIAgentBreakdown, AIAgentBreakdown{
+			Name:  agent.Name,
+			Lines: agent.AILineChanges,
+			Cost:  cost,
+		})
+	}
 }
 
 func valueOrZero(value *int) int {

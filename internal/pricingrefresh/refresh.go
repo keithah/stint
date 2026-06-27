@@ -13,8 +13,9 @@ import (
 )
 
 type Refresher struct {
-	Store  *db.Store
-	Engine *pricing.Engine
+	Store   *db.Store
+	Engine  *pricing.Engine
+	OnError func(error)
 }
 
 // Sync reloads the engine from the cached snapshots when either source is newer
@@ -57,7 +58,10 @@ func (r Refresher) Sync(ctx context.Context, since time.Time) (time.Time, error)
 // swallowed: a transient DB hiccup must not crash the host process, and the next
 // tick retries.
 func (r Refresher) Run(ctx context.Context, interval time.Duration) {
-	since, _ := r.Sync(ctx, time.Time{})
+	since, err := r.Sync(ctx, time.Time{})
+	if err != nil {
+		r.reportError(err)
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -65,7 +69,18 @@ func (r Refresher) Run(ctx context.Context, interval time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			since, _ = r.Sync(ctx, since)
+			nextSince, err := r.Sync(ctx, since)
+			if err != nil {
+				r.reportError(err)
+				continue
+			}
+			since = nextSince
 		}
+	}
+}
+
+func (r Refresher) reportError(err error) {
+	if err != nil && r.OnError != nil {
+		r.OnError(err)
 	}
 }

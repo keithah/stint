@@ -1,19 +1,32 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Activity, ArrowRight, Bot, Check, Coins, Copy, GitPullRequestArrow, KeyRound, Monitor, RefreshCw, Sparkles, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { AIPanel } from "@/components/ai-panel";
-import { ActivityBars, AIHumanByDay, HourlyTimeline, ProjectStackedArea, SliceBars, SliceDonut, WeekdayHeatmap } from "@/components/dashboard-charts";
 import { StatCard } from "@/components/stat-card";
+import { noopSubscribe, serverWakaTimeAPIURL } from "@/components/settings/shared";
 import { AuthGate, EmptyState, HeroHeader, SecondaryButton, SecondaryLink, SegmentedToggle, Skeleton, pillWrapperClass } from "@/components/ui";
 import { allTimeSinceToday, listProgramLanguages, me, statsForRange, statusBarToday, type AIStat, type Stats, type StatsRange, wakatimeAPIURL } from "@/lib/api";
 import { languageColorMap } from "@/lib/language-colors";
 import { rangeOptions } from "@/lib/ranges";
 import { compactNumber, formatCents } from "@/lib/number-format";
 import { ONBOARDING_STORAGE_KEY, shouldShowOnboarding } from "@/lib/onboarding-state";
+
+const AIPanel = dynamic(() => import("@/components/ai-panel").then((module) => module.AIPanel), { ssr: false, loading: ChartSkeleton });
+const ActivityBars = dynamic(() => import("@/components/dashboard-charts").then((module) => module.ActivityBars), { ssr: false, loading: ChartSkeleton });
+const AIHumanByDay = dynamic(() => import("@/components/dashboard-charts").then((module) => module.AIHumanByDay), { ssr: false, loading: ChartSkeleton });
+const HourlyTimeline = dynamic(() => import("@/components/dashboard-charts").then((module) => module.HourlyTimeline), { ssr: false, loading: ChartSkeleton });
+const ProjectStackedArea = dynamic(() => import("@/components/dashboard-charts").then((module) => module.ProjectStackedArea), { ssr: false, loading: ChartSkeleton });
+const SliceBars = dynamic(() => import("@/components/dashboard-charts").then((module) => module.SliceBars), { ssr: false, loading: ChartSkeleton });
+const SliceDonut = dynamic(() => import("@/components/dashboard-charts").then((module) => module.SliceDonut), { ssr: false, loading: ChartSkeleton });
+const WeekdayHeatmap = dynamic(() => import("@/components/dashboard-charts").then((module) => module.WeekdayHeatmap), { ssr: false, loading: ChartSkeleton });
+
+function ChartSkeleton() {
+  return <Skeleton className="h-[260px]" />;
+}
 
 export default function DashboardPage() {
   return (
@@ -24,12 +37,12 @@ export default function DashboardPage() {
 function DashboardContent() {
 	const [range, setRange] = useState<StatsRange>("last_7_days");
 	const [onboardingDismissed, setOnboardingDismissed] = useStoredBoolean(ONBOARDING_STORAGE_KEY);
-	const user = useQuery({ queryKey: ["me"], queryFn: me, retry: false });
-	const stats = useQuery({ queryKey: ["stats", range], queryFn: () => statsForRange(range), retry: false, refetchInterval: 120000 });
-	const aiTrend = useQuery({ queryKey: ["stats", "ai-trend", "last_30_days"], queryFn: () => statsForRange("last_30_days"), retry: false, refetchInterval: 120000 });
-	const status = useQuery({ queryKey: ["status-bar-today"], queryFn: statusBarToday, retry: false, refetchInterval: 120000 });
-	const allTime = useQuery({ queryKey: ["all-time"], queryFn: allTimeSinceToday, retry: false, refetchInterval: 120000 });
-	const programLanguages = useQuery({ queryKey: ["program-languages"], queryFn: listProgramLanguages, retry: false, staleTime: 3600000 });
+	const user = useQuery({ queryKey: ["me"], queryFn: me, });
+	const stats = useQuery({ queryKey: ["stats", range], queryFn: () => statsForRange(range), staleTime: 120000, refetchOnWindowFocus: true });
+	const aiTrend = useQuery({ queryKey: ["stats", "last_30_days"], queryFn: () => statsForRange("last_30_days"), staleTime: 120000, refetchOnWindowFocus: true });
+	const status = useQuery({ queryKey: ["status-bar-today"], queryFn: statusBarToday, staleTime: 120000, refetchOnWindowFocus: true });
+	const allTime = useQuery({ queryKey: ["all-time"], queryFn: allTimeSinceToday, staleTime: 120000, refetchOnWindowFocus: true });
+	const programLanguages = useQuery({ queryKey: ["program-languages"], queryFn: listProgramLanguages, staleTime: 3600000 });
 	const apiURL = useSyncExternalStore(noopSubscribe, wakatimeAPIURL, serverWakaTimeAPIURL);
 	const data = stats.data?.data;
 	const languageColors = useMemo(() => languageColorMap(programLanguages.data?.data ?? []), [programLanguages.data?.data]);
@@ -227,29 +240,37 @@ function todayDetail(project?: string, language?: string) {
 }
 
 function useStoredBoolean(key: string) {
-	const [value, setValue] = useState(() => {
-		if (typeof window !== "undefined") {
-			return window.localStorage.getItem(key) === "true";
-		}
-		return false;
-	});
+	const eventName = `stint-storage:${key}`;
+	const value = useSyncExternalStore(
+		(onStoreChange) => {
+			if (typeof window === "undefined") return noopSubscribe();
+			const onStorage = (event: StorageEvent) => {
+				if (event.key === key) onStoreChange();
+			};
+			window.addEventListener("storage", onStorage);
+			window.addEventListener(eventName, onStoreChange);
+			return () => {
+				window.removeEventListener("storage", onStorage);
+				window.removeEventListener(eventName, onStoreChange);
+			};
+		},
+		() => {
+			if (typeof window !== "undefined") {
+				return window.localStorage.getItem(key) === "true";
+			}
+			return false;
+		},
+		() => false
+	);
 	return [
 		value,
 		(nextValue: boolean) => {
-			setValue(nextValue);
 			if (typeof window !== "undefined") {
 				window.localStorage.setItem(key, String(nextValue));
+				window.dispatchEvent(new Event(eventName));
 			}
 		}
 	] as const;
-}
-
-function noopSubscribe() {
-	return () => {};
-}
-
-function serverWakaTimeAPIURL() {
-	return "/api/v1";
 }
 
 function freshnessLabel(stats?: Stats) {

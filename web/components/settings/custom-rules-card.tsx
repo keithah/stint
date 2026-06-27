@@ -18,8 +18,8 @@ const ruleOperations = [
 
 export function CustomRulesCard() {
   const client = useQueryClient();
-  const customRules = useQuery({ queryKey: ["custom-rules"], queryFn: listCustomRules, retry: false });
-  const ruleProgress = useQuery({ queryKey: ["custom-rules-progress"], queryFn: customRulesProgress, retry: false, refetchInterval: 2000 });
+  const customRules = useQuery({ queryKey: ["custom-rules"], queryFn: listCustomRules, });
+	  const ruleProgress = useQuery({ queryKey: ["custom-rules-progress"], queryFn: customRulesProgress });
   const [ruleAction, setRuleAction] = useState<"change" | "delete">("change");
   const [ruleSource, setRuleSource] = useState("entity");
   const [ruleOperation, setRuleOperation] = useState("contains");

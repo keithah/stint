@@ -1,9 +1,12 @@
 package workers
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/keithah/stint/internal/db"
 	"github.com/keithah/stint/internal/services"
 )
 
@@ -24,4 +27,51 @@ func TestComputeWorkerLeaderboardStatsIncludesExternalDurations(t *testing.T) {
 	if stats.TotalSeconds != 1800 {
 		t.Fatalf("expected leaderboard worker stats to include external duration, got %d", stats.TotalSeconds)
 	}
+}
+
+func TestLeaderboardWorkerUsesBatchedRangeLoads(t *testing.T) {
+	userID := uuid.New()
+	store := &countingLeaderboardStore{
+		users: []db.User{{
+			ID:             userID,
+			GitHubUsername: "leader",
+			Timezone:       "UTC",
+			TimeoutMinutes: 15,
+		}},
+	}
+	worker := LeaderboardWorker{Store: store}
+
+	entries, err := worker.Compute(context.Background(), "last_7_days")
+	if err != nil {
+		t.Fatalf("Compute returned error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected one leaderboard entry, got %d", len(entries))
+	}
+	if store.heartbeatsCalls != 1 {
+		t.Fatalf("expected one batched heartbeat load, got %d", store.heartbeatsCalls)
+	}
+	if store.externalCalls != 1 {
+		t.Fatalf("expected one batched external duration load, got %d", store.externalCalls)
+	}
+}
+
+type countingLeaderboardStore struct {
+	users           []db.User
+	heartbeatsCalls int
+	externalCalls   int
+}
+
+func (s *countingLeaderboardStore) ListUsers(context.Context) ([]db.User, error) {
+	return s.users, nil
+}
+
+func (s *countingLeaderboardStore) HeartbeatsForStatsRangeByUser(context.Context, []uuid.UUID, time.Time, string) (map[uuid.UUID][]services.Heartbeat, error) {
+	s.heartbeatsCalls++
+	return map[uuid.UUID][]services.Heartbeat{}, nil
+}
+
+func (s *countingLeaderboardStore) ExternalDurationsBetweenByUser(context.Context, []uuid.UUID, time.Time, time.Time) (map[uuid.UUID][]db.ExternalDuration, error) {
+	s.externalCalls++
+	return map[uuid.UUID][]db.ExternalDuration{}, nil
 }

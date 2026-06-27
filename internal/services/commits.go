@@ -20,11 +20,9 @@ func ComputeProjectCommits(heartbeats []Heartbeat, project, branch string, timeo
 
 	rows := make([]CommitSummary, 0, len(groups))
 	for hash, items := range groups {
-		sort.Slice(items, func(i, j int) bool {
-			return items[i].Time < items[j].Time
-		})
-		total := sumDurations(ComputeDurations(items, timeout, "commit"))
-		last := items[len(items)-1]
+		sortedItems := SortedHeartbeats(items)
+		total := sumDurations(ComputeDurationsFromSorted(sortedItems, timeout, "commit"))
+		last := sortedItems[len(sortedItems)-1]
 		commitTime := time.Unix(int64(last.Time), 0).UTC().Format(time.RFC3339)
 		rows = append(rows, CommitSummary{
 			ID:                            hash,

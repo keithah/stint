@@ -387,8 +387,32 @@ type GitHubProfile struct {
 	AvatarURL string
 }
 
+type PoolConfig struct {
+	MaxConns        int32
+	MinConns        int32
+	MaxConnLifetime time.Duration
+	MaxConnIdleTime time.Duration
+}
+
 func Open(ctx context.Context, databaseURL string) (*Store, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
+	return OpenWithPoolConfig(ctx, databaseURL, PoolConfig{
+		MaxConns:        16,
+		MinConns:        0,
+		MaxConnLifetime: time.Hour,
+		MaxConnIdleTime: 15 * time.Minute,
+	})
+}
+
+func OpenWithPoolConfig(ctx context.Context, databaseURL string, poolConfig PoolConfig) (*Store, error) {
+	cfg, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, err
+	}
+	cfg.MaxConns = poolConfig.MaxConns
+	cfg.MinConns = poolConfig.MinConns
+	cfg.MaxConnLifetime = poolConfig.MaxConnLifetime
+	cfg.MaxConnIdleTime = poolConfig.MaxConnIdleTime
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -405,12 +429,21 @@ func (s *Store) Close() {
 	}
 }
 
+const (
+	migrationLockTimeout   = 30 * time.Second
+	migrationUnlockTimeout = 5 * time.Second
+)
+
 func (s *Store) RunMigrations(ctx context.Context) error {
-	if _, err := s.Pool.Exec(ctx, `SELECT pg_advisory_lock(447196290717551)`); err != nil {
+	lockCtx, cancelLock := context.WithTimeout(ctx, migrationLockTimeout)
+	defer cancelLock()
+	if _, err := s.Pool.Exec(lockCtx, `SELECT pg_advisory_lock(447196290717551)`); err != nil {
 		return err
 	}
 	defer func() {
-		_, _ = s.Pool.Exec(context.Background(), `SELECT pg_advisory_unlock(447196290717551)`)
+		unlockCtx, cancelUnlock := context.WithTimeout(context.Background(), migrationUnlockTimeout)
+		defer cancelUnlock()
+		_, _ = s.Pool.Exec(unlockCtx, `SELECT pg_advisory_unlock(447196290717551)`)
 	}()
 
 	entries, err := migrationFiles.ReadDir("migrations")
@@ -693,7 +726,9 @@ func (s *Store) AuthByAPIKey(ctx context.Context, key string) (AuthResult, error
 		if err := rows.Scan(destinations...); err != nil {
 			return AuthResult{}, err
 		}
-		if auth.VerifyAPIKey(hash, key) {
+		if s.verifyTokenHash(ctx, hash, key, func(ctx context.Context, token string) error {
+			return s.upgradeAPIKeyHash(ctx, keyID, token)
+		}) {
 			_, _ = s.Pool.Exec(ctx, `UPDATE api_keys SET last_used_at = now() WHERE id = $1`, keyID)
 			return AuthResult{User: user, Kind: "api_key", Subject: keyID.String(), Scopes: scopes}, nil
 		}
@@ -784,7 +819,9 @@ func (s *Store) VerifyOAuthAppSecret(ctx context.Context, clientID, secret strin
 	if err != nil {
 		return OAuthApp{}, err
 	}
-	if !auth.VerifyOAuthSecret(hash, secret) {
+	if !s.verifyTokenHash(ctx, hash, secret, func(ctx context.Context, token string) error {
+		return s.upgradeOAuthAppSecretHash(ctx, app.ID, token)
+	}) {
 		return OAuthApp{}, pgx.ErrNoRows
 	}
 	return app, nil
@@ -832,7 +869,7 @@ func (s *Store) OAuthAuthorizationCodeUserID(ctx context.Context, clientID, code
 		if err := rows.Scan(&userID, &hash); err != nil {
 			return uuid.Nil, err
 		}
-		if auth.VerifyOAuthSecret(hash, code) {
+		if s.verifyTokenHash(ctx, hash, code, nil) {
 			return userID, nil
 		}
 	}
@@ -871,7 +908,9 @@ func (s *Store) ExchangeOAuthAuthorizationCode(ctx context.Context, clientID, co
 		if err := rows.Scan(destinations...); err != nil {
 			return OAuthTokenResult{}, err
 		}
-		if !auth.VerifyOAuthSecret(hash, code) {
+		if !s.verifyTokenHash(ctx, hash, code, func(ctx context.Context, token string) error {
+			return s.upgradeOAuthAuthorizationCodeHash(ctx, codeID, token)
+		}) {
 			continue
 		}
 		tx, err := s.Pool.Begin(ctx)
@@ -918,7 +957,7 @@ func (s *Store) OAuthRefreshTokenUserID(ctx context.Context, clientID, refreshTo
 		if err := rows.Scan(&userID, &hash); err != nil {
 			return uuid.Nil, err
 		}
-		if auth.VerifyOAuthSecret(hash, refreshToken) {
+		if s.verifyTokenHash(ctx, hash, refreshToken, nil) {
 			return userID, nil
 		}
 	}
@@ -956,7 +995,9 @@ func (s *Store) RefreshOAuthToken(ctx context.Context, clientID, refreshToken st
 		if err := rows.Scan(destinations...); err != nil {
 			return OAuthTokenResult{}, err
 		}
-		if !auth.VerifyOAuthSecret(hash, refreshToken) {
+		if !s.verifyTokenHash(ctx, hash, refreshToken, func(ctx context.Context, token string) error {
+			return s.upgradeOAuthRefreshTokenHash(ctx, tokenID, token)
+		}) {
 			continue
 		}
 		tx, err := s.Pool.Begin(ctx)
@@ -998,7 +1039,11 @@ func (s *Store) RevokeOAuthToken(ctx context.Context, clientID, token string) er
 		if err := rows.Scan(&tokenID, &accessHash, &refreshHash); err != nil {
 			return err
 		}
-		if auth.VerifyOAuthSecret(accessHash, token) || auth.VerifyOAuthSecret(refreshHash, token) {
+		if s.verifyTokenHash(ctx, accessHash, token, func(ctx context.Context, value string) error {
+			return s.upgradeOAuthAccessTokenHash(ctx, tokenID, value)
+		}) || s.verifyTokenHash(ctx, refreshHash, token, func(ctx context.Context, value string) error {
+			return s.upgradeOAuthRefreshTokenHash(ctx, tokenID, value)
+		}) {
 			_, err := s.Pool.Exec(ctx, `UPDATE oauth_tokens SET revoked_at = now() WHERE id = $1`, tokenID)
 			return err
 		}
@@ -1038,7 +1083,9 @@ func (s *Store) AuthByOAuthAccessToken(ctx context.Context, token string) (AuthR
 		if err := rows.Scan(destinations...); err != nil {
 			return AuthResult{}, err
 		}
-		if auth.VerifyOAuthSecret(hash, token) {
+		if s.verifyTokenHash(ctx, hash, token, func(ctx context.Context, value string) error {
+			return s.upgradeOAuthAccessTokenHash(ctx, tokenID, value)
+		}) {
 			_, _ = s.Pool.Exec(ctx, `UPDATE oauth_tokens SET last_used_at = now() WHERE id = $1`, tokenID)
 			return AuthResult{User: user, Kind: "oauth", Subject: tokenID.String(), Scopes: scopes}, nil
 		}
@@ -1136,7 +1183,9 @@ func (s *Store) UserByShareToken(ctx context.Context, userRef, token string) (Us
 		if err := rows.Scan(destinations...); err != nil {
 			return User{}, err
 		}
-		if auth.VerifyAPIKey(hash, token) {
+		if s.verifyTokenHash(ctx, hash, token, func(ctx context.Context, value string) error {
+			return s.upgradeShareTokenHash(ctx, tokenID, value)
+		}) {
 			_, _ = s.Pool.Exec(ctx, `UPDATE share_tokens SET last_used_at = now() WHERE id = $1`, tokenID)
 			return user, nil
 		}
@@ -1166,7 +1215,9 @@ func (s *Store) UserByShareTokenOnly(ctx context.Context, token string) (User, e
 		if err := rows.Scan(destinations...); err != nil {
 			return User{}, err
 		}
-		if auth.VerifyAPIKey(hash, token) {
+		if s.verifyTokenHash(ctx, hash, token, func(ctx context.Context, value string) error {
+			return s.upgradeShareTokenHash(ctx, tokenID, value)
+		}) {
 			_, _ = s.Pool.Exec(ctx, `UPDATE share_tokens SET last_used_at = now() WHERE id = $1`, tokenID)
 			return user, nil
 		}
@@ -1225,12 +1276,23 @@ func (s *Store) ReplaceAICostSettings(ctx context.Context, userID uuid.UUID, set
 	if _, err := tx.Exec(ctx, `DELETE FROM ai_cost_settings WHERE user_id = $1`, userID); err != nil {
 		return nil, err
 	}
-	for _, setting := range settings {
-		agent := strings.TrimSpace(setting.Agent)
-		if _, err := tx.Exec(ctx, `
+	if len(settings) > 0 {
+		batch := &pgx.Batch{}
+		for _, setting := range settings {
+			agent := strings.TrimSpace(setting.Agent)
+			batch.Queue(`
 			INSERT INTO ai_cost_settings (user_id, agent, input_cost_per_million_cents, output_cost_per_million_cents)
 			VALUES ($1, $2, $3, $4)`,
-			userID, agent, setting.InputCostPerMillionCents, setting.OutputCostPerMillionCents); err != nil {
+				userID, agent, setting.InputCostPerMillionCents, setting.OutputCostPerMillionCents)
+		}
+		results := tx.SendBatch(ctx, batch)
+		for range settings {
+			if _, err := results.Exec(); err != nil {
+				_ = results.Close()
+				return nil, err
+			}
+		}
+		if err := results.Close(); err != nil {
 			return nil, err
 		}
 	}
@@ -1310,19 +1372,23 @@ func (s *Store) InsertHeartbeat(ctx context.Context, userID uuid.UUID, heartbeat
 	return heartbeat, nil
 }
 
+type HeartbeatInsertResult struct {
+	Heartbeat services.Heartbeat
+	Duplicate bool
+	Stored    bool
+	Err       error
+}
+
+func (s *Store) InsertHeartbeats(ctx context.Context, userID uuid.UUID, heartbeats []services.Heartbeat) ([]HeartbeatInsertResult, error) {
+	return s.insertHeartbeatsWithCopyStaging(ctx, userID, heartbeats)
+}
+
 func (s *Store) HeartbeatsBetween(ctx context.Context, userID uuid.UUID, start, end float64) ([]services.Heartbeat, error) {
-	rows, err := s.Pool.Query(ctx, `
-		SELECT id, entity, type, coalesce(category, ''), time, coalesce(project, ''), coalesce(branch, ''),
-			coalesce(language, ''), coalesce(machine_name, ''), coalesce(plugin, ''), coalesce(plugin_version, ''),
-			coalesce(editor, ''), coalesce(editor_version, ''), coalesce(operating_system, ''), coalesce(architecture, ''),
-			coalesce(dependencies, ''), lines, line_number, cursor_pos, is_write, ai_line_changes,
-			human_line_changes, coalesce(ai_session, ''), ai_input_tokens, ai_output_tokens, ai_prompt_length,
-			coalesce(ai_subscription_plan, ''), coalesce(ai_model, ''), coalesce(ai_provider, ''), coalesce(ai_agent, ''),
-			coalesce(ai_agent_version, ''), coalesce(ai_agent_complexity, ''), coalesce(commit_hash, ''),
-			coalesce(metadata, '{}'::jsonb), coalesce(raw_payload, '{}'::jsonb)
+	rows, err := s.Pool.Query(ctx, fmt.Sprintf(`
+		SELECT %s
 		FROM heartbeats
 		WHERE user_id = $1 AND time >= $2 AND time < $3
-		ORDER BY time ASC`, userID, start, end)
+		ORDER BY time ASC`, heartbeatSelectColumns), userID, start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -1461,6 +1527,38 @@ func (s *Store) HeartbeatsForStatsRange(ctx context.Context, userID uuid.UUID, n
 		return nil, err
 	}
 	return s.HeartbeatsBetween(ctx, userID, float64(window.Start.Unix()), float64(window.End.Unix()))
+}
+
+func (s *Store) HeartbeatsForStatsRangeByUser(ctx context.Context, userIDs []uuid.UUID, now time.Time, rangeName string) (map[uuid.UUID][]services.Heartbeat, error) {
+	window, err := services.WindowForRange(now, rangeName)
+	if err != nil {
+		return nil, err
+	}
+	return s.HeartbeatsBetweenByUser(ctx, userIDs, float64(window.Start.Unix()), float64(window.End.Unix()))
+}
+
+func (s *Store) HeartbeatsBetweenByUser(ctx context.Context, userIDs []uuid.UUID, start, end float64) (map[uuid.UUID][]services.Heartbeat, error) {
+	result := map[uuid.UUID][]services.Heartbeat{}
+	if len(userIDs) == 0 {
+		return result, nil
+	}
+	rows, err := s.Pool.Query(ctx, fmt.Sprintf(`
+		SELECT user_id, %s
+		FROM heartbeats
+		WHERE user_id = ANY($1) AND time >= $2 AND time < $3
+		ORDER BY user_id, time ASC`, heartbeatSelectColumns), userIDs, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		userID, heartbeat, err := scanHeartbeatWithUserID(rows)
+		if err != nil {
+			return nil, err
+		}
+		result[userID] = append(result[userID], heartbeat)
+	}
+	return result, rows.Err()
 }
 
 func (s *Store) HeartbeatsForDay(ctx context.Context, userID uuid.UUID, day time.Time) ([]services.Heartbeat, error) {
@@ -1793,6 +1891,31 @@ func (s *Store) ExternalDurationsBetween(ctx context.Context, userID uuid.UUID, 
 	return durations, rows.Err()
 }
 
+func (s *Store) ExternalDurationsBetweenByUser(ctx context.Context, userIDs []uuid.UUID, start, end time.Time) (map[uuid.UUID][]ExternalDuration, error) {
+	result := map[uuid.UUID][]ExternalDuration{}
+	if len(userIDs) == 0 {
+		return result, nil
+	}
+	rows, err := s.Pool.Query(ctx, `
+		SELECT user_id, id, external_id, provider, entity, type, coalesce(category, ''), start_time, end_time,
+			coalesce(project, ''), coalesce(branch, ''), coalesce(language, ''), coalesce(meta, ''), created_at
+		FROM external_durations
+		WHERE user_id = ANY($1) AND start_time < $3 AND end_time > $2
+		ORDER BY user_id, start_time ASC`, userIDs, float64(start.Unix()), float64(end.Unix()))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		userID, duration, err := scanExternalDurationWithUserID(rows)
+		if err != nil {
+			return nil, err
+		}
+		result[userID] = append(result[userID], duration)
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) UpsertExternalDuration(ctx context.Context, userID uuid.UUID, input services.ExternalDuration) (ExternalDuration, error) {
 	if err := services.ValidateExternalDuration(input); err != nil {
 		return ExternalDuration{}, err
@@ -1819,6 +1942,56 @@ func (s *Store) UpsertExternalDuration(ctx context.Context, userID uuid.UUID, in
 		return ExternalDuration{}, err
 	}
 	return duration, s.MarkStatsStale(ctx, userID)
+}
+
+func (s *Store) UpsertExternalDurations(ctx context.Context, userID uuid.UUID, inputs []services.ExternalDuration) ([]ExternalDuration, error) {
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+	batch := &pgx.Batch{}
+	for _, input := range inputs {
+		if err := services.ValidateExternalDuration(input); err != nil {
+			return nil, err
+		}
+		batch.Queue(`
+			INSERT INTO external_durations (user_id, external_id, provider, entity, type, category, start_time, end_time, project, branch, language, meta)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			ON CONFLICT (user_id, provider, external_id) DO UPDATE SET
+				entity = EXCLUDED.entity,
+				type = EXCLUDED.type,
+				category = EXCLUDED.category,
+				start_time = EXCLUDED.start_time,
+				end_time = EXCLUDED.end_time,
+				project = EXCLUDED.project,
+				branch = EXCLUDED.branch,
+				language = EXCLUDED.language,
+				meta = EXCLUDED.meta
+			RETURNING id, external_id, provider, entity, type, coalesce(category, ''), start_time, end_time,
+				coalesce(project, ''), coalesce(branch, ''), coalesce(language, ''), coalesce(meta, ''), created_at`,
+			userID, input.ExternalID, input.Provider, input.Entity, input.Type, nullEmpty(input.Category), input.StartTime, input.EndTime,
+			nullEmpty(input.Project), nullEmpty(input.Branch), nullEmpty(input.Language), nullEmpty(input.Meta))
+	}
+	results := s.Pool.SendBatch(ctx, batch)
+	closed := false
+	defer func() {
+		if !closed {
+			_ = results.Close()
+		}
+	}()
+	durations := make([]ExternalDuration, 0, len(inputs))
+	for range inputs {
+		duration, err := scanExternalDuration(results.QueryRow())
+		if err != nil {
+			return nil, err
+		}
+		durations = append(durations, duration)
+	}
+	err := results.Close()
+	closed = true
+	if err != nil {
+		return nil, err
+	}
+	return durations, s.MarkStatsStale(ctx, userID)
 }
 
 func (s *Store) DeleteExternalDurations(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) (int64, error) {
@@ -2076,19 +2249,26 @@ func (s *Store) ListCustomRules(ctx context.Context, userID uuid.UUID) ([]Custom
 	}
 	defer rows.Close()
 	var rules []CustomRule
+	var ruleIDs []uuid.UUID
 	for rows.Next() {
 		rule, err := scanCustomRule(rows)
 		if err != nil {
 			return nil, err
 		}
-		destinations, err := s.customRuleDestinations(ctx, rule.ID)
-		if err != nil {
-			return nil, err
-		}
-		rule.Destinations = destinations
+		ruleIDs = append(ruleIDs, rule.ID)
 		rules = append(rules, rule)
 	}
-	return rules, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	destinations, err := s.customRuleDestinationsByRule(ctx, ruleIDs)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rules {
+		rules[i].Destinations = destinations[rules[i].ID]
+	}
+	return rules, nil
 }
 
 func (s *Store) ReplaceCustomRules(ctx context.Context, userID uuid.UUID, inputs []services.CustomRule) ([]CustomRule, error) {
@@ -2119,21 +2299,46 @@ func (s *Store) ReplaceCustomRules(ctx context.Context, userID uuid.UUID, inputs
 	if _, err := tx.Exec(ctx, `DELETE FROM custom_rules WHERE user_id = $1`, userID); err != nil {
 		return nil, err
 	}
-	for _, input := range normalized {
-		row := tx.QueryRow(ctx, `
-			INSERT INTO custom_rules (user_id, action, source, operation, source_value, priority)
-			VALUES ($1, $2, $3, $4, $5, $6)
-			RETURNING id`, userID, input.Action, input.Source, input.Operation, input.SourceValue, input.Priority)
-		var ruleID uuid.UUID
-		if err := row.Scan(&ruleID); err != nil {
-			return nil, err
+	ruleIDs := make([]uuid.UUID, len(normalized))
+	if len(normalized) > 0 {
+		ruleBatch := &pgx.Batch{}
+		for _, input := range normalized {
+			ruleBatch.Queue(`
+				INSERT INTO custom_rules (user_id, action, source, operation, source_value, priority)
+				VALUES ($1, $2, $3, $4, $5, $6)
+				RETURNING id`, userID, input.Action, input.Source, input.Operation, input.SourceValue, input.Priority)
 		}
-		for _, destination := range input.Destinations {
-			if _, err := tx.Exec(ctx, `
-				INSERT INTO custom_rule_destinations (rule_id, destination, destination_value)
-				VALUES ($1, $2, $3)`, ruleID, destination.Destination, destination.DestinationValue); err != nil {
+		ruleResults := tx.SendBatch(ctx, ruleBatch)
+		for i := range normalized {
+			if err := ruleResults.QueryRow().Scan(&ruleIDs[i]); err != nil {
+				_ = ruleResults.Close()
 				return nil, err
 			}
+		}
+		if err := ruleResults.Close(); err != nil {
+			return nil, err
+		}
+	}
+	destinationBatch := &pgx.Batch{}
+	destinationCount := 0
+	for i, input := range normalized {
+		for _, destination := range input.Destinations {
+			destinationBatch.Queue(`
+				INSERT INTO custom_rule_destinations (rule_id, destination, destination_value)
+				VALUES ($1, $2, $3)`, ruleIDs[i], destination.Destination, destination.DestinationValue)
+			destinationCount++
+		}
+	}
+	if destinationCount > 0 {
+		destinationResults := tx.SendBatch(ctx, destinationBatch)
+		for i := 0; i < destinationCount; i++ {
+			if _, err := destinationResults.Exec(); err != nil {
+				_ = destinationResults.Close()
+				return nil, err
+			}
+		}
+		if err := destinationResults.Close(); err != nil {
+			return nil, err
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -2304,6 +2509,10 @@ func (s *Store) ApplyCustomRulesToHeartbeats(ctx context.Context, userID uuid.UU
 			Destinations: rule.Destinations,
 		})
 	}
+	preparedRules, err := services.PrepareCustomRules(serviceRules)
+	if err != nil {
+		return 0, 0, err
+	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return 0, 0, err
@@ -2311,6 +2520,8 @@ func (s *Store) ApplyCustomRulesToHeartbeats(ctx context.Context, userID uuid.UU
 	defer tx.Rollback(ctx)
 	changed := 0
 	deleted := 0
+	queuedWrites := 0
+	batch := &pgx.Batch{}
 	projectsToUpsert := map[string]float64{}
 	for i, heartbeat := range heartbeats {
 		if i%100 == 0 {
@@ -2326,11 +2537,10 @@ func (s *Store) ApplyCustomRulesToHeartbeats(ctx context.Context, userID uuid.UU
 		if err != nil {
 			continue
 		}
-		updated, shouldDelete := services.ApplyCustomRules(heartbeat, serviceRules)
+		updated, shouldDelete := services.ApplyPreparedCustomRules(heartbeat, preparedRules)
 		if shouldDelete {
-			if _, err := tx.Exec(ctx, `DELETE FROM heartbeats WHERE user_id = $1 AND id = $2`, userID, heartbeatID); err != nil {
-				return changed, deleted, err
-			}
+			batch.Queue(`DELETE FROM heartbeats WHERE user_id = $1 AND id = $2`, userID, heartbeatID)
+			queuedWrites++
 			deleted++
 			continue
 		}
@@ -2338,14 +2548,13 @@ func (s *Store) ApplyCustomRulesToHeartbeats(ctx context.Context, userID uuid.UU
 			continue
 		}
 		if updated.Entity != heartbeat.Entity {
-			if _, err := tx.Exec(ctx, `
+			batch.Queue(`
 				DELETE FROM heartbeats
 				WHERE user_id = $1 AND id <> $2 AND entity = $3 AND time = $4`,
-				userID, heartbeatID, updated.Entity, updated.Time); err != nil {
-				return changed, deleted, err
-			}
+				userID, heartbeatID, updated.Entity, updated.Time)
+			queuedWrites++
 		}
-		if _, err := tx.Exec(ctx, `
+		batch.Queue(`
 			UPDATE heartbeats
 			SET entity = $3,
 				type = $4,
@@ -2357,13 +2566,24 @@ func (s *Store) ApplyCustomRulesToHeartbeats(ctx context.Context, userID uuid.UU
 				operating_system = $10
 			WHERE user_id = $1 AND id = $2`,
 			userID, heartbeatID, updated.Entity, updated.Type, nullEmpty(updated.Category), nullEmpty(updated.Project),
-			nullEmpty(updated.Branch), nullEmpty(updated.Language), nullEmpty(updated.Editor), nullEmpty(updated.OperatingSystem)); err != nil {
-			return changed, deleted, err
-		}
+			nullEmpty(updated.Branch), nullEmpty(updated.Language), nullEmpty(updated.Editor), nullEmpty(updated.OperatingSystem))
+		queuedWrites++
 		if updated.Project != "" {
 			projectsToUpsert[updated.Project] = updated.Time
 		}
 		changed++
+	}
+	if queuedWrites > 0 {
+		results := tx.SendBatch(ctx, batch)
+		for i := 0; i < queuedWrites; i++ {
+			if _, err := results.Exec(); err != nil {
+				_ = results.Close()
+				return changed, deleted, err
+			}
+		}
+		if err := results.Close(); err != nil {
+			return changed, deleted, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return changed, deleted, err
@@ -2413,6 +2633,31 @@ func (s *Store) customRuleDestinations(ctx context.Context, ruleID uuid.UUID) ([
 	return destinations, rows.Err()
 }
 
+func (s *Store) customRuleDestinationsByRule(ctx context.Context, ruleIDs []uuid.UUID) (map[uuid.UUID][]services.CustomRuleDestination, error) {
+	destinations := make(map[uuid.UUID][]services.CustomRuleDestination, len(ruleIDs))
+	if len(ruleIDs) == 0 {
+		return destinations, nil
+	}
+	rows, err := s.Pool.Query(ctx, `
+		SELECT rule_id, destination, destination_value
+		FROM custom_rule_destinations
+		WHERE rule_id = ANY($1)
+		ORDER BY rule_id ASC, id ASC`, ruleIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var ruleID uuid.UUID
+		var destination services.CustomRuleDestination
+		if err := rows.Scan(&ruleID, &destination.Destination, &destination.DestinationValue); err != nil {
+			return nil, err
+		}
+		destinations[ruleID] = append(destinations[ruleID], destination)
+	}
+	return destinations, rows.Err()
+}
+
 func (s *Store) UpsertStatsCache(ctx context.Context, userID uuid.UUID, rangeName string, stats services.Stats) error {
 	payload, err := json.Marshal(stats)
 	if err != nil {
@@ -2426,6 +2671,22 @@ func (s *Store) UpsertStatsCache(ctx context.Context, userID uuid.UUID, rangeNam
 			is_up_to_date = true,
 			percent_calculated = 100,
 			computed_at = now()`, userID, rangeName, payload)
+	return err
+}
+
+func (s *Store) UpsertProjectStatsCache(ctx context.Context, userID uuid.UUID, project, rangeName string, stats services.Stats) error {
+	payload, err := json.Marshal(stats)
+	if err != nil {
+		return err
+	}
+	_, err = s.Pool.Exec(ctx, `
+		INSERT INTO project_stats_cache (user_id, project, range, data, is_up_to_date, percent_calculated, computed_at)
+		VALUES ($1, $2, $3, $4, true, 100, now())
+		ON CONFLICT (user_id, project, range) DO UPDATE SET
+			data = EXCLUDED.data,
+			is_up_to_date = true,
+			percent_calculated = 100,
+			computed_at = now()`, userID, project, rangeName, payload)
 	return err
 }
 
@@ -2450,8 +2711,33 @@ func (s *Store) StatsCache(ctx context.Context, userID uuid.UUID, rangeName stri
 	return stats, true, nil
 }
 
+func (s *Store) ProjectStatsCache(ctx context.Context, userID uuid.UUID, project, rangeName string) (services.Stats, bool, error) {
+	var data []byte
+	var upToDate bool
+	err := s.Pool.QueryRow(ctx, `SELECT data, is_up_to_date FROM project_stats_cache WHERE user_id = $1 AND project = $2 AND range = $3`, userID, project, rangeName).Scan(&data, &upToDate)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return services.Stats{}, false, nil
+	}
+	if err != nil {
+		return services.Stats{}, false, err
+	}
+	var stats services.Stats
+	if err := json.Unmarshal(data, &stats); err != nil {
+		return services.Stats{}, false, err
+	}
+	stats.IsUpToDate = upToDate
+	if !upToDate {
+		stats.PercentCalculated = int(math.Min(float64(stats.PercentCalculated), 99))
+	}
+	return stats, true, nil
+}
+
 func (s *Store) MarkStatsStale(ctx context.Context, userID uuid.UUID) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE stats_cache SET is_up_to_date = false, percent_calculated = 0 WHERE user_id = $1`, userID)
+	if err != nil {
+		return err
+	}
+	_, err = s.Pool.Exec(ctx, `UPDATE project_stats_cache SET is_up_to_date = false, percent_calculated = 0 WHERE user_id = $1`, userID)
 	return err
 }
 
@@ -2529,11 +2815,22 @@ func (s *Store) upsertMachine(ctx context.Context, userID uuid.UUID, name string
 	if name == "" {
 		return nil, nil
 	}
+	return upsertMachineTx(ctx, s.Pool, userID, name)
+}
+
+type machineUpserter interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func upsertMachineTx(ctx context.Context, q machineUpserter, userID uuid.UUID, name string) (*uuid.UUID, error) {
+	if name == "" {
+		return nil, nil
+	}
 	var id uuid.UUID
-	err := s.Pool.QueryRow(ctx, `
-		INSERT INTO machine_names (user_id, name, last_seen_at)
-		VALUES ($1, $2, now())
-		ON CONFLICT (user_id, name) DO UPDATE SET last_seen_at = now()
+	err := q.QueryRow(ctx, `
+			INSERT INTO machine_names (user_id, name, last_seen_at)
+			VALUES ($1, $2, now())
+			ON CONFLICT (user_id, name) DO UPDATE SET last_seen_at = now()
 		RETURNING id`, userID, name).Scan(&id)
 	if err != nil {
 		return nil, err
@@ -2542,11 +2839,19 @@ func (s *Store) upsertMachine(ctx context.Context, userID uuid.UUID, name string
 }
 
 func (s *Store) upsertProject(ctx context.Context, userID uuid.UUID, name string, heartbeatTime float64) error {
+	return upsertProjectTx(ctx, s.Pool, userID, name, heartbeatTime)
+}
+
+type projectUpserter interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+func upsertProjectTx(ctx context.Context, q projectUpserter, userID uuid.UUID, name string, heartbeatTime float64) error {
 	timestamp := time.Unix(int64(heartbeatTime), 0).UTC()
-	_, err := s.Pool.Exec(ctx, `
-		INSERT INTO projects (user_id, name, first_heartbeat_at, last_heartbeat_at)
-		VALUES ($1, $2, $3, $3)
-		ON CONFLICT (user_id, name) DO UPDATE SET
+	_, err := q.Exec(ctx, `
+			INSERT INTO projects (user_id, name, first_heartbeat_at, last_heartbeat_at)
+			VALUES ($1, $2, $3, $3)
+			ON CONFLICT (user_id, name) DO UPDATE SET
 			last_heartbeat_at = GREATEST(projects.last_heartbeat_at, EXCLUDED.last_heartbeat_at),
 			first_heartbeat_at = LEAST(projects.first_heartbeat_at, EXCLUDED.first_heartbeat_at)`,
 		userID, name, timestamp)
@@ -2592,6 +2897,14 @@ func scanExternalDuration(row pgx.Row) (ExternalDuration, error) {
 	err := row.Scan(&duration.ID, &duration.ExternalID, &duration.Provider, &duration.Entity, &duration.Type, &duration.Category,
 		&duration.StartTime, &duration.EndTime, &duration.Project, &duration.Branch, &duration.Language, &duration.Meta, &duration.CreatedAt)
 	return duration, err
+}
+
+func scanExternalDurationWithUserID(row pgx.Row) (uuid.UUID, ExternalDuration, error) {
+	var userID uuid.UUID
+	var duration ExternalDuration
+	err := row.Scan(&userID, &duration.ID, &duration.ExternalID, &duration.Provider, &duration.Entity, &duration.Type, &duration.Category,
+		&duration.StartTime, &duration.EndTime, &duration.Project, &duration.Branch, &duration.Language, &duration.Meta, &duration.CreatedAt)
+	return userID, duration, err
 }
 
 func scanLeaderboard(row pgx.Row) (Leaderboard, error) {
@@ -2643,11 +2956,30 @@ func scanAICostSetting(row pgx.Row) (AICostSetting, error) {
 	return setting, err
 }
 
+const heartbeatSelectColumns = `id, entity, type, coalesce(category, ''), time, coalesce(project, ''), coalesce(branch, ''),
+	coalesce(language, ''), coalesce(machine_name, ''), coalesce(plugin, ''), coalesce(plugin_version, ''),
+	coalesce(editor, ''), coalesce(editor_version, ''), coalesce(operating_system, ''), coalesce(architecture, ''),
+	coalesce(dependencies, ''), lines, line_number, cursor_pos, is_write, ai_line_changes,
+	human_line_changes, coalesce(ai_session, ''), ai_input_tokens, ai_output_tokens, ai_prompt_length,
+	coalesce(ai_subscription_plan, ''), coalesce(ai_model, ''), coalesce(ai_provider, ''), coalesce(ai_agent, ''),
+	coalesce(ai_agent_version, ''), coalesce(ai_agent_complexity, ''), coalesce(commit_hash, ''),
+	coalesce(metadata, '{}'::jsonb), coalesce(raw_payload, '{}'::jsonb)`
+
 func scanHeartbeat(row pgx.Row) (services.Heartbeat, error) {
+	return scanHeartbeatFields(row)
+}
+
+func scanHeartbeatWithUserID(row pgx.Row) (uuid.UUID, services.Heartbeat, error) {
+	var userID uuid.UUID
+	heartbeat, err := scanHeartbeatFields(row, &userID)
+	return userID, heartbeat, err
+}
+
+func scanHeartbeatFields(row pgx.Row, leading ...any) (services.Heartbeat, error) {
 	var heartbeat services.Heartbeat
 	var id uuid.UUID
 	var metadataRaw, rawPayloadRaw json.RawMessage
-	err := row.Scan(&id, &heartbeat.Entity, &heartbeat.Type, &heartbeat.Category, &heartbeat.Time,
+	destinations := append(leading, &id, &heartbeat.Entity, &heartbeat.Type, &heartbeat.Category, &heartbeat.Time,
 		&heartbeat.Project, &heartbeat.Branch, &heartbeat.Language, &heartbeat.MachineName,
 		&heartbeat.Plugin, &heartbeat.PluginVersion, &heartbeat.Editor, &heartbeat.EditorVersion,
 		&heartbeat.OperatingSystem, &heartbeat.Architecture, &heartbeat.Dependencies, &heartbeat.Lines,
@@ -2656,6 +2988,7 @@ func scanHeartbeat(row pgx.Row) (services.Heartbeat, error) {
 		&heartbeat.AIPromptLength, &heartbeat.AISubscriptionPlan, &heartbeat.AIModel, &heartbeat.AIProvider,
 		&heartbeat.AIAgent, &heartbeat.AIAgentVersion, &heartbeat.AIAgentComplexity, &heartbeat.CommitHash,
 		&metadataRaw, &rawPayloadRaw)
+	err := row.Scan(destinations...)
 	if err != nil {
 		return heartbeat, err
 	}
@@ -2675,6 +3008,13 @@ func nullEmpty(value string) any {
 		return nil
 	}
 	return value
+}
+
+func nullableInt(value *int) any {
+	if value == nil {
+		return nil
+	}
+	return *value
 }
 
 func jsonMapArg(value map[string]any) string {

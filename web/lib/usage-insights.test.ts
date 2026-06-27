@@ -1,6 +1,5 @@
 import {
   cacheEfficiency,
-  cacheSavingsEstimate,
   cachingDollarSavings,
   costPerProjectPerDay,
   latestDay,
@@ -33,14 +32,6 @@ assertEqual("empty cache reports no data", noData.hasData, false);
 
 const negative = cacheEfficiency({ cache_read_tokens: -50, input_tokens: 100 });
 assertClose("negative cache reads clamp to zero", negative.cacheHitRatio, 0);
-
-// cacheSavingsEstimate
-const savings = cacheSavingsEstimate({ cache_read_tokens: 1000, input_tokens: 0 });
-assertClose("saved token equivalent", savings.savedTokenEquivalent, 900);
-assertClose("savings ratio", savings.savingsRatio, 0.9);
-
-const noSavings = cacheSavingsEstimate({ cache_read_tokens: 0, input_tokens: 0 });
-assertClose("no billable tokens means zero savings ratio", noSavings.savingsRatio, 0);
 
 // cachingDollarSavings
 const dollars = cachingDollarSavings({ cost_usd: 100, uncached_cost_usd: 1000 });

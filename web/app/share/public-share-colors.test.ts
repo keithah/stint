@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-const source = readFileSync("app/share/[userOrToken]/[token]/page.tsx", "utf8");
+const source = readFileSync("components/public-share-page.tsx", "utf8");
 
 assertIncludes("program language API client", source, "listProgramLanguages");
 assertIncludes("language color map helper", source, "languageColorMap");

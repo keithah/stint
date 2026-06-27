@@ -1004,7 +1004,7 @@ func assertAIMetricsSchemaDocumentsDashboardFields(t *testing.T, schema any) {
 	if !ok {
 		t.Fatalf("expected AIMetrics schema to include properties")
 	}
-	for _, field := range []string{"session_count", "estimated_cost_cents", "agents", "days", "costs"} {
+	for _, field := range []string{"session_count", "ai_sessions", "estimated_cost_cents", "agents", "days", "costs", "tool_costs", "ai_prompt_length", "ai_additions", "ai_deletions", "human_additions", "human_deletions", "ai_agent_line_changes", "ai_agent_costs", "ai_agent_breakdown", "ai_agent_total_cost", "ai_prompt_length_avg", "ai_prompt_length_sum", "ai_prompt_length_avg_per_session", "ai_prompt_length_median_per_session", "ai_prompt_events_total", "ai_prompt_events_avg_per_session", "ai_prompt_events_median_per_session"} {
 		if _, ok := properties[field]; !ok {
 			t.Fatalf("expected AIMetrics schema to document %q", field)
 		}

@@ -64,10 +64,10 @@ func TestComputeDurationsDoesNotDoubleCountOverlappingProjects(t *testing.T) {
 func TestComputeDurationsMatchesWakaTimeFAQExample(t *testing.T) {
 	const base = 1_700_000_000.0
 	heartbeats := []Heartbeat{
-		{Entity: "a.go", Project: "app", Time: base},            // start of 2 min burst
-		{Entity: "a.go", Project: "app", Time: base + 120},      // ...end of 2 min burst
-		{Entity: "a.go", Project: "app", Time: base + 900},      // 13 min break (< timeout, filled)
-		{Entity: "a.go", Project: "app", Time: base + 960},      // ...end of trailing 1 min burst
+		{Entity: "a.go", Project: "app", Time: base},              // start of 2 min burst
+		{Entity: "a.go", Project: "app", Time: base + 120},        // ...end of 2 min burst
+		{Entity: "a.go", Project: "app", Time: base + 900},        // 13 min break (< timeout, filled)
+		{Entity: "a.go", Project: "app", Time: base + 960},        // ...end of trailing 1 min burst
 		{Entity: "a.go", Project: "app", Time: base + 960 + 1200}, // 20 min idle (> timeout): new session
 	}
 
@@ -143,5 +143,50 @@ func TestComputeDurationsSplitsDependencyLists(t *testing.T) {
 	}
 	if got[1].Name != "pgx" || got[1].DurationSeconds != 120 {
 		t.Fatalf("expected pgx duration to span 120s, got %#v", got[1])
+	}
+}
+
+func TestComputeDurationsCarriesWakaTimeAIFields(t *testing.T) {
+	aiLines := 12
+	humanLines := 3
+	inputTokens := 1000
+	outputTokens := 2000
+	promptA := 120
+	promptB := 80
+	heartbeats := []Heartbeat{
+		{
+			Entity: "a.go", Project: "api", Time: 1_700_000_000, Category: "ai coding",
+			AILineChanges: &aiLines, HumanLineChanges: &humanLines, AIInputTokens: &inputTokens, AIOutputTokens: &outputTokens,
+			AIPromptLength: &promptA, AISession: "session-a", AISubscriptionPlan: "Codex",
+		},
+		{
+			Entity: "b.go", Project: "api", Time: 1_700_000_120, Category: "ai coding",
+			AIPromptLength: &promptB, AISession: "session-a", AISubscriptionPlan: "Codex",
+		},
+	}
+
+	got := ComputeDurations(heartbeats, 15*time.Minute, "project")
+
+	if len(got) != 1 {
+		t.Fatalf("expected merged AI duration row, got %#v", got)
+	}
+	row := got[0]
+	if row.DurationSeconds != 120 {
+		t.Fatalf("expected merged duration of 120s, got %#v", row)
+	}
+	if row.AIAdditions != 12 || row.AIDeletions != 0 || row.HumanAdditions != 3 || row.HumanDeletions != 0 {
+		t.Fatalf("expected WakaTime duration line aliases, got %#v", row)
+	}
+	if row.AIInputTokens != 1000 || row.AIOutputTokens != 2000 {
+		t.Fatalf("expected duration token totals, got %#v", row)
+	}
+	if row.AIPromptLengthSum != 200 || row.AIPromptLengthAvg != 100 {
+		t.Fatalf("expected duration prompt totals, got %#v", row)
+	}
+	if row.AISessions != 1 || row.AIPromptEventsTotal != 2 || row.AIPromptEventsAvgPerSession != 2 || row.AIPromptLengthAvgPerSession != 200 {
+		t.Fatalf("expected duration prompt session stats, got %#v", row)
+	}
+	if row.AIAgentCosts["Codex"] != 0 {
+		t.Fatalf("expected duration agent cost map to include Codex with zero cost when rates are unavailable, got %#v", row.AIAgentCosts)
 	}
 }

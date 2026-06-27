@@ -33,4 +33,4 @@ assert.match(apiSource, /listUserAgents/);
 assert.match(apiSource, /\/api\/v1\/users\/current\/user_agents/);
 assert.match(shell, /\/integrations/);
 assert.match(shell, /Integrations/);
-assert.match(packageJSON, /app\/\(console\)\/integrations\/page\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

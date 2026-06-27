@@ -135,3 +135,34 @@ func TestExtractAPIKeyRejectsMalformedBasicAuth(t *testing.T) {
 		t.Fatal("expected malformed Basic auth to be rejected")
 	}
 }
+
+func TestHashAPIKeyUsesVersionedSHA256Hash(t *testing.T) {
+	hash, err := HashAPIKey("waka_secret")
+	if err != nil {
+		t.Fatalf("HashAPIKey returned error: %v", err)
+	}
+	if !strings.HasPrefix(hash, "sha256$") {
+		t.Fatalf("expected versioned sha256 hash, got %q", hash)
+	}
+	result := VerifyAPIKeyDetailed(hash, "waka_secret")
+	if !result.Valid {
+		t.Fatal("expected versioned hash to verify")
+	}
+	if result.NeedsUpgrade {
+		t.Fatal("new versioned hash should not need upgrade")
+	}
+}
+
+func TestVerifyAPIKeyDetailedAcceptsBcryptAndRequestsUpgrade(t *testing.T) {
+	hash, err := HashAPIKeyBcryptForTest("waka_legacy")
+	if err != nil {
+		t.Fatalf("HashAPIKeyBcryptForTest returned error: %v", err)
+	}
+	result := VerifyAPIKeyDetailed(hash, "waka_legacy")
+	if !result.Valid {
+		t.Fatal("expected legacy bcrypt hash to verify")
+	}
+	if !result.NeedsUpgrade {
+		t.Fatal("expected legacy bcrypt hash to need upgrade")
+	}
+}

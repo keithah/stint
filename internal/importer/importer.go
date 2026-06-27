@@ -12,6 +12,7 @@ import (
 
 type HeartbeatStore interface {
 	InsertHeartbeat(ctx context.Context, userID uuid.UUID, heartbeat services.Heartbeat) (services.Heartbeat, error)
+	InsertHeartbeats(ctx context.Context, userID uuid.UUID, heartbeats []services.Heartbeat) ([]db.HeartbeatInsertResult, error)
 }
 
 type Result struct {
@@ -28,20 +29,31 @@ func QueuedResult(total int) Result {
 
 func ProcessHeartbeats(ctx context.Context, store HeartbeatStore, userID uuid.UUID, heartbeats []services.Heartbeat, defaults services.HeartbeatDefaults, now time.Time) (Result, error) {
 	result := Result{Status: "Completed", Total: len(heartbeats)}
+	valid := make([]services.Heartbeat, 0, len(heartbeats))
 	for _, heartbeat := range heartbeats {
 		services.PrepareHeartbeat(&heartbeat, defaults)
 		if err := services.ValidateHeartbeatAt(heartbeat, now); err != nil {
 			result.Invalid++
 			continue
 		}
-		if _, err := store.InsertHeartbeat(ctx, userID, heartbeat); err != nil {
-			if errors.Is(err, db.ErrDuplicateHeartbeat) {
-				result.Duplicates++
-				continue
-			}
-			return Result{}, err
+		valid = append(valid, heartbeat)
+	}
+	if len(valid) == 0 {
+		return result, nil
+	}
+	rows, err := store.InsertHeartbeats(ctx, userID, valid)
+	if err != nil {
+		return Result{}, err
+	}
+	for _, row := range rows {
+		switch {
+		case row.Stored:
+			result.Inserted++
+		case row.Duplicate || errors.Is(row.Err, db.ErrDuplicateHeartbeat):
+			result.Duplicates++
+		case row.Err != nil:
+			return Result{}, row.Err
 		}
-		result.Inserted++
 	}
 	return result, nil
 }

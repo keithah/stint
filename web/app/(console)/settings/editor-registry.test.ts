@@ -13,5 +13,5 @@ assert.match(source, /queryKey: \["editors"\]/);
 assert.match(source, /Supported editors/);
 assert.match(source, /editors\.data\?\.data/);
 assert.match(source, /editor\.version/);
-assert.match(packageJSON, /lib\/editors-api\.test\.ts/);
-assert.match(packageJSON, /app\/\(console\)\/settings\/editor-registry\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

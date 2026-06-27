@@ -1,7 +1,11 @@
 package pricing
 
 import (
+	"context"
+	"io"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/keithah/stint/internal/usage"
@@ -196,6 +200,31 @@ func TestSetOverridesNormalizesPrefixedModelID(t *testing.T) {
 	proxy := usage.Event{Model: "openrouter/foo/bar", InputTokens: 1000, OutputTokens: 1000}
 	if r := e.Price(proxy, ModeCalculate); !r.Priced || !approx(r.USD, 1000*1e-6+1000*1e-6) {
 		t.Fatalf("proxy-prefixed override should price the event, got %+v", r)
+	}
+}
+
+func TestFetchRetriesTransientServerErrors(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = io.WriteString(w, "temporary")
+			return
+		}
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	defer server.Close()
+
+	got, err := fetch(context.Background(), server.Client(), server.URL)
+	if err != nil {
+		t.Fatalf("fetch returned error: %v", err)
+	}
+	if string(got) != `{"ok":true}` {
+		t.Fatalf("unexpected body: %s", got)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
 	}
 }
 

@@ -9,4 +9,4 @@ assert.match(source, /agent: costAgent\.trim\(\)/);
 assert.match(source, /disabled=\{saveCosts\.isPending \|\| !canSaveAICosts\}/);
 assert.match(source, /onChange=\{\(event\) => setInputCost\(Math\.max\(0, Number\(event\.target\.value\)\)\)\}/);
 assert.match(source, /onChange=\{\(event\) => setOutputCost\(Math\.max\(0, Number\(event\.target\.value\)\)\)\}/);
-assert.match(packageJSON, /app\/\(console\)\/settings\/ai-cost-validation\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

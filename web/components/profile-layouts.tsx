@@ -1,11 +1,13 @@
 "use client";
 
 import { Briefcase, Github, Globe, Linkedin, Mail, MapPin, Twitter } from "lucide-react";
+import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
-import { AIPanel } from "@/components/ai-panel";
-import { SliceDonut } from "@/components/dashboard-charts";
 import { activityHeatmapClass, activityHeatmapTitle } from "@/lib/activity-heatmap";
 import type { DailyStat, PublicProfilePermissions, PublicUser, SliceTotal, Stats, StatsRange } from "@/lib/api";
+
+const AIPanel = dynamic(() => import("@/components/ai-panel").then((module) => module.AIPanel), { ssr: false });
+const SliceDonut = dynamic(() => import("@/components/dashboard-charts").then((module) => module.SliceDonut), { ssr: false });
 
 export type RangeOption = { value: StatsRange; label: string };
 
@@ -46,7 +48,7 @@ function Avatar({ user, username, size = 64, square = false }: { user: PublicUse
   const radius = square ? "rounded-lg" : "rounded-full";
   if (user.avatar_url) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={user.avatar_url} alt={displayName(user, username)} width={size} height={size} className={`${radius} border border-line object-cover`} style={{ width: size, height: size }} />;
+    return <img src={user.avatar_url} alt={displayName(user, username)} width={size} height={size} loading="lazy" decoding="async" className={`${radius} border border-line object-cover`} style={{ width: size, height: size }} />;
   }
   return (
     <div className={`grid place-items-center border border-line bg-panel font-semibold text-accent ${radius}`} style={{ width: size, height: size, fontSize: size / 2.6 }}>

@@ -202,6 +202,20 @@ func TestGoalEvaluationWindowUsesCompletedLocalWeek(t *testing.T) {
 	}
 }
 
+func TestGoalProgressDataWindowIncludesPreviousPeriodForImprovementGoals(t *testing.T) {
+	improve := 25.0
+	now := time.Date(2026, 6, 25, 15, 0, 0, 0, time.UTC)
+
+	start, end := GoalProgressDataWindow(Goal{Delta: "day", ImproveByPercent: &improve}, now)
+
+	if want := time.Date(2026, 6, 24, 0, 0, 0, 0, time.UTC); !start.Equal(want) {
+		t.Fatalf("expected start %s, got %s", want, start)
+	}
+	if want := time.Date(2026, 6, 26, 0, 0, 0, 0, time.UTC); !end.Equal(want) {
+		t.Fatalf("expected end %s, got %s", want, end)
+	}
+}
+
 func TestComputeGoalProgressForWindowUsesExplicitBoundaries(t *testing.T) {
 	start := time.Date(2026, 6, 18, 8, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 6, 19, 8, 0, 0, 0, time.UTC)

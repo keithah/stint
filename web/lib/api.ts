@@ -1,3 +1,5 @@
+import { timeoutSignal } from "./http";
+
 export type User = {
   id: string;
   github_username: string;
@@ -153,6 +155,13 @@ export type AICostPeriod = {
   monthly_cents: number;
   total_cents: number;
 };
+
+export type AIAgentBreakdown = {
+  name: string;
+  lines: number;
+  cost: number;
+};
+
 export type AIToolCost = {
   name: string;
   cost_cents: number;
@@ -164,6 +173,15 @@ export type AIToolCost = {
 export type AIMetrics = {
   ai_line_changes: number;
   human_line_changes: number;
+  ai_additions: number;
+  ai_deletions: number;
+  human_additions: number;
+  human_deletions: number;
+  ai_line_changes_total: number;
+  ai_agent_line_changes: Record<string, number>;
+  ai_agent_costs: Record<string, number>;
+  ai_agent_breakdown: AIAgentBreakdown[];
+  ai_agent_total_cost: number;
   ai_percentage: number;
   human_review_percentage: number;
   follow_up_edits: number;
@@ -173,7 +191,15 @@ export type AIMetrics = {
   prompt_count: number;
   average_prompt_length: number;
   median_prompt_length: number;
+  ai_prompt_length_avg: number;
+  ai_prompt_length_sum: number;
+  ai_prompt_length_avg_per_session: number;
+  ai_prompt_length_median_per_session: number;
+  ai_prompt_events_total: number;
+  ai_prompt_events_avg_per_session: number;
+  ai_prompt_events_median_per_session: number;
   session_count: number;
+  ai_sessions: number;
   estimated_cost_cents: number;
   agents: AIStat[];
   days: AIStat[];
@@ -357,6 +383,21 @@ export type Duration = {
   language?: string;
   time: number;
   duration: number;
+  ai_additions: number;
+  ai_deletions: number;
+  human_additions: number;
+  human_deletions: number;
+  ai_agent_costs: Record<string, number>;
+  ai_input_tokens: number;
+  ai_output_tokens: number;
+  ai_prompt_length_sum: number;
+  ai_prompt_length_avg: number;
+  ai_prompt_length_avg_per_session: number;
+  ai_prompt_length_median_per_session: number;
+  ai_prompt_events_total: number;
+  ai_prompt_events_avg_per_session: number;
+  ai_prompt_events_median_per_session: number;
+  ai_sessions: number;
 };
 
 export type FileExpert = {
@@ -552,6 +593,8 @@ export type AICostSetting = {
 };
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+const defaultRequestTimeoutMs = 30000;
+const uploadRequestTimeoutMs = 10 * 60 * 1000;
 
 export function wakatimeAPIURL() {
   const base = apiBase || (typeof window !== "undefined" ? window.location.origin : "");
@@ -559,27 +602,34 @@ export function wakatimeAPIURL() {
 }
 
 export function dataDumpDownloadURL(path?: string | null) {
-  if (!path) {
-    return "#";
-  }
+	if (!path) {
+		return "#";
+	}
   if (/^https?:\/\//i.test(path) || path.startsWith("#")) {
     return path;
   }
   if (!apiBase) {
     return path.startsWith("/") ? path : `/${path}`;
   }
-  return new URL(path, `${apiBase.replace(/\/$/, "")}/`).toString();
+	return new URL(path, `${apiBase.replace(/\/$/, "")}/`).toString();
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBase}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {})
-    }
-  });
+  const { signal, cleanup } = timeoutSignal(defaultRequestTimeoutMs, init?.signal ?? undefined);
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}${path}`, {
+      ...init,
+      credentials: "include",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {})
+      }
+    });
+  } finally {
+    cleanup();
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     const message = body.error ?? body.errors?.[0] ?? `Request failed with ${response.status}`;
@@ -605,10 +655,6 @@ export async function serverMeta() {
 
 export async function seedDevKey() {
   return request<{ data: { user: User; api_key: string } }>("/api/v1/dev/seed-key", { method: "POST" });
-}
-
-export async function statsLast7Days() {
-  return request<{ data: Stats }>("/api/v1/users/current/stats/last_7_days");
 }
 
 export async function statsForRange(range: StatsRange) {
@@ -956,11 +1002,18 @@ export async function publicShareSummariesByToken(token: string, start: string, 
 export async function importWakaTimeDump(file: File) {
   const form = new FormData();
   form.set("file", file);
-  const response = await fetch(`${apiBase}/api/v1/users/current/imports/wakatime`, {
-    method: "POST",
-    credentials: "include",
-    body: form
-  });
+  const { signal, cleanup } = timeoutSignal(uploadRequestTimeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}/api/v1/users/current/imports/wakatime`, {
+      method: "POST",
+      credentials: "include",
+      signal,
+      body: form
+    });
+  } finally {
+    cleanup();
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     const message = body.error ?? body.errors?.[0] ?? `Request failed with ${response.status}`;
@@ -979,4 +1032,3 @@ export async function replaceAICosts(settings: AICostSetting[]) {
     body: JSON.stringify(settings)
   });
 }
-

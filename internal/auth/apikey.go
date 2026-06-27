@@ -2,8 +2,10 @@ package auth
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -12,6 +14,7 @@ import (
 )
 
 const APIKeyPrefix = "waka_"
+const tokenHashSHA256Prefix = "sha256$"
 
 func ExtractAPIKey(r *http.Request) (string, bool) {
 	if key := strings.TrimSpace(r.URL.Query().Get("api_key")); key != "" {
@@ -70,10 +73,36 @@ func KeyFingerprint(key string) string {
 }
 
 func HashAPIKey(key string) (string, error) {
+	sum := sha256.Sum256([]byte(key))
+	return tokenHashSHA256Prefix + hex.EncodeToString(sum[:]), nil
+}
+
+type VerifyResult struct {
+	Valid        bool
+	NeedsUpgrade bool
+}
+
+func VerifyAPIKeyDetailed(hash, key string) VerifyResult {
+	if strings.HasPrefix(hash, tokenHashSHA256Prefix) {
+		want := strings.TrimPrefix(hash, tokenHashSHA256Prefix)
+		sum := sha256.Sum256([]byte(key))
+		got := hex.EncodeToString(sum[:])
+		return VerifyResult{Valid: subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1}
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(key)) == nil {
+		return VerifyResult{Valid: true, NeedsUpgrade: true}
+	}
+	return VerifyResult{}
+}
+
+func HashAPIKeyBcryptForTest(key string) (string, error) {
+	if key == "" {
+		return "", fmt.Errorf("key is required")
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(key), bcrypt.DefaultCost)
 	return string(hash), err
 }
 
 func VerifyAPIKey(hash, key string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(key)) == nil
+	return VerifyAPIKeyDetailed(hash, key).Valid
 }

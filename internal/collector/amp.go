@@ -1,7 +1,6 @@
 package collector
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,14 +121,8 @@ func scanAmpFile(path string, state *State, events *[]usage.Event, report *ScanR
 		return
 	}
 
-	b, err := os.ReadFile(path)
-	if err != nil {
-		report.Errors++
-		return
-	}
-
 	var thread ampThread
-	if err := json.Unmarshal(b, &thread); err != nil {
+	if err := decodeJSONFile(path, &thread); err != nil {
 		report.Errors++
 		report.LinesSkipped++
 		// Record the cursor so an unparseable file is not retried every scan.

@@ -8,8 +8,8 @@ import { noopSubscribe, serverWakaTimeAPIURL, shareStatsJSONPURL } from "@/compo
 
 export function ShareTokensCard() {
   const client = useQueryClient();
-  const user = useQuery({ queryKey: ["me"], queryFn: me, retry: false });
-  const shareTokens = useQuery({ queryKey: ["share-tokens"], queryFn: listShareTokens, retry: false });
+  const user = useQuery({ queryKey: ["me"], queryFn: me, });
+  const shareTokens = useQuery({ queryKey: ["share-tokens"], queryFn: listShareTokens, });
   const [latestShareToken, setLatestShareToken] = useState("");
   const [shareName, setShareName] = useState("Public dashboard");
   const apiURL = useSyncExternalStore(noopSubscribe, wakatimeAPIURL, serverWakaTimeAPIURL);

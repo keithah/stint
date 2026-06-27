@@ -6,4 +6,4 @@ const packageJSON = readFileSync("package.json", "utf8");
 
 assert.match(source, /import \{ boundedPercent \} from "@\/lib\/chart-percent";/);
 assert.match(source, /style=\{\{ width: `\$\{boundedPercent\(ruleProgress\.data\?\.data\.percent_complete \?\? 0\)\}%` \}\}/);
-assert.match(packageJSON, /app\/\(console\)\/settings\/progress-width\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

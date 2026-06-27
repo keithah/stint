@@ -42,9 +42,9 @@ function PublicUserContent() {
   const params = useParams<{ user: string }>();
   const username = params.user;
   const [range, setRange] = useState<StatsRange>("last_6_months");
-  const profile = useQuery({ queryKey: ["public-user", username], queryFn: () => publicUserProfile(username), retry: false, enabled: Boolean(username) });
-  const stats = useQuery({ queryKey: ["public-user-stats", username, range], queryFn: () => publicUserStats(username, range), retry: false, enabled: Boolean(username) });
-  const programLanguages = useQuery({ queryKey: ["program-languages"], queryFn: listProgramLanguages, retry: false, staleTime: 3600000 });
+  const profile = useQuery({ queryKey: ["public-user", username], queryFn: () => publicUserProfile(username), enabled: Boolean(username) });
+  const stats = useQuery({ queryKey: ["public-user-stats", username, range], queryFn: () => publicUserStats(username, range), enabled: Boolean(username) });
+  const programLanguages = useQuery({ queryKey: ["program-languages"], queryFn: listProgramLanguages, staleTime: 3600000 });
 
   const publicUser = profile.data?.data ?? stats.data?.user;
   const permissions = publicUser?.permissions ?? defaultPermissions;

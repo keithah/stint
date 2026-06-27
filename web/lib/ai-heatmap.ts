@@ -1,3 +1,5 @@
+import { formatCents } from "./number-format";
+
 export type AIHeatmapDay = {
   name: string;
   ai_line_changes: number;
@@ -37,8 +39,4 @@ export function aiHeatmapClass(day: Pick<AIHeatmapDay, "ai_line_changes" | "huma
 
 export function aiHeatmapTitle(day: AIHeatmapDay) {
   return `${day.name}: ${aiDayPercentage(day)}% AI, ${day.ai_line_changes.toLocaleString()} AI lines, ${formatCents(day.estimated_cost_cents)}`;
-}
-
-export function formatCents(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
 }

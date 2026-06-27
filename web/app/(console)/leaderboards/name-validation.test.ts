@@ -14,4 +14,4 @@ assert.match(source, /createLeaderboard\(name\.trim\(\), createRange as StatsRan
 assert.match(source, /updateLeaderboard\(activeBoard\?\.id \?\? "", editedBoardName, saveRange as StatsRange\)/);
 assert.match(source, /disabled=\{create\.isPending \|\| !canCreateBoard\}/);
 assert.match(source, /disabled=\{update\.isPending \|\| !canSaveBoard\}/);
-assert.match(packageJSON, /app\/\(console\)\/leaderboards\/name-validation\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

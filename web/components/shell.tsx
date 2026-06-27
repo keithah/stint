@@ -8,7 +8,7 @@ import { me } from "@/lib/api";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const user = useQuery({ queryKey: ["me"], queryFn: me, retry: false, staleTime: 60000 });
+  const user = useQuery({ queryKey: ["me"], queryFn: me, staleTime: 60000 });
   const isLoggedIn = user.isSuccess;
   const accountHref = isLoggedIn ? "/settings" : "/login";
   const AccountIcon = isLoggedIn ? KeyRound : LogIn;

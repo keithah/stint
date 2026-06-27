@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -156,6 +157,40 @@ func TestUsageEventsIngestIsIdempotentAndSummaryAggregates(t *testing.T) {
 	}
 	if len(export.Data) != 2 {
 		t.Fatalf("expected 2 exported events, got %d", len(export.Data))
+	}
+}
+
+func TestUsageEventsBulkRejectsOversizedBodyBeforeJSONBind(t *testing.T) {
+	ctx := context.Background()
+	store := openTestPostgresStore(t, ctx)
+
+	user, err := store.UpsertGitHubUser(ctx, db.GitHubProfile{ID: 2003, Username: "usage-events-large", Email: "usage-large@example.test"})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, rawKey, err := store.CreateAPIKeyWithScopes(ctx, user.ID, "usage events large body", nil)
+	if err != nil {
+		t.Fatalf("create API key: %v", err)
+	}
+
+	router := NewRouter(config.Config{
+		BaseURL:       "http://api.example.test",
+		WebBaseURL:    "http://web.example.test",
+		SessionSecret: "test-session-secret-with-enough-bytes",
+	}, store)
+
+	payload := bytes.Repeat([]byte(" "), 12<<20)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/current/usage_events.bulk", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", basicAPIKey(rawKey))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(strings.ToLower(rec.Body.String()), "too large") {
+		t.Fatalf("expected size error, got %s", rec.Body.String())
 	}
 }
 

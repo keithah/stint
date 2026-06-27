@@ -11,9 +11,12 @@ type RateLimiter interface {
 }
 
 type MemoryRateLimiter struct {
-	mu      sync.Mutex
-	entries map[string][]time.Time
+	mu        sync.Mutex
+	entries   map[string][]time.Time
+	lastSweep time.Time
 }
+
+const memoryRateLimitSweepInterval = time.Minute
 
 func NewMemoryRateLimiter() *MemoryRateLimiter {
 	return &MemoryRateLimiter{entries: map[string][]time.Time{}}
@@ -28,6 +31,10 @@ func (l *MemoryRateLimiter) Allow(_ context.Context, key string, limit int, wind
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	if now.Sub(l.lastSweep) >= memoryRateLimitSweepInterval {
+		l.sweepExpired(cutoff, now)
+	}
 
 	values := l.entries[key]
 	active := values[:0]
@@ -47,4 +54,21 @@ func (l *MemoryRateLimiter) Allow(_ context.Context, key string, limit int, wind
 	active = append(active, now)
 	l.entries[key] = active
 	return true, 0, nil
+}
+
+func (l *MemoryRateLimiter) sweepExpired(cutoff, now time.Time) {
+	for entryKey, values := range l.entries {
+		active := values[:0]
+		for _, value := range values {
+			if value.After(cutoff) {
+				active = append(active, value)
+			}
+		}
+		if len(active) == 0 {
+			delete(l.entries, entryKey)
+			continue
+		}
+		l.entries[entryKey] = active
+	}
+	l.lastSweep = now
 }

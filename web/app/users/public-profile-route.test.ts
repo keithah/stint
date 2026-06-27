@@ -35,5 +35,5 @@ assert.match(layouts, /case "rail"/);
 assert.match(layouts, /TerminalLayout/);
 assert.match(layouts, /<SliceDonut title="Languages" rows=\{stats\?\.languages \?\? \[\]\} colors=\{languageColors\} \/>/);
 
-assert.match(packageJSON, /lib\/public-user-api\.test\.ts/);
-assert.match(packageJSON, /app\/users\/public-profile-route\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

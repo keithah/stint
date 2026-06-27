@@ -1,7 +1,6 @@
 package collector
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -159,14 +158,8 @@ func scanGeminiFile(path string, state *State, events *[]usage.Event, report *Sc
 		return
 	}
 
-	b, err := os.ReadFile(path)
-	if err != nil {
-		report.Errors++
-		return
-	}
-
 	var sess geminiSession
-	if err := json.Unmarshal(b, &sess); err != nil {
+	if err := decodeJSONFile(path, &sess); err != nil {
 		report.Errors++
 		report.LinesSkipped++
 		// Record the cursor anyway so an unparseable file is not retried every

@@ -68,6 +68,6 @@ assert.match(source, /customPricingError\(\{/);
 assert.match(source, /disabled=\{savePricing\.isPending \|\| !canSaveCustomPricing\}/);
 assert.match(source, /upsertCustomPricing\(\{/);
 assert.match(source, /removePricing\.mutate\(price\.model\)/);
-assert.match(packageJSON, /app\/\(console\)\/settings\/custom-pricing-validation\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);
 
 console.log("custom-pricing-validation.test.ts passed");

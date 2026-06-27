@@ -5,7 +5,8 @@ import { BarChart3, CalendarDays, Download, FileDown, Plus, Trash2 } from "lucid
 import { useState } from "react";
 import { PageHeader } from "@/components/ui";
 import { createDataDump, createExternalDuration, dataDumpDownloadURL, deleteExternalDurationsBulk, deleteHeartbeats, durationsForDay, heartbeatsForDay, listDataDumps, listExternalDurations, summaries, type DurationSlice } from "@/lib/api";
-import { dataDumpExpiryText, dataDumpIsDownloadable, hasPendingDumps } from "@/lib/data-dumps";
+import { dataDumpExpiryText, dataDumpIsDownloadable } from "@/lib/data-dumps";
+import { useJobEvents } from "@/lib/job-events";
 
 const today = new Date().toISOString().slice(0, 10);
 const weekAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -27,6 +28,7 @@ export default function ReportsPage() {
 }
 
 function ReportsContent() {
+  useJobEvents();
   const client = useQueryClient();
   const [dumpType, setDumpType] = useState<"heartbeats" | "daily">("heartbeats");
   const [startDate, setStartDate] = useState(weekAgo);
@@ -40,16 +42,11 @@ function ReportsContent() {
   const [selectedHeartbeatIDs, setSelectedHeartbeatIDs] = useState<string[]>([]);
   const [durationDate, setDurationDate] = useState(today);
   const [durationSlice, setDurationSlice] = useState<DurationSlice>("project");
-  const dumps = useQuery({
-    queryKey: ["data-dumps"],
-    queryFn: listDataDumps,
-    retry: false,
-    refetchInterval: (query) => (hasPendingDumps(query.state.data) ? 2000 : false)
-  });
-  const external = useQuery({ queryKey: ["external-durations"], queryFn: listExternalDurations, retry: false });
-  const report = useQuery({ queryKey: ["summaries", startDate, endDate], queryFn: () => summaries(startDate, endDate), retry: false });
-  const heartbeats = useQuery({ queryKey: ["heartbeats", heartbeatDate], queryFn: () => heartbeatsForDay(heartbeatDate), retry: false });
-  const durations = useQuery({ queryKey: ["durations", durationDate, durationSlice], queryFn: () => durationsForDay(durationDate, durationSlice), retry: false });
+	  const dumps = useQuery({ queryKey: ["data-dumps"], queryFn: listDataDumps });
+  const external = useQuery({ queryKey: ["external-durations"], queryFn: listExternalDurations, });
+  const report = useQuery({ queryKey: ["summaries", startDate, endDate], queryFn: () => summaries(startDate, endDate), });
+  const heartbeats = useQuery({ queryKey: ["heartbeats", heartbeatDate], queryFn: () => heartbeatsForDay(heartbeatDate), });
+  const durations = useQuery({ queryKey: ["durations", durationDate, durationSlice], queryFn: () => durationsForDay(durationDate, durationSlice), });
   const createDump = useMutation({
     mutationFn: () => createDataDump(dumpType),
     onSuccess: () => client.invalidateQueries({ queryKey: ["data-dumps"] })

@@ -37,7 +37,7 @@ function GoalsContent() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createDraft, setCreateDraft] = useState<GoalDraft>(() => defaultGoalDraft());
   const [editing, setEditing] = useState<GoalDraft | null>(null);
-  const goals = useQuery({ queryKey: ["goals"], queryFn: listGoals, retry: false });
+  const goals = useQuery({ queryKey: ["goals"], queryFn: listGoals, });
   const create = useMutation({
     mutationFn: () => createGoal(goalPayloadFromInputs(createDraft)),
     onSuccess: () => {

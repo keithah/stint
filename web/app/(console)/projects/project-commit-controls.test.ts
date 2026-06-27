@@ -16,4 +16,4 @@ assert.match(source, /setCommitPage\(commits\.data\?\.prev_page \?\? 1\)/);
 assert.match(source, /setCommitPage\(commits\.data\?\.next_page \?\? commitPage\)/);
 assert.match(source, /href=\{commit\.html_url \|\| commit\.url \|\| undefined\}/);
 assert.match(source, /target=\{commit\.html_url \|\| commit\.url \? "_blank" : undefined\}/);
-assert.match(packageJSON, /app\/\(console\)\/projects\/project-commit-controls\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

@@ -8,6 +8,7 @@ node_modules/
 web/node_modules/
 web/.next/
 web/tsconfig.tsbuildinfo
+web/tsconfig.test.tsbuildinfo
 docs/screenshots/
 tmp/
 .tmp/

@@ -3,11 +3,40 @@ package middleware
 import (
 	"context"
 	"fmt"
-	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
+
+var redisRateLimitMemberCounter atomic.Uint64
+
+var redisRateLimitScript = redis.NewScript(`
+local key = KEYS[1]
+local cutoff = tonumber(ARGV[1])
+local now = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local window = tonumber(ARGV[4])
+local member = ARGV[5]
+
+redis.call("ZREMRANGEBYSCORE", key, "0", cutoff)
+local count = redis.call("ZCARD", key)
+if count >= limit then
+  local oldest = redis.call("ZRANGE", key, 0, 0, "WITHSCORES")
+  local retry_after = 1000
+  if oldest[2] then
+    retry_after = tonumber(oldest[2]) + window - now
+    if retry_after < 1000 then
+      retry_after = 1000
+    end
+  end
+  return {0, retry_after}
+end
+
+redis.call("ZADD", key, now, member)
+redis.call("PEXPIRE", key, window * 2)
+return {1, 0}
+`)
 
 type RedisRateLimiter struct {
 	client *redis.Client
@@ -30,29 +59,20 @@ func (l *RedisRateLimiter) Allow(ctx context.Context, key string, limit int, win
 	cutoffMs := now.Add(-window).UnixMilli()
 	redisKey := "stint:ratelimit:" + key
 
-	pipe := l.client.TxPipeline()
-	pipe.ZRemRangeByScore(ctx, redisKey, "0", strconv.FormatInt(cutoffMs, 10))
-	countCmd := pipe.ZCard(ctx, redisKey)
-	oldestCmd := pipe.ZRangeWithScores(ctx, redisKey, 0, 0)
-	if _, err := pipe.Exec(ctx); err != nil {
+	member := fmt.Sprintf("%d:%d", now.UnixNano(), redisRateLimitMemberCounter.Add(1))
+	result, err := redisRateLimitScript.Run(ctx, l.client, []string{redisKey}, cutoffMs, nowMs, limit, window.Milliseconds(), member).Int64Slice()
+	if err != nil {
 		return false, 0, err
 	}
-	if countCmd.Val() >= int64(limit) {
-		retryAfter := time.Second
-		if oldest := oldestCmd.Val(); len(oldest) > 0 {
-			oldestMs := int64(oldest[0].Score)
-			retryAfter = time.Duration(oldestMs+window.Milliseconds()-nowMs) * time.Millisecond
-			if retryAfter < time.Second {
-				retryAfter = time.Second
-			}
+	if len(result) != 2 {
+		return false, 0, fmt.Errorf("unexpected Redis rate limit result: %v", result)
+	}
+	if result[0] == 0 {
+		retryAfter := time.Duration(result[1]) * time.Millisecond
+		if retryAfter < time.Second {
+			retryAfter = time.Second
 		}
 		return false, retryAfter, nil
 	}
-
-	member := fmt.Sprintf("%d:%d", now.UnixNano(), countCmd.Val())
-	if err := l.client.ZAdd(ctx, redisKey, redis.Z{Score: float64(nowMs), Member: member}).Err(); err != nil {
-		return false, 0, err
-	}
-	_ = l.client.Expire(ctx, redisKey, window*2).Err()
 	return true, 0, nil
 }

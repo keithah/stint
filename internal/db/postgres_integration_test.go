@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/keithah/stint/internal/auth"
 	"github.com/keithah/stint/internal/services"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -66,6 +67,26 @@ func TestPostgresIntegrationRunsMigrationsAndStoresHeartbeat(t *testing.T) {
 	}
 	if rawKey == "" || apiKey.Fingerprint == "" {
 		t.Fatalf("expected API key material and fingerprint, got key=%q fingerprint=%q", rawKey, apiKey.Fingerprint)
+	}
+	legacyHash, err := auth.HashAPIKeyBcryptForTest(rawKey)
+	if err != nil {
+		t.Fatalf("hash legacy API key: %v", err)
+	}
+	if _, err := store.Pool.Exec(ctx, `UPDATE api_keys SET key_hash = $1 WHERE id = $2`, legacyHash, apiKey.ID); err != nil {
+		t.Fatalf("write legacy API key hash: %v", err)
+	}
+	if _, err := store.AuthByAPIKey(ctx, rawKey); err != nil {
+		t.Fatalf("auth legacy API key: %v", err)
+	}
+	var upgradedHash string
+	if err := store.Pool.QueryRow(ctx, `SELECT key_hash FROM api_keys WHERE id = $1`, apiKey.ID).Scan(&upgradedHash); err != nil {
+		t.Fatalf("read upgraded API key hash: %v", err)
+	}
+	if upgradedHash == legacyHash {
+		t.Fatal("expected legacy API key hash to be upgraded")
+	}
+	if !auth.VerifyAPIKey(upgradedHash, rawKey) {
+		t.Fatal("expected upgraded API key hash to verify")
 	}
 
 	heartbeatTime := float64(time.Date(2026, 6, 19, 12, 30, 0, 0, time.UTC).Unix())

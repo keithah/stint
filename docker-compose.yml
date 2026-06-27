@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: stint
       POSTGRES_PASSWORD: stint
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redisdata:/data
 
@@ -58,6 +58,12 @@ services:
       - "8080:8080"
     volumes:
       - dumpdata:/data/dumps
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
@@ -116,7 +122,8 @@ services:
     ports:
       - "3001:3000"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
   # Continuous local AI-usage ingestion. Opt-in:
   #   docker compose --profile collector up -d collector
@@ -175,7 +182,8 @@ services:
       # root; otherwise state never persists and every restart re-scans/re-posts.
       - ${STINT_COLLECT_STATE_DIR:-./.collector-state}:/state
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
   caddy:
     image: caddy:2-alpine
@@ -192,8 +200,10 @@ services:
       - caddydata:/data
       - caddyconfig:/config
     depends_on:
-      - api
-      - web
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
 
 volumes:
   pgdata:

@@ -1,18 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { AIMetrics } from "@/lib/api";
 import { aiAgentDonutRows } from "@/lib/ai-agent-donut";
-import { aiDayPercentage, aiHeatmapClass, aiHeatmapTitle, formatCents } from "@/lib/ai-heatmap";
+import { aiDayPercentage, aiHeatmapClass, aiHeatmapTitle } from "@/lib/ai-heatmap";
 import { aiRingStyle } from "@/lib/ai-ring";
 import { fallbackPalette } from "@/lib/language-colors";
-import { compactNumber } from "@/lib/number-format";
+import { compactNumber, formatCents } from "@/lib/number-format";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 export function AIPanel({ metrics }: { metrics?: AIMetrics }) {
   const ai = metrics ?? {
     ai_line_changes: 0,
     human_line_changes: 0,
+    ai_additions: 0,
+    ai_deletions: 0,
+    human_additions: 0,
+    human_deletions: 0,
+    ai_line_changes_total: 0,
+    ai_agent_line_changes: {},
+    ai_agent_costs: {},
+    ai_agent_breakdown: [],
+    ai_agent_total_cost: 0,
     ai_percentage: 0,
     human_review_percentage: 0,
     follow_up_edits: 0,
@@ -22,7 +31,15 @@ export function AIPanel({ metrics }: { metrics?: AIMetrics }) {
     prompt_count: 0,
     average_prompt_length: 0,
     median_prompt_length: 0,
+    ai_prompt_length_avg: 0,
+    ai_prompt_length_sum: 0,
+    ai_prompt_length_avg_per_session: 0,
+    ai_prompt_length_median_per_session: 0,
+    ai_prompt_events_total: 0,
+    ai_prompt_events_avg_per_session: 0,
+    ai_prompt_events_median_per_session: 0,
     session_count: 0,
+    ai_sessions: 0,
     estimated_cost_cents: 0,
     agents: [],
     days: [],
@@ -30,9 +47,9 @@ export function AIPanel({ metrics }: { metrics?: AIMetrics }) {
     tool_costs: []
   };
   const totalTokens = ai.ai_input_tokens + ai.ai_output_tokens;
-  const activeDays = ai.days.filter((day) => day.ai_line_changes > 0 || day.ai_input_tokens > 0 || day.estimated_cost_cents > 0);
-  const heatmapDays = ai.days.slice(-35);
-  const fullAIDays = heatmapDays.filter((day) => aiDayPercentage(day) === 100).length;
+  const activeDays = useMemo(() => ai.days.filter((day) => day.ai_line_changes > 0 || day.ai_input_tokens > 0 || day.estimated_cost_cents > 0), [ai.days]);
+  const heatmapDays = useMemo(() => ai.days.slice(-35), [ai.days]);
+  const fullAIDays = useMemo(() => heatmapDays.filter((day) => aiDayPercentage(day) === 100).length, [heatmapDays]);
 
   return (
     <section className="rounded-md border border-line bg-panel/95 p-5 shadow-[0_1px_0_rgba(255,255,255,0.04)]">

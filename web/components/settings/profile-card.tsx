@@ -14,7 +14,7 @@ const PROFILE_THEMES: Array<{ value: ProfileLayout; title: string; detail: strin
 
 export function ProfileCard() {
   const client = useQueryClient();
-  const user = useQuery({ queryKey: ["me"], queryFn: me, retry: false });
+  const user = useQuery({ queryKey: ["me"], queryFn: me, });
   const [profileDraft, setProfileDraft] = useState<PublicProfileDraft | null>(null);
   const profile = profileDraft ?? {
     timezone: user.data?.data.timezone ?? "UTC",
@@ -50,9 +50,8 @@ export function ProfileCard() {
     }
     setPP({ visibility });
   };
-  const publicOrigin = typeof window === "undefined" ? "" : window.location.origin;
   const publicHandle = (profile.public_username?.trim() || user.data?.data.github_username || "username").replace(/^@/, "");
-  const publicProfileURL = `${publicOrigin}/@${publicHandle}`;
+  const publicProfilePath = `/@${publicHandle}`;
   const canSaveProfile = profile.timezone.trim().length > 0 && Number.isFinite(profile.timeout_minutes) && profile.timeout_minutes >= 0 && profile.timeout_minutes <= 120 && Number.isFinite(profile.heartbeat_retention_days) && profile.heartbeat_retention_days >= 0 && (!profile.country?.trim() || /^[A-Za-z]{2}$/.test(profile.country.trim())) && (!profile.public_username?.trim() || /^[A-Za-z0-9][A-Za-z0-9_-]{1,37}[A-Za-z0-9]$/.test(profile.public_username.trim().replace(/^@/, "")));
   const saveProfile = useMutation({
     mutationFn: () =>
@@ -152,9 +151,9 @@ export function ProfileCard() {
             <h3 className="font-medium text-zinc-100">Public profile</h3>
             <p className="mt-1 text-sm text-zinc-500">Publish a clean profile URL and explicitly choose which activity sections are visible.</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <code className="min-w-0 flex-1 break-all rounded border border-line bg-panel px-3 py-2 text-xs text-zinc-400">{publicProfileURL}</code>
+              <code className="min-w-0 flex-1 break-all rounded border border-line bg-panel px-3 py-2 text-xs text-zinc-400">{publicProfilePath}</code>
               <a
-                href={publicProfileURL}
+                href={publicProfilePath}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex shrink-0 items-center gap-2 rounded border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-accent transition hover:bg-accent/20"

@@ -54,13 +54,8 @@ func (w CustomRulesWorker) HandleCustomRulesApplyTask(ctx context.Context, task 
 	if err != nil {
 		return err
 	}
-	stats := StatsWorker{Store: w.Store}
-	for _, rangeName := range jobs.DefaultStatsRanges() {
-		if _, err := stats.RecomputeRange(ctx, payload.UserID, rangeName, user.TimeoutMinutes, user.WritesOnly); err != nil {
-			return err
-		}
-	}
-	return nil
+	stats := NewStatsWorker(w.Store, nil)
+	return stats.RecomputeRanges(ctx, payload.UserID, jobs.DefaultStatsRanges(), user.TimeoutMinutes, user.WritesOnly)
 }
 
 func shouldSkipCustomRulesApply(status string) bool {

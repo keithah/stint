@@ -12,7 +12,8 @@ import (
 )
 
 type fakeHeartbeatStore struct {
-	seen map[string]bool
+	seen       map[string]bool
+	batchCalls int
 }
 
 func (s *fakeHeartbeatStore) InsertHeartbeat(_ context.Context, _ uuid.UUID, heartbeat services.Heartbeat) (services.Heartbeat, error) {
@@ -25,6 +26,23 @@ func (s *fakeHeartbeatStore) InsertHeartbeat(_ context.Context, _ uuid.UUID, hea
 	}
 	s.seen[key] = true
 	return heartbeat, nil
+}
+
+func (s *fakeHeartbeatStore) InsertHeartbeats(_ context.Context, _ uuid.UUID, heartbeats []services.Heartbeat) ([]db.HeartbeatInsertResult, error) {
+	s.batchCalls++
+	results := make([]db.HeartbeatInsertResult, 0, len(heartbeats))
+	for _, heartbeat := range heartbeats {
+		stored, err := s.InsertHeartbeat(context.Background(), uuid.Nil, heartbeat)
+		if err != nil {
+			if errors.Is(err, db.ErrDuplicateHeartbeat) {
+				results = append(results, db.HeartbeatInsertResult{Heartbeat: heartbeat, Duplicate: true, Err: db.ErrDuplicateHeartbeat})
+				continue
+			}
+			return nil, err
+		}
+		results = append(results, db.HeartbeatInsertResult{Heartbeat: stored, Stored: true})
+	}
+	return results, nil
 }
 
 func TestProcessHeartbeatsCountsInsertedDuplicatesAndInvalid(t *testing.T) {
@@ -47,6 +65,9 @@ func TestProcessHeartbeatsCountsInsertedDuplicatesAndInvalid(t *testing.T) {
 	if result.Inserted != 1 || result.Duplicates != 1 || result.Invalid != 1 || result.Total != 3 {
 		t.Fatalf("unexpected result: %#v", result)
 	}
+	if store.batchCalls != 1 {
+		t.Fatalf("expected one batched store call, got %d", store.batchCalls)
+	}
 }
 
 func TestProcessHeartbeatsReturnsStoreErrors(t *testing.T) {
@@ -65,4 +86,8 @@ type failingHeartbeatStore struct {
 
 func (s failingHeartbeatStore) InsertHeartbeat(context.Context, uuid.UUID, services.Heartbeat) (services.Heartbeat, error) {
 	return services.Heartbeat{}, s.err
+}
+
+func (s failingHeartbeatStore) InsertHeartbeats(context.Context, uuid.UUID, []services.Heartbeat) ([]db.HeartbeatInsertResult, error) {
+	return nil, s.err
 }

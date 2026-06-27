@@ -46,6 +46,9 @@ const breakdowns = [
   "ai_days"
 ] as const;
 
+const maxRenderedDailyRows = 120;
+const maxRenderedTrendBars = 180;
+
 type DailyAverageInsightValue = {
   seconds: number;
   text: string;
@@ -60,8 +63,8 @@ export default function InsightsPage() {
 function InsightsContent() {
   const [range, setRange] = useState<StatsRange>("last_30_days");
   const [breakdown, setBreakdown] = useState<(typeof breakdowns)[number]>("stats");
-  const stats = useQuery({ queryKey: ["stats", range], queryFn: () => statsForRange(range), retry: false });
-  const rows = useQuery({ queryKey: ["insight", breakdown, range], queryFn: () => insight(breakdown, range), retry: false });
+  const stats = useQuery({ queryKey: ["stats", range], queryFn: () => statsForRange(range), });
+  const rows = useQuery({ queryKey: ["insight", breakdown, range], queryFn: () => insight(breakdown, range), });
 
   const sliceRows = Array.isArray(rows.data?.data) ? (rows.data?.data as Array<SliceTotal | AIStat | DailyStat | HourlyStat | WeekdayStat | DailyAverageTrendStat>) : [];
   const statsOverview = breakdown === "stats" && rows.data?.data && !Array.isArray(rows.data.data) ? (rows.data.data as Stats) : undefined;
@@ -214,6 +217,7 @@ function TopList({ title, rows, total }: { title: string; rows: SliceTotal[]; to
 }
 
 function InsightRows({ rows, fallbackTotal }: { rows: Array<SliceTotal | AIStat>; fallbackTotal: number }) {
+  const total = totalForRows(rows, fallbackTotal);
   return (
     <div className="divide-y divide-line">
       {rows.map((row, index) => (
@@ -222,7 +226,7 @@ function InsightRows({ rows, fallbackTotal }: { rows: Array<SliceTotal | AIStat>
           <div className="min-w-0">
             <div className="truncate text-sm font-medium text-zinc-100">{row.name}</div>
             <div className="mt-2 h-1.5 overflow-hidden rounded bg-white/5">
-              <div className="h-full rounded bg-accent" style={{ width: `${percent(rowValue(row), totalForRows(rows, fallbackTotal))}%` }} />
+              <div className="h-full rounded bg-accent" style={{ width: `${percent(rowValue(row), total)}%` }} />
             </div>
           </div>
           <span className="text-right text-sm text-zinc-400">{rowLabel(row)}</span>
@@ -234,9 +238,13 @@ function InsightRows({ rows, fallbackTotal }: { rows: Array<SliceTotal | AIStat>
 }
 
 function DailyRows({ rows, fallbackTotal }: { rows: DailyStat[]; fallbackTotal: number }) {
+  const visibleRows = rows.slice(-maxRenderedDailyRows);
   return (
     <div className="divide-y divide-line">
-      {rows.map((row) => (
+      {rows.length > visibleRows.length ? (
+        <div className="px-4 py-2 text-xs text-zinc-500">Showing latest {visibleRows.length} of {rows.length} daily rows.</div>
+      ) : null}
+      {visibleRows.map((row) => (
         <div key={row.date} className="grid gap-3 px-4 py-3 sm:grid-cols-[120px_1fr_120px] sm:items-center">
           <div className="text-sm font-medium text-zinc-200">{row.date}</div>
           <div className="min-w-0">
@@ -306,12 +314,14 @@ function DailyAverageInsight({ average }: { average?: DailyAverageInsightValue }
 }
 
 function DailyAverageTrend({ rows }: { rows: DailyAverageTrendStat[] }) {
-  const maxSeconds = Math.max(1, ...rows.map((row) => Math.max(row.total_seconds, row.average_seconds)));
+  const visibleRows = rows.slice(-maxRenderedTrendBars);
+  const maxSeconds = Math.max(1, ...visibleRows.map((row) => Math.max(row.total_seconds, row.average_seconds)));
   const lastRow = rows[rows.length - 1];
   return (
     <div className="p-4">
-      <div className="grid h-72 items-end gap-1 border-b border-line pb-3" style={{ gridTemplateColumns: `repeat(${Math.max(rows.length, 1)}, minmax(10px, 1fr))` }}>
-        {rows.map((row) => (
+      {rows.length > visibleRows.length ? <div className="mb-3 text-xs text-zinc-500">Showing latest {visibleRows.length} of {rows.length} trend days.</div> : null}
+      <div className="grid h-72 items-end gap-1 border-b border-line pb-3" style={{ gridTemplateColumns: `repeat(${Math.max(visibleRows.length, 1)}, minmax(10px, 1fr))` }}>
+        {visibleRows.map((row) => (
           <div key={row.date} className="flex h-full flex-col justify-end gap-1" title={`${row.date}: ${row.text}, ${row.average_text} average`}>
             <div className="rounded-t bg-accent/80" style={{ height: `${Math.max(3, Math.round((row.average_seconds / maxSeconds) * 100))}%` }} />
             <div className="rounded-t bg-white/20" style={{ height: `${Math.max(3, Math.round((row.total_seconds / maxSeconds) * 100))}%` }} />

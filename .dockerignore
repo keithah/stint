@@ -2,8 +2,12 @@
 .env
 web/node_modules
 web/.next
+web
 node_modules
 tmp
 .tmp
 coverage
 *.log
+docs
+**/*_test.go
+internal/collector/testdata

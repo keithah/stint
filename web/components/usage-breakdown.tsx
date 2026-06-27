@@ -2,6 +2,7 @@ import { formatUSD, compactNumber } from "@/lib/number-format";
 import type { UsageSlice } from "@/lib/usage-api";
 import { billingBadge } from "@/lib/usage-billing";
 import { minimumVisiblePercent } from "@/lib/chart-percent";
+import { useMemo } from "react";
 
 // A ranked cost breakdown with a proportion bar per row. Optionally clickable to
 // drive drill-down (agents), and optionally badging each row's effective billing
@@ -19,8 +20,8 @@ export function UsageBreakdown({
   onSelect?: (name: string) => void;
   selected?: string | null;
 }) {
-  const ranked = [...rows].sort((a, b) => b.cost_usd - a.cost_usd).slice(0, 8);
-  const max = Math.max(1e-9, ...ranked.map((row) => row.cost_usd));
+  const ranked = useMemo(() => topCostRows(rows, 8), [rows]);
+  const max = useMemo(() => Math.max(1e-9, ...ranked.map((row) => row.cost_usd)), [ranked]);
 
   return (
     <div className="ops-chart-panel rounded border border-line bg-panel/95 p-4 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
@@ -72,4 +73,22 @@ export function UsageBreakdown({
       )}
     </div>
   );
+}
+
+function topCostRows(rows: UsageSlice[], limit: number) {
+  const top: UsageSlice[] = [];
+  for (const row of rows) {
+    const insertAt = top.findIndex((item) => row.cost_usd > item.cost_usd);
+    if (insertAt === -1) {
+      if (top.length < limit) {
+        top.push(row);
+      }
+    } else {
+      top.splice(insertAt, 0, row);
+      if (top.length > limit) {
+        top.pop();
+      }
+    }
+  }
+  return top;
 }

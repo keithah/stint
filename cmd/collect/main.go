@@ -13,11 +13,14 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/keithah/stint/internal/collector"
 	"github.com/keithah/stint/internal/usage"
 )
+
+const collectUploadTimeout = 5 * time.Minute
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -169,21 +172,43 @@ func selectAgents(reg collector.Registry, allow []string) ([]string, error) {
 }
 
 func scanOnce(reg collector.Registry, ids []string, agentPaths map[string][]string, state *collector.State, client *collector.Client, dryRun bool) error {
+	type scanResult struct {
+		id     string
+		events []usage.Event
+		report collector.ScanReport
+		err    error
+	}
+	results := make([]scanResult, len(ids))
+	const maxConcurrentScans = 4
+	sem := make(chan struct{}, maxConcurrentScans)
+	var wg sync.WaitGroup
+	for i, id := range ids {
+		i, id := i, id
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			entry := reg[id]
+			baseDirs := entry.BaseDirs()
+			if override := agentPaths[id]; len(override) > 0 {
+				baseDirs = override
+			}
+			events, report, err := entry.Adapter.Scan(baseDirs, state)
+			results[i] = scanResult{id: id, events: events, report: report, err: err}
+		}()
+	}
+	wg.Wait()
+
 	var all []usage.Event
-	for _, id := range ids {
-		entry := reg[id]
-		baseDirs := entry.BaseDirs()
-		if override := agentPaths[id]; len(override) > 0 {
-			baseDirs = override
+	for _, result := range results {
+		if result.err != nil {
+			fmt.Fprintf(os.Stderr, "collect: agent %s scan error: %v\n", result.id, result.err)
 		}
-		events, report, err := entry.Adapter.Scan(baseDirs, state)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "collect: agent %s scan error: %v\n", id, err)
-		}
-		printReport(id, report, len(events))
-		all = append(all, events...)
+		printReport(result.id, result.report, len(result.events))
+		all = append(all, result.events...)
 		if dryRun {
-			printSample(events)
+			printSample(result.events)
 		}
 	}
 
@@ -196,7 +221,8 @@ func scanOnce(reg collector.Registry, ids []string, agentPaths map[string][]stri
 	}
 
 	// Persist state only after a successful post so a failed post is retried.
-	ctx := context.Background()
+	ctx, cancelUpload := context.WithTimeout(context.Background(), collectUploadTimeout)
+	defer cancelUpload()
 	res, err := client.Post(ctx, all)
 	if err != nil {
 		return fmt.Errorf("post: %w", err)

@@ -12,5 +12,5 @@ assert.match(source, /<ActivityHeatmap days=\{stats\.data\?\.data\.days \?\? \[\
 assert.match(source, /Coding heatmap/);
 assert.match(source, /Less/);
 assert.match(source, /More/);
-assert.match(packageJSON, /lib\/activity-heatmap\.test\.ts/);
-assert.match(packageJSON, /app\/\(console\)\/insights\/activity-heatmap\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

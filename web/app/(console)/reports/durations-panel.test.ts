@@ -12,5 +12,5 @@ assert.match(source, /queryFn: \(\) => durationsForDay\(durationDate, durationSl
 assert.match(source, /Duration breakdown/);
 assert.match(source, /durationRows\.reduce\(\(sum, row\) => sum \+ row\.duration, 0\)/);
 assert.match(source, /formatHeartbeatTime\(row\.time\)/);
-assert.match(packageJSON, /lib\/durations-api\.test\.ts/);
-assert.match(packageJSON, /app\/\(console\)\/reports\/durations-panel\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

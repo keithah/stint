@@ -13,4 +13,4 @@ assert.match(source, /client\.invalidateQueries\(\{ queryKey: \["external-durati
 assert.match(source, /selectedExternalDurationIDs\.includes\(duration\.id\)/);
 assert.match(source, /deleteSelectedExternalDurations\.mutate\(\)/);
 assert.match(source, /Delete selected durations/);
-assert.match(packageJSON, /app\/\(console\)\/reports\/external-durations-delete\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

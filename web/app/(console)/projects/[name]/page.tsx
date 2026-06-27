@@ -1,16 +1,19 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { Boxes, ChevronLeft, ChevronRight, ExternalLink, GitCommitHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
-import { AIPanel } from "@/components/ai-panel";
-import { ActivityBars, SliceDonut } from "@/components/dashboard-charts";
 import { StatCard } from "@/components/stat-card";
 import { listProgramLanguages, listProjectCommits, projectDetail, type StatsRange } from "@/lib/api";
 import { languageColorMap } from "@/lib/language-colors";
 import { rangeOptions } from "@/lib/ranges";
 import { PageHeader, SecondaryButton, SegmentedToggle, pillWrapperClass } from "@/components/ui";
+
+const AIPanel = dynamic(() => import("@/components/ai-panel").then((module) => module.AIPanel), { ssr: false });
+const ActivityBars = dynamic(() => import("@/components/dashboard-charts").then((module) => module.ActivityBars), { ssr: false });
+const SliceDonut = dynamic(() => import("@/components/dashboard-charts").then((module) => module.SliceDonut), { ssr: false });
 
 export default function ProjectDetailPage() {
   return <ProjectDetailContent />;
@@ -22,9 +25,9 @@ function ProjectDetailContent() {
   const [range, setRange] = useState<StatsRange>("last_30_days");
   const [commitBranch, setCommitBranch] = useState("");
   const [commitPage, setCommitPage] = useState(1);
-  const detail = useQuery({ queryKey: ["project", name, range], queryFn: () => projectDetail(name, range), retry: false });
-  const commits = useQuery({ queryKey: ["project-commits", name, commitBranch, commitPage], queryFn: () => listProjectCommits(name, { branch: commitBranch || undefined, page: commitPage }), retry: false });
-  const programLanguages = useQuery({ queryKey: ["program-languages"], queryFn: listProgramLanguages, retry: false, staleTime: 3600000 });
+  const detail = useQuery({ queryKey: ["project", name, range], queryFn: () => projectDetail(name, range), });
+  const commits = useQuery({ queryKey: ["project-commits", name, commitBranch, commitPage], queryFn: () => listProjectCommits(name, { branch: commitBranch || undefined, page: commitPage }), });
+  const programLanguages = useQuery({ queryKey: ["program-languages"], queryFn: listProgramLanguages, staleTime: 3600000 });
   const data = detail.data?.data;
   const languageColors = useMemo(() => languageColorMap(programLanguages.data?.data ?? []), [programLanguages.data?.data]);
   const activeRange = rangeOptions.find((item) => item.value === range) ?? rangeOptions[1];
@@ -139,4 +142,3 @@ function ProjectDetailContent() {
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
-

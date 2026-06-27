@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // `stint_session` cookie on login; its mere presence is enough to skip the
 // public entry points. If the cookie is stale/invalid, the dashboard's own
 // auth check surfaces a login prompt, so this never traps the user.
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   if (request.cookies.has("stint_session")) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";

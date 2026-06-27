@@ -13,4 +13,4 @@ assert.match(source, /disabled=\{saveProfile\.isPending \|\| !canSaveProfile\}/)
 assert.match(source, /min=\{0\}/);
 assert.match(source, /onChange=\{\(event\) => setProfileDraft\(\{ \.\.\.profile, timeout_minutes: Math\.min\(120, Math\.max\(0, Number\(event\.target\.value\) \|\| 0\)\) \}\)\}/);
 assert.match(source, /onChange=\{\(event\) => setProfileDraft\(\{ \.\.\.profile, heartbeat_retention_days: Math\.max\(0, Number\(event\.target\.value\) \|\| 0\) \}\)\}/);
-assert.match(packageJSON, /app\/\(console\)\/settings\/profile-validation\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

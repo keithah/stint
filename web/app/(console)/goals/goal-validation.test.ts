@@ -13,4 +13,4 @@ assert.match(source, /type="number" min=\{0\} step=\{60\}/);
 assert.match(source, /type="number" min=\{0\} step=\{1\}/);
 assert.match(source, /const improveByPercent = input\.improveByPercent\.trim\(\);/);
 assert.match(source, /improve_by_percent: improveByPercent === "" \? undefined : Number\(improveByPercent\)/);
-assert.match(packageJSON, /app\/\(console\)\/goals\/goal-validation\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

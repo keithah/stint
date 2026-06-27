@@ -2,21 +2,26 @@
 
 import type { AIStat, HourlyStat, DailyStat, SliceTotal } from "@/lib/api";
 import { colorForLanguage, fallbackPalette } from "@/lib/language-colors";
+import { useMemo } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 const chartPanelClass = "ops-chart-panel rounded border border-line bg-panel/95 p-4 shadow-[0_1px_0_rgba(255,255,255,0.04)]";
+const chartTick = { fontSize: 12 };
+const smallChartTick = { fontSize: 11 };
+const tooltipStyle = { background: "#161618", border: "1px solid #26262b", borderRadius: 8 };
+const shortDateTick = (value: string) => value.slice(5);
 
 export function ActivityBars({ days, title = "Last 7 Days" }: { days: DailyStat[]; title?: string }) {
-  const data = days.map((day) => ({ ...day, hours: Number((day.total_seconds / 3600).toFixed(2)) }));
+  const data = useMemo(() => days.map((day) => ({ ...day, hours: Number((day.total_seconds / 3600).toFixed(2)) })), [days]);
   return (
     <div className={`${chartPanelClass} h-72`}>
       <div className="mb-4 text-sm font-medium text-zinc-300">{title}</div>
       <ResponsiveContainer width="100%" height="85%">
         <BarChart data={data}>
           <CartesianGrid stroke="#26262b" vertical={false} />
-          <XAxis dataKey="date" stroke="#888" tick={{ fontSize: 12 }} tickFormatter={(value) => value.slice(5)} />
-          <YAxis stroke="#888" tick={{ fontSize: 12 }} />
-          <Tooltip contentStyle={{ background: "#161618", border: "1px solid #26262b", borderRadius: 8 }} />
+          <XAxis dataKey="date" stroke="#888" tick={chartTick} tickFormatter={shortDateTick} />
+          <YAxis stroke="#888" tick={chartTick} />
+          <Tooltip contentStyle={tooltipStyle} />
           <Bar dataKey="hours" fill="#00b4d8" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
@@ -25,15 +30,16 @@ export function ActivityBars({ days, title = "Last 7 Days" }: { days: DailyStat[
 }
 
 export function ProjectStackedArea({ days }: { days: DailyStat[] }) {
-  const keys = topProjectKeys(days);
-  const data = days.map((day) => {
+  const keys = useMemo(() => topProjectKeys(days), [days]);
+  const data = useMemo(() => days.map((day) => {
     const row: Record<string, string | number> = { date: day.date, label: day.date.slice(5), total: Number((day.total_seconds / 3600).toFixed(2)) };
+    const projectsByName = new Map((day.projects ?? []).map((entry) => [entry.name, entry]));
     for (const key of keys) {
-      const project = (day.projects ?? []).find((entry) => entry.name === key);
+      const project = projectsByName.get(key);
       row[key] = project ? Number((project.total_seconds / 3600).toFixed(2)) : 0;
     }
     return row;
-  });
+  }), [days, keys]);
   return (
     <div className={`${chartPanelClass} h-72`}>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -43,9 +49,9 @@ export function ProjectStackedArea({ days }: { days: DailyStat[] }) {
       <ResponsiveContainer width="100%" height="82%">
         <AreaChart data={data}>
           <CartesianGrid stroke="#26262b" vertical={false} />
-          <XAxis dataKey="label" stroke="#888" tick={{ fontSize: 12 }} />
-          <YAxis stroke="#888" tick={{ fontSize: 12 }} />
-          <Tooltip contentStyle={{ background: "#161618", border: "1px solid #26262b", borderRadius: 8 }} />
+          <XAxis dataKey="label" stroke="#888" tick={chartTick} />
+          <YAxis stroke="#888" tick={chartTick} />
+          <Tooltip contentStyle={tooltipStyle} />
           {keys.map((key, index) => (
             <Area key={key} dataKey={key} stackId="projects" stroke={fallbackPalette[index % fallbackPalette.length]} fill={fallbackPalette[index % fallbackPalette.length]} fillOpacity={0.72} />
           ))}
@@ -70,7 +76,7 @@ export function SliceDonut({ title, rows, colors = {} }: { title: string; rows: 
                   <Cell key={index} fill={colorForLanguage(row.name, colors, index)} />
                 ))}
               </Pie>
-              <Tooltip contentStyle={{ background: "#161618", border: "1px solid #26262b", borderRadius: 8 }} />
+              <Tooltip contentStyle={tooltipStyle} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -118,15 +124,16 @@ export function SliceBars({ title, rows, colors = {} }: { title: string; rows: S
 }
 
 export function HourlyTimeline({ hours, mode, colors = {} }: { hours: HourlyStat[]; mode: "projects" | "languages"; colors?: Record<string, string> }) {
-  const keys = topTimelineKeys(hours, mode);
-  const data = hours.map((hour) => {
+  const keys = useMemo(() => topTimelineKeys(hours, mode), [hours, mode]);
+  const data = useMemo(() => hours.map((hour) => {
     const row: Record<string, string | number> = { label: hour.label, total: Number((hour.total_seconds / 3600).toFixed(2)) };
+    const itemsByName = new Map((hour[mode] ?? []).map((entry) => [entry.name, entry]));
     for (const key of keys) {
-      const item = (hour[mode] ?? []).find((entry) => entry.name === key);
+      const item = itemsByName.get(key);
       row[key] = item ? Number((item.total_seconds / 3600).toFixed(2)) : 0;
     }
     return row;
-  });
+  }), [hours, keys, mode]);
   return (
     <div className={`${chartPanelClass} h-72`}>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -136,9 +143,9 @@ export function HourlyTimeline({ hours, mode, colors = {} }: { hours: HourlyStat
       <ResponsiveContainer width="100%" height="82%">
         <BarChart data={data}>
           <CartesianGrid stroke="#26262b" vertical={false} />
-          <XAxis dataKey="label" stroke="#888" tick={{ fontSize: 11 }} interval={2} />
-          <YAxis stroke="#888" tick={{ fontSize: 12 }} />
-          <Tooltip contentStyle={{ background: "#161618", border: "1px solid #26262b", borderRadius: 8 }} />
+          <XAxis dataKey="label" stroke="#888" tick={smallChartTick} interval={2} />
+          <YAxis stroke="#888" tick={chartTick} />
+          <Tooltip contentStyle={tooltipStyle} />
           {keys.map((key, index) => (
             <Bar key={key} dataKey={key} stackId={mode} fill={colorForLanguage(key, colors, index)} radius={index === keys.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
           ))}
@@ -150,13 +157,13 @@ export function HourlyTimeline({ hours, mode, colors = {} }: { hours: HourlyStat
 }
 
 export function AIHumanByDay({ days, title = "AI vs Human by Day" }: { days: AIStat[]; title?: string }) {
-  const data = days.map((day) => ({
+  const data = useMemo(() => days.map((day) => ({
     name: day.name.slice(5),
     ai: day.ai_line_changes,
     human: day.human_line_changes,
     tokens: day.ai_input_tokens + day.ai_output_tokens,
     sessions: day.session_count
-  }));
+  })), [days]);
   const hasRows = data.some((day) => day.ai > 0 || day.human > 0 || day.tokens > 0);
   return (
     <div className={`${chartPanelClass} h-72`}>
@@ -170,10 +177,10 @@ export function AIHumanByDay({ days, title = "AI vs Human by Day" }: { days: AIS
       <ResponsiveContainer width="100%" height="82%">
         <BarChart data={data}>
           <CartesianGrid stroke="#26262b" vertical={false} />
-          <XAxis dataKey="name" stroke="#888" tick={{ fontSize: 12 }} />
-          <YAxis stroke="#888" tick={{ fontSize: 12 }} />
+          <XAxis dataKey="name" stroke="#888" tick={chartTick} />
+          <YAxis stroke="#888" tick={chartTick} />
           <Tooltip
-            contentStyle={{ background: "#161618", border: "1px solid #26262b", borderRadius: 8 }}
+            contentStyle={tooltipStyle}
             formatter={(value, name) => [Number(value).toLocaleString(), name === "ai" ? "AI changes" : "Human changes"]}
           />
           <Bar dataKey="ai" stackId="lines" fill={fallbackPalette[0]} radius={[4, 4, 0, 0]} />
@@ -186,7 +193,7 @@ export function AIHumanByDay({ days, title = "AI vs Human by Day" }: { days: AIS
 }
 
 export function WeekdayHeatmap({ days }: { days: DailyStat[] }) {
-  const rows = weekdayRows(days);
+  const rows = useMemo(() => weekdayRows(days), [days]);
   const maxSeconds = Math.max(1, ...rows.map((row) => row.totalSeconds));
   return (
     <div className={chartPanelClass}>

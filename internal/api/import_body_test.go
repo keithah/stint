@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"compress/gzip"
 	"mime/multipart"
 	"net/http/httptest"
 	"strings"
@@ -57,5 +58,27 @@ func TestReadImportBodyRequiresMultipartFile(t *testing.T) {
 
 	if _, err := readImportBody(c); err == nil {
 		t.Fatal("expected missing multipart file to return an error")
+	}
+}
+
+func TestReadImportBodyRejectsOversizedExpandedGzip(t *testing.T) {
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write(bytes.Repeat([]byte("x"), maxImportBodyBytes+1)); err != nil {
+		t.Fatalf("write gzip payload: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close gzip payload: %v", err)
+	}
+
+	req := httptest.NewRequest("POST", "/api/v1/users/current/imports/wakatime", &compressed)
+	c := echo.New().NewContext(req, httptest.NewRecorder())
+
+	_, err := readImportBody(c)
+	if err == nil {
+		t.Fatal("expected oversized expanded gzip to return an error")
+	}
+	if !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("expected size error, got %v", err)
 	}
 }

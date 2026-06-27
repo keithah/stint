@@ -11,6 +11,7 @@ import { leaderboardRangeIsValid, normalizeLeaderboardRangeInput } from "@/lib/l
 
 const publicLanguageOptions = ["", "Go", "TypeScript", "JavaScript", "Python", "Rust", "Markdown"];
 const publicCountryOptions = ["", "US", "CA", "GB", "DE", "FR", "IN", "BR", "AU", "JP"];
+const rankingRowsPageSize = 100;
 
 export default function LeaderboardsPage() {
   return (
@@ -30,12 +31,12 @@ function LeaderboardsContent() {
   const [memberUsername, setMemberUsername] = useState("");
   const [publicLanguage, setPublicLanguage] = useState("");
   const [publicCountry, setPublicCountry] = useState("");
-  const user = useQuery({ queryKey: ["me"], queryFn: me, retry: false });
+  const user = useQuery({ queryKey: ["me"], queryFn: me, });
   const isLoggedIn = Boolean(user.data?.data);
-  const boards = useQuery({ queryKey: ["leaderboards"], queryFn: listLeaderboards, enabled: isLoggedIn, retry: false });
-  const publicRows = useQuery({ queryKey: ["public-leaders", publicLanguage, publicCountry], queryFn: () => publicLeaders(publicLanguage || undefined, publicCountry || undefined), retry: false });
+  const boards = useQuery({ queryKey: ["leaderboards"], queryFn: listLeaderboards, enabled: isLoggedIn, });
+  const publicRows = useQuery({ queryKey: ["public-leaders", publicLanguage, publicCountry], queryFn: () => publicLeaders(publicLanguage || undefined, publicCountry || undefined), });
   const activeBoard = (boards.data?.data ?? []).find((board) => board.id === activeBoardID) ?? boards.data?.data[0];
-  const privateRows = useQuery({ queryKey: ["leaderboard", activeBoard?.id], queryFn: () => leaderboardEntries(activeBoard?.id ?? ""), enabled: Boolean(activeBoard && isLoggedIn), retry: false });
+  const privateRows = useQuery({ queryKey: ["leaderboard", activeBoard?.id], queryFn: () => leaderboardEntries(activeBoard?.id ?? ""), enabled: Boolean(activeBoard && isLoggedIn), });
   const publicLeaderboardRows = publicRows.data?.data ?? [];
   const currentPublicEntry = currentLeaderboardEntry(publicLeaderboardRows, user.data?.data.github_username);
   const createRange = normalizeLeaderboardRangeInput(customRange, range);
@@ -266,9 +267,11 @@ function MemberRows({ members, onRemove, removing }: { members: LeaderboardMembe
 }
 
 function RankingRows({ rows, currentUsername }: { rows: LeaderboardEntry[]; currentUsername?: string }) {
+  const [visibleCount, setVisibleCount] = useState(rankingRowsPageSize);
+  const visibleRows = rows.slice(0, visibleCount);
   return (
     <div className="divide-y divide-line">
-      {rows.map((row) => (
+      {visibleRows.map((row) => (
         <div key={`${row.rank}-${row.username}`} className={`grid grid-cols-[42px_36px_1fr_100px] items-center gap-3 px-4 py-3 text-sm transition hover:bg-white/[0.03] ${isCurrentLeaderboardUser(row, currentUsername) ? "bg-accent/10" : ""}`}>
           <span className="text-zinc-500">#{row.rank}</span>
           <Avatar row={row} />
@@ -282,6 +285,13 @@ function RankingRows({ rows, currentUsername }: { rows: LeaderboardEntry[]; curr
           <span className="text-right text-zinc-400">{row.text}</span>
         </div>
       ))}
+      {visibleRows.length < rows.length ? (
+        <div className="px-4 py-3 text-center">
+          <button className="rounded-md border border-line px-4 py-2 text-sm text-zinc-300 hover:bg-white/5" onClick={() => setVisibleCount((count) => count + rankingRowsPageSize)}>
+            Show more
+          </button>
+        </div>
+      ) : null}
       {rows.length === 0 ? <div className="p-4 text-sm text-zinc-500">No ranked activity yet.</div> : null}
     </div>
   );

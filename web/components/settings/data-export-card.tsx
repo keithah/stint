@@ -4,17 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Plus } from "lucide-react";
 import { useState } from "react";
 import { createDataDump, dataDumpDownloadURL, listDataDumps } from "@/lib/api";
-import { dataDumpExpiryText, dataDumpIsDownloadable, hasPendingDumps } from "@/lib/data-dumps";
+import { dataDumpExpiryText, dataDumpIsDownloadable } from "@/lib/data-dumps";
 
 export function DataExportCard() {
   const client = useQueryClient();
   const [settingsDumpType, setSettingsDumpType] = useState<"heartbeats" | "daily">("heartbeats");
-  const settingsDumps = useQuery({
-    queryKey: ["settings-data-dumps"],
-    queryFn: listDataDumps,
-    retry: false,
-    refetchInterval: (query) => (hasPendingDumps(query.state.data) ? 2000 : false)
-  });
+	  const settingsDumps = useQuery({ queryKey: ["settings-data-dumps"], queryFn: listDataDumps });
   const createSettingsDump = useMutation({
     mutationFn: () => createDataDump(settingsDumpType),
     onSuccess: () => client.invalidateQueries({ queryKey: ["settings-data-dumps"] })

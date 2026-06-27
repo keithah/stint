@@ -15,11 +15,32 @@ import (
 )
 
 type StatsWorker struct {
-	Store *db.Store
+	Store statsStore
+	Baker statsCostBaker
 	// Pricing prices usage_events when baking the AI cost meter into the stats
 	// cache. Optional: when nil, a process-wide bundled engine is used so every
 	// StatsWorker construction site stays a simple {Store: ...} literal.
 	Pricing *pricing.Engine
+}
+
+type statsStore interface {
+	UserByID(context.Context, uuid.UUID) (db.User, error)
+	AllHeartbeats(context.Context, uuid.UUID) ([]services.Heartbeat, error)
+	HeartbeatsForStatsRange(context.Context, uuid.UUID, time.Time, string) ([]services.Heartbeat, error)
+	ListExternalDurations(context.Context, uuid.UUID) ([]db.ExternalDuration, error)
+	ExternalDurationsBetween(context.Context, uuid.UUID, time.Time, time.Time) ([]db.ExternalDuration, error)
+	AICostRates(context.Context, uuid.UUID) (map[string]services.AICostRate, error)
+	UpsertStatsCache(context.Context, uuid.UUID, string, services.Stats) error
+}
+
+type statsCostBaker interface {
+	BakeStatsCosts(context.Context, uuid.UUID, *time.Location, string, *services.Stats)
+}
+
+type statsCostBakeFunc func(context.Context, uuid.UUID, *time.Location, string, *services.Stats)
+
+func (f statsCostBakeFunc) BakeStatsCosts(ctx context.Context, userID uuid.UUID, location *time.Location, rangeName string, stats *services.Stats) {
+	f(ctx, userID, location, rangeName, stats)
 }
 
 var (
@@ -70,7 +91,7 @@ func (w StatsWorker) RecomputeRange(ctx context.Context, userID uuid.UUID, range
 		if err != nil {
 			return services.Stats{}, err
 		}
-		aicostbake.Bake(ctx, w.Store, w.pricingEngine(), userID, location, rangeName, &stats)
+		w.bakeAICosts(ctx, userID, location, rangeName, &stats)
 		if err := w.Store.UpsertStatsCache(ctx, userID, rangeName, stats); err != nil {
 			return services.Stats{}, err
 		}
@@ -97,11 +118,49 @@ func (w StatsWorker) RecomputeRange(ctx context.Context, userID uuid.UUID, range
 	if err != nil {
 		return services.Stats{}, err
 	}
-	aicostbake.Bake(ctx, w.Store, w.pricingEngine(), userID, location, rangeName, &stats)
+	w.bakeAICosts(ctx, userID, location, rangeName, &stats)
 	if err := w.Store.UpsertStatsCache(ctx, userID, rangeName, stats); err != nil {
 		return services.Stats{}, err
 	}
 	return stats, nil
+}
+
+func (w StatsWorker) RecomputeRanges(ctx context.Context, userID uuid.UUID, ranges []string, timeoutMinutes int, writesOnly bool) error {
+	if len(ranges) == 0 {
+		ranges = jobs.DefaultStatsRanges()
+	}
+	location := time.UTC
+	if user, err := w.Store.UserByID(ctx, userID); err == nil && user.Timezone != "" {
+		if loaded, err := time.LoadLocation(user.Timezone); err == nil {
+			location = loaded
+		}
+	}
+	now := time.Now().In(location)
+	heartbeats, err := w.Store.AllHeartbeats(ctx, userID)
+	if err != nil {
+		return err
+	}
+	heartbeats = services.FilterWritesOnly(heartbeats, writesOnly)
+	externalRows, err := w.Store.ListExternalDurations(ctx, userID)
+	if err != nil {
+		return err
+	}
+	external := workerExternalDurations(externalRows)
+	costs, err := w.Store.AICostRates(ctx, userID)
+	if err != nil {
+		return err
+	}
+	for _, rangeName := range ranges {
+		stats, err := computeWorkerStats(rangeName, heartbeats, external, now, time.Duration(timeoutMinutes)*time.Minute, costs)
+		if err != nil {
+			return err
+		}
+		w.bakeAICosts(ctx, userID, location, rangeName, &stats)
+		if err := w.Store.UpsertStatsCache(ctx, userID, rangeName, stats); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (w StatsWorker) HandleStatsRecomputeTask(ctx context.Context, task *asynq.Task) error {
@@ -109,7 +168,7 @@ func (w StatsWorker) HandleStatsRecomputeTask(ctx context.Context, task *asynq.T
 	if err != nil {
 		return err
 	}
-	user, err := w.Store.GetUser(ctx, payload.UserID)
+	user, err := w.Store.UserByID(ctx, payload.UserID)
 	if err != nil {
 		return err
 	}
@@ -117,12 +176,21 @@ func (w StatsWorker) HandleStatsRecomputeTask(ctx context.Context, task *asynq.T
 	if len(ranges) == 0 {
 		ranges = jobs.DefaultStatsRanges()
 	}
-	for _, rangeName := range ranges {
-		if _, err := w.RecomputeRange(ctx, payload.UserID, rangeName, user.TimeoutMinutes, user.WritesOnly); err != nil {
-			return err
-		}
+	return w.RecomputeRanges(ctx, payload.UserID, ranges, user.TimeoutMinutes, user.WritesOnly)
+}
+
+func (w StatsWorker) bakeAICosts(ctx context.Context, userID uuid.UUID, location *time.Location, rangeName string, stats *services.Stats) {
+	if w.Baker != nil {
+		w.Baker.BakeStatsCosts(ctx, userID, location, rangeName, stats)
 	}
-	return nil
+}
+
+func NewStatsWorker(store *db.Store, engine *pricing.Engine) StatsWorker {
+	worker := StatsWorker{Store: store, Pricing: engine}
+	worker.Baker = statsCostBakeFunc(func(ctx context.Context, userID uuid.UUID, location *time.Location, rangeName string, stats *services.Stats) {
+		aicostbake.Bake(ctx, store, worker.pricingEngine(), userID, location, rangeName, stats)
+	})
+	return worker
 }
 
 func computeWorkerStats(rangeName string, heartbeats []services.Heartbeat, external []services.ExternalDuration, now time.Time, timeout time.Duration, costs map[string]services.AICostRate) (services.Stats, error) {

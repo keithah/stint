@@ -12,6 +12,7 @@ import (
 	"github.com/keithah/stint/internal/config"
 	"github.com/keithah/stint/internal/db"
 	"github.com/keithah/stint/internal/services"
+	"github.com/keithah/stint/internal/summaryrows"
 )
 
 type Store interface {
@@ -57,8 +58,8 @@ func BuildPayload(ctx context.Context, store Store, user db.User, dumpType strin
 		return nil, err
 	}
 	external := toServiceExternalDurations(externalRows)
-	startDate, endDate := dailyDateRange(heartbeats, external, now)
-	return summaryRowsForRange(heartbeats, external, startDate, endDate, time.Duration(user.TimeoutMinutes)*time.Minute), nil
+	startDate, endDate := summaryrows.DateRange(heartbeats, external, now)
+	return summaryrows.RowsForRange(heartbeats, external, startDate, endDate, time.Duration(user.TimeoutMinutes)*time.Minute, summaryrows.AllFields()), nil
 }
 
 func WriteLocalPayload(cfg config.Config, userID, dumpID uuid.UUID, payload any) (string, error) {
@@ -66,19 +67,16 @@ func WriteLocalPayload(cfg config.Config, userID, dumpID uuid.UUID, payload any)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return "", err
 	}
-	raw, err := json.Marshal(payload)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return "", err
 	}
-	raw = append(raw, '\n')
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
+	defer file.Close()
+	encoder := json.NewEncoder(file)
+	if err := encoder.Encode(payload); err != nil {
 		return "", err
 	}
 	return path, nil
-}
-
-func ReadLocalPayload(cfg config.Config, userID, dumpID uuid.UUID) ([]byte, error) {
-	return os.ReadFile(LocalPath(cfg, userID, dumpID))
 }
 
 func LocalPath(cfg config.Config, userID, dumpID uuid.UUID) string {
@@ -108,76 +106,4 @@ func toServiceExternalDurations(durations []db.ExternalDuration) []services.Exte
 		})
 	}
 	return rows
-}
-
-func summaryRowsForRange(heartbeats []services.Heartbeat, external []services.ExternalDuration, startDate, endDate time.Time, timeout time.Duration) []map[string]any {
-	data := []map[string]any{}
-	for day := startDate; !day.After(endDate); day = day.AddDate(0, 0, 1) {
-		next := day.AddDate(0, 0, 1)
-		var daily []services.Heartbeat
-		for _, heartbeat := range heartbeats {
-			t := time.Unix(int64(heartbeat.Time), 0).UTC()
-			if !t.Before(day) && t.Before(next) {
-				daily = append(daily, heartbeat)
-			}
-		}
-		var dailyExternal []services.ExternalDuration
-		for _, duration := range external {
-			started := time.Unix(int64(duration.StartTime), 0).UTC()
-			ended := time.Unix(int64(duration.EndTime), 0).UTC()
-			if started.Before(next) && ended.After(day) {
-				dailyExternal = append(dailyExternal, duration)
-			}
-		}
-		stats, _, _ := services.ComputeStatsForRangeWithExternalDurations(daily, dailyExternal, day.Add(12*time.Hour), timeout, "last_7_days")
-		data = append(data, map[string]any{
-			"range": map[string]string{
-				"date":  day.Format("2006-01-02"),
-				"start": day.Format(time.RFC3339),
-				"end":   next.Format(time.RFC3339),
-			},
-			"grand_total":       map[string]any{"total_seconds": stats.TotalSeconds, "text": services.HumanDuration(stats.TotalSeconds)},
-			"projects":          stats.Projects,
-			"languages":         stats.Languages,
-			"categories":        stats.Categories,
-			"dependencies":      stats.Dependencies,
-			"editors":           stats.Editors,
-			"machines":          stats.Machines,
-			"operating_systems": stats.OperatingSystems,
-		})
-	}
-	return data
-}
-
-func dailyDateRange(heartbeats []services.Heartbeat, external []services.ExternalDuration, now time.Time) (time.Time, time.Time) {
-	start := utcDate(now)
-	end := start
-	expand := func(t time.Time) {
-		day := utcDate(t)
-		if day.Before(start) {
-			start = day
-		}
-		if day.After(end) {
-			end = day
-		}
-	}
-	for _, heartbeat := range heartbeats {
-		if heartbeat.Time > 0 {
-			expand(time.Unix(int64(heartbeat.Time), 0).UTC())
-		}
-	}
-	for _, duration := range external {
-		if duration.StartTime > 0 {
-			expand(time.Unix(int64(duration.StartTime), 0).UTC())
-		}
-		if duration.EndTime > 0 {
-			expand(time.Unix(int64(duration.EndTime), 0).UTC())
-		}
-	}
-	return start, end
-}
-
-func utcDate(t time.Time) time.Time {
-	year, month, day := t.UTC().Date()
-	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }

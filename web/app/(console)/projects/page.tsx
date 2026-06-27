@@ -3,8 +3,11 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowRight, Boxes, Clock3 } from "lucide-react";
-import { PageHeader, SecondaryLink } from "@/components/ui";
+import { useMemo, useState } from "react";
+import { PageHeader, SecondaryButton, SecondaryLink } from "@/components/ui";
 import { listProjects, statsForRange } from "@/lib/api";
+
+const projectsPageSize = 50;
 
 export default function ProjectsPage() {
   return (
@@ -13,9 +16,14 @@ export default function ProjectsPage() {
 }
 
 function ProjectsContent() {
-  const projects = useQuery({ queryKey: ["projects"], queryFn: listProjects, retry: false });
-  const stats = useQuery({ queryKey: ["stats", "last_30_days"], queryFn: () => statsForRange("last_30_days"), retry: false });
-  const totals = new Map((stats.data?.data.projects ?? []).map((row) => [row.name, row]));
+  const [page, setPage] = useState(1);
+	  const projects = useQuery({ queryKey: ["projects"], queryFn: listProjects, });
+	  const stats = useQuery({ queryKey: ["stats", "last_30_days"], queryFn: () => statsForRange("last_30_days"), });
+	  const totals = useMemo(() => new Map((stats.data?.data.projects ?? []).map((row) => [row.name, row])), [stats.data?.data.projects]);
+  const allProjects = projects.data?.data ?? [];
+  const totalPages = Math.max(1, Math.ceil(allProjects.length / projectsPageSize));
+  const currentPage = Math.min(page, totalPages);
+  const visibleProjects = useMemo(() => allProjects.slice((currentPage - 1) * projectsPageSize, currentPage * projectsPageSize), [allProjects, currentPage]);
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
@@ -33,7 +41,7 @@ function ProjectsContent() {
           <span>Last seen</span>
           <span />
         </div>
-        {(projects.data?.data ?? []).map((project) => {
+        {visibleProjects.map((project) => {
           const total = totals.get(project.name);
           return (
             <div key={project.id} className="grid grid-cols-[1.4fr_1fr_1fr_auto] items-center gap-4 border-b border-line px-4 py-4 last:border-b-0">
@@ -51,6 +59,21 @@ function ProjectsContent() {
             </div>
           );
         })}
+        {allProjects.length > projectsPageSize ? (
+          <div className="flex flex-col justify-between gap-3 border-t border-line px-4 py-3 text-sm text-zinc-400 sm:flex-row sm:items-center">
+            <span>
+              Showing {(currentPage - 1) * projectsPageSize + 1}-{Math.min(currentPage * projectsPageSize, allProjects.length)} of {allProjects.length}
+            </span>
+            <div className="flex gap-2">
+              <SecondaryButton onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}>
+                Previous
+              </SecondaryButton>
+              <SecondaryButton onClick={() => setPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}>
+                Next
+              </SecondaryButton>
+            </div>
+          </div>
+        ) : null}
         {projects.data?.data.length === 0 ? <div className="p-5 text-sm text-zinc-500">No projects yet. Send a heartbeat with a project name.</div> : null}
       </section>
     </div>

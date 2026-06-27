@@ -291,8 +291,8 @@ func TestPostgresHandlerIntegrationPublicBulkAndOAuthAppEndpoints(t *testing.T) 
 	}
 
 	router := NewRouter(config.Config{
-		BaseURL:                 "http://api.example.test",
-		WebBaseURL:              "http://web.example.test",
+		BaseURL:                 "http://localhost:8080",
+		WebBaseURL:              "http://localhost:3000",
 		SessionSecret:           "test-session-secret-with-enough-bytes",
 		EnablePublicLeaderboard: true,
 	}, store)
@@ -365,8 +365,8 @@ func TestPostgresHandlerIntegrationDevSeedOAuthAndAccountLifecycle(t *testing.T)
 	store := openTestPostgresStore(t, ctx)
 
 	router := NewRouter(config.Config{
-		BaseURL:                 "http://api.example.test",
-		WebBaseURL:              "http://web.example.test",
+		BaseURL:                 "http://localhost:8080",
+		WebBaseURL:              "http://localhost:3000",
 		SessionSecret:           "test-session-secret-with-enough-bytes",
 		DevSeedEnabled:          true,
 		EnableRegistration:      true,
@@ -511,8 +511,8 @@ func TestPostgresHandlerIntegrationValidationAndNotFoundPaths(t *testing.T) {
 	}
 
 	router := NewRouter(config.Config{
-		BaseURL:            "http://api.example.test",
-		WebBaseURL:         "http://web.example.test",
+		BaseURL:            "http://localhost:8080",
+		WebBaseURL:         "http://localhost:3000",
 		SessionSecret:      "test-session-secret-with-enough-bytes",
 		DevSeedEnabled:     true,
 		EnableRegistration: true,
@@ -980,6 +980,22 @@ func responseUUID(t *testing.T, value string) uuid.UUID {
 		t.Fatalf("parse uuid %q: %v", value, err)
 	}
 	return id
+}
+
+func TestDevSeedRoutesRequireLocalBaseURL(t *testing.T) {
+	ctx := context.Background()
+	store := openTestPostgresStore(t, ctx)
+
+	router := NewRouter(config.Config{
+		BaseURL:            "https://api.example.test",
+		WebBaseURL:         "https://web.example.test",
+		SessionSecret:      "test-session-secret-with-enough-bytes",
+		DevSeedEnabled:     true,
+		EnableRegistration: true,
+	}, store)
+
+	assertPublicPOST(t, router, "/api/v1/dev/seed-key", nil, http.StatusNotFound, "disabled")
+	assertPublicPOST(t, router, "/api/v1/dev/jobs/goals-evaluate", nil, http.StatusNotFound, "disabled")
 }
 
 func responseDataKeyID(t *testing.T, raw []byte) string {

@@ -6,7 +6,7 @@ import { listKeys, revokeKey } from "@/lib/api";
 
 export function ApiKeysListCard() {
   const client = useQueryClient();
-  const keys = useQuery({ queryKey: ["api-keys"], queryFn: listKeys, retry: false });
+  const keys = useQuery({ queryKey: ["api-keys"], queryFn: listKeys, });
   const revoke = useMutation({
     mutationFn: revokeKey,
     onSuccess: () => client.invalidateQueries({ queryKey: ["api-keys"] })

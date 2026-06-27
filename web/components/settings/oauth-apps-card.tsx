@@ -8,7 +8,7 @@ import { isHTTPURL } from "@/components/settings/shared";
 
 export function OAuthAppsCard() {
   const client = useQueryClient();
-  const oauthApps = useQuery({ queryKey: ["oauth-apps"], queryFn: listOAuthApps, retry: false });
+  const oauthApps = useQuery({ queryKey: ["oauth-apps"], queryFn: listOAuthApps, });
   const [latestOAuthSecret, setLatestOAuthSecret] = useState("");
   const [oauthName, setOAuthName] = useState("Local OAuth client");
   const [oauthRedirect, setOAuthRedirect] = useState("http://localhost:3000/oauth/callback");

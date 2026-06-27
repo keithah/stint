@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { listEditors } from "@/lib/api";
 
 export function EditorsCard() {
-  const editors = useQuery({ queryKey: ["editors"], queryFn: listEditors, retry: false, staleTime: 3600000 });
+  const editors = useQuery({ queryKey: ["editors"], queryFn: listEditors, staleTime: 3600000 });
 
   return (
     <section className="mt-5 rounded border border-line bg-panel p-5">

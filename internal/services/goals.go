@@ -108,14 +108,15 @@ func ComputeAllTimeStatsWithExternalDurations(heartbeats []Heartbeat, external [
 }
 
 func ComputeAllTimeStatsWithExternalDurationsAndAICosts(heartbeats []Heartbeat, external []ExternalDuration, timeout time.Duration, costs map[string]AICostRate) Stats {
-	projectDurations := append(ComputeDurations(heartbeats, timeout, "project"), ExternalDurationsAsDurations(external, "project")...)
-	languageDurations := append(ComputeDurations(heartbeats, timeout, "language"), ExternalDurationsAsDurations(external, "language")...)
-	editorDurations := ComputeDurations(heartbeats, timeout, "editor")
-	osDurations := ComputeDurations(heartbeats, timeout, "operating_system")
-	machineDurations := ComputeDurations(heartbeats, timeout, "machine")
-	categoryDurations := append(ComputeDurations(heartbeats, timeout, "category"), ExternalDurationsAsDurations(external, "category")...)
-	branchDurations := append(ComputeDurations(heartbeats, timeout, "branch"), ExternalDurationsAsDurations(external, "branch")...)
-	dependencyDurations := ComputeDurations(heartbeats, timeout, "dependencies")
+	sortedHeartbeats := SortedHeartbeats(heartbeats)
+	projectDurations := append(ComputeDurationsFromSorted(sortedHeartbeats, timeout, "project"), ExternalDurationsAsDurations(external, "project")...)
+	languageDurations := append(ComputeDurationsFromSorted(sortedHeartbeats, timeout, "language"), ExternalDurationsAsDurations(external, "language")...)
+	editorDurations := ComputeDurationsFromSorted(sortedHeartbeats, timeout, "editor")
+	osDurations := ComputeDurationsFromSorted(sortedHeartbeats, timeout, "operating_system")
+	machineDurations := ComputeDurationsFromSorted(sortedHeartbeats, timeout, "machine")
+	categoryDurations := append(ComputeDurationsFromSorted(sortedHeartbeats, timeout, "category"), ExternalDurationsAsDurations(external, "category")...)
+	branchDurations := append(ComputeDurationsFromSorted(sortedHeartbeats, timeout, "branch"), ExternalDurationsAsDurations(external, "branch")...)
+	dependencyDurations := ComputeDurationsFromSorted(sortedHeartbeats, timeout, "dependencies")
 	total := sumDurations(projectDurations)
 
 	start := allTimeStart(heartbeats)
@@ -218,6 +219,35 @@ func GoalEvaluationWindow(delta string, now time.Time) (time.Time, time.Time) {
 		return previousWeekStart.UTC(), thisWeekStart.UTC()
 	}
 	return today.AddDate(0, 0, -1).UTC(), today.UTC()
+}
+
+func GoalProgressDataWindow(goal Goal, now time.Time) (time.Time, time.Time) {
+	start, end := goalWindow(goal.Delta, now)
+	if goal.ImproveByPercent != nil {
+		windowDuration := end.Sub(start)
+		start = start.Add(-windowDuration)
+	}
+	return start, end
+}
+
+func GoalProgressDataWindowForGoals(goals []Goal, now time.Time) (time.Time, time.Time, bool) {
+	var start time.Time
+	var end time.Time
+	hasWindow := false
+	for _, goal := range goals {
+		if !goal.IsEnabled {
+			continue
+		}
+		windowStart, windowEnd := GoalProgressDataWindow(goal, now)
+		if !hasWindow || windowStart.Before(start) {
+			start = windowStart
+		}
+		if !hasWindow || windowEnd.After(end) {
+			end = windowEnd
+		}
+		hasWindow = true
+	}
+	return start, end, hasWindow
 }
 
 func goalHeartbeatsInWindow(goal Goal, heartbeats []Heartbeat, windowStart, windowEnd time.Time) []Heartbeat {

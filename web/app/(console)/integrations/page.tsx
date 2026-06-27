@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowRight, Bot, Cable, Check, CheckCircle2, Clipboard, Code2, KeyRound, PlugZap, Plus, Radar, ShieldCheck, TerminalSquare } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/ui";
 import { createKey, listEditors, listKeys, listUserAgents, serverMeta, wakatimeAPIURL, type UserAgent } from "@/lib/api";
 
@@ -17,10 +17,11 @@ function IntegrationsContent() {
   const queryClient = useQueryClient();
   const [latestKey, setLatestKey] = useState("");
   const [copied, setCopied] = useState("");
-  const meta = useQuery({ queryKey: ["server-meta"], queryFn: serverMeta, retry: false, staleTime: 60000 });
-  const keys = useQuery({ queryKey: ["api-keys"], queryFn: listKeys, retry: false });
-  const editors = useQuery({ queryKey: ["editors"], queryFn: listEditors, retry: false, staleTime: 3600000 });
-  const userAgents = useQuery({ queryKey: ["user-agents"], queryFn: listUserAgents, retry: false, staleTime: 60000 });
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const meta = useQuery({ queryKey: ["server-meta"], queryFn: serverMeta, staleTime: 60000 });
+  const keys = useQuery({ queryKey: ["api-keys"], queryFn: listKeys, });
+  const editors = useQuery({ queryKey: ["editors"], queryFn: listEditors, staleTime: 3600000 });
+  const userAgents = useQuery({ queryKey: ["user-agents"], queryFn: listUserAgents, staleTime: 60000 });
   const apiURL = meta.data?.data.api_url || wakatimeAPIURL() || "https://stint.fyi/api/v1";
   const displayKey = latestKey || "waka_your_stint_key";
   const keyCount = keys.data?.data.length ?? 0;
@@ -37,10 +38,18 @@ function IntegrationsContent() {
       queryClient.invalidateQueries({ queryKey: ["api-keys"] });
     }
   });
+  useEffect(() => () => {
+    if (copyTimer.current) {
+      clearTimeout(copyTimer.current);
+    }
+  }, []);
   const copyText = async (id: string, text: string) => {
     await navigator.clipboard?.writeText(text);
     setCopied(id);
-    window.setTimeout(() => setCopied((current) => (current === id ? "" : current)), 1600);
+    if (copyTimer.current) {
+      clearTimeout(copyTimer.current);
+    }
+    copyTimer.current = setTimeout(() => setCopied((current) => (current === id ? "" : current)), 1600);
   };
 
   return (

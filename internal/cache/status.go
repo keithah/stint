@@ -20,6 +20,8 @@ type MemoryStatusCache struct {
 	entries map[string]memoryStatusEntry
 }
 
+const maxMemoryStatusEntries = 4096
+
 type memoryStatusEntry struct {
 	status    services.StatusBarStats
 	expiresAt time.Time
@@ -46,8 +48,36 @@ func (c *MemoryStatusCache) Get(_ context.Context, userID string) (services.Stat
 func (c *MemoryStatusCache) Set(_ context.Context, userID string, status services.StatusBarStats, ttl time.Duration) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.entries[userID] = memoryStatusEntry{status: status, expiresAt: time.Now().Add(ttl)}
+	now := time.Now()
+	c.sweepExpired(now)
+	c.evictOldestIfFull()
+	c.entries[userID] = memoryStatusEntry{status: status, expiresAt: now.Add(ttl)}
 	return nil
+}
+
+func (c *MemoryStatusCache) sweepExpired(now time.Time) {
+	for key, entry := range c.entries {
+		if now.After(entry.expiresAt) {
+			delete(c.entries, key)
+		}
+	}
+}
+
+func (c *MemoryStatusCache) evictOldestIfFull() {
+	if len(c.entries) < maxMemoryStatusEntries {
+		return
+	}
+	var oldestKey string
+	var oldest time.Time
+	for key, entry := range c.entries {
+		if oldestKey == "" || entry.expiresAt.Before(oldest) {
+			oldestKey = key
+			oldest = entry.expiresAt
+		}
+	}
+	if oldestKey != "" {
+		delete(c.entries, oldestKey)
+	}
 }
 
 type RedisStatusCache struct {
@@ -83,6 +113,10 @@ func (c *RedisStatusCache) Set(ctx context.Context, userID string, status servic
 		return err
 	}
 	return c.client.Set(ctx, statusKey(userID), raw, ttl).Err()
+}
+
+func (c *RedisStatusCache) Close() error {
+	return c.client.Close()
 }
 
 func statusKey(userID string) string {

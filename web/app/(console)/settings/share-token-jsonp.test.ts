@@ -11,4 +11,4 @@ assert.match(source, /StintEmbed\.render/);
 assert.match(source, /\/share\/\$\{encodeURIComponent\(token\)\}\/stats/);
 assert.match(source, /callback/);
 assert.match(source, /JSONP stats endpoint/);
-assert.match(packageJSON, /app\/\(console\)\/settings\/share-token-jsonp\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

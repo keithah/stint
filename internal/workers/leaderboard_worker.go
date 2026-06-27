@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/keithah/stint/internal/cache"
 	"github.com/keithah/stint/internal/db"
@@ -14,8 +15,14 @@ import (
 const leaderboardCacheTTL = time.Hour
 
 type LeaderboardWorker struct {
-	Store *db.Store
+	Store leaderboardStore
 	Cache cache.LeaderboardCache
+}
+
+type leaderboardStore interface {
+	ListUsers(context.Context) ([]db.User, error)
+	HeartbeatsForStatsRangeByUser(context.Context, []uuid.UUID, time.Time, string) (map[uuid.UUID][]services.Heartbeat, error)
+	ExternalDurationsBetweenByUser(context.Context, []uuid.UUID, time.Time, time.Time) (map[uuid.UUID][]db.ExternalDuration, error)
 }
 
 func (w LeaderboardWorker) HandleLeaderboardUpdateTask(ctx context.Context, task *asynq.Task) error {
@@ -47,17 +54,23 @@ func (w LeaderboardWorker) Compute(ctx context.Context, rangeName string) ([]ser
 	if err != nil {
 		return nil, err
 	}
+	userIDs := make([]uuid.UUID, 0, len(users))
+	for _, user := range users {
+		userIDs = append(userIDs, user.ID)
+	}
+	heartbeatsByUser, err := w.Store.HeartbeatsForStatsRangeByUser(ctx, userIDs, now, rangeName)
+	if err != nil {
+		return nil, err
+	}
+	externalByUser, err := w.Store.ExternalDurationsBetweenByUser(ctx, userIDs, window.Start, window.End)
+	if err != nil {
+		return nil, err
+	}
 	entries := make([]services.LeaderboardEntry, 0, len(users))
 	for _, user := range users {
-		heartbeats, err := w.Store.HeartbeatsForStatsRange(ctx, user.ID, now, rangeName)
-		if err != nil {
-			return nil, err
-		}
+		heartbeats := heartbeatsByUser[user.ID]
 		heartbeats = services.FilterWritesOnly(heartbeats, user.WritesOnly)
-		externalRows, err := w.Store.ExternalDurationsBetween(ctx, user.ID, window.Start, window.End)
-		if err != nil {
-			return nil, err
-		}
+		externalRows := externalByUser[user.ID]
 		stats, err := computeWorkerLeaderboardStats(heartbeats, workerExternalDurations(externalRows), now, time.Duration(user.TimeoutMinutes)*time.Minute, rangeName)
 		if err != nil {
 			return nil, err

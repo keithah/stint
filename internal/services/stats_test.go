@@ -375,8 +375,14 @@ func TestComputeStatsForRangeAggregatesAIMetrics(t *testing.T) {
 	if got.AI.AILineChanges != 100 {
 		t.Fatalf("expected 100 AI line changes, got %d", got.AI.AILineChanges)
 	}
+	if got.AI.AIAdditions != 100 || got.AI.AIDeletions != 0 || got.AI.AILineChangesTotal != 100 {
+		t.Fatalf("expected WakaTime AI line aliases to mirror line changes, got %#v", got.AI)
+	}
 	if got.AI.HumanLineChanges != 50 {
 		t.Fatalf("expected 50 human line changes, got %d", got.AI.HumanLineChanges)
+	}
+	if got.AI.HumanAdditions != 50 || got.AI.HumanDeletions != 0 {
+		t.Fatalf("expected WakaTime human line aliases to mirror line changes, got %#v", got.AI)
 	}
 	if got.AI.AIPercentage != 66 {
 		t.Fatalf("expected 66 AI percentage, got %d", got.AI.AIPercentage)
@@ -390,11 +396,23 @@ func TestComputeStatsForRangeAggregatesAIMetrics(t *testing.T) {
 	if got.AI.PromptCount != 2 {
 		t.Fatalf("expected 2 prompts, got %d", got.AI.PromptCount)
 	}
+	if got.AI.AISessions != 2 {
+		t.Fatalf("expected WakaTime ai_sessions alias to be 2, got %d", got.AI.AISessions)
+	}
 	if got.AI.AveragePromptLength != 250 {
 		t.Fatalf("expected 250 average prompt length, got %d", got.AI.AveragePromptLength)
 	}
+	if got.AI.AIPromptLengthAvg != 250 || got.AI.AIPromptLengthSum != 500 {
+		t.Fatalf("expected WakaTime prompt length aliases, got %#v", got.AI)
+	}
 	if got.AI.MedianPromptLength != 250 {
 		t.Fatalf("expected 250 median prompt length, got %d", got.AI.MedianPromptLength)
+	}
+	if got.AI.AIPromptLengthAvgPerSession != 250 || got.AI.AIPromptLengthMedianPerSession != 250 {
+		t.Fatalf("expected WakaTime per-session prompt length stats, got %#v", got.AI)
+	}
+	if got.AI.AIPromptEventsTotal != 2 || got.AI.AIPromptEventsAvgPerSession != 1 || got.AI.AIPromptEventsMedianPerSession != 1 {
+		t.Fatalf("expected WakaTime per-session prompt event stats, got %#v", got.AI)
 	}
 	if got.AI.FollowUpEdits != 50 {
 		t.Fatalf("expected 50 follow-up edits, got %d", got.AI.FollowUpEdits)
@@ -405,8 +423,36 @@ func TestComputeStatsForRangeAggregatesAIMetrics(t *testing.T) {
 	if len(got.AI.Agents) != 1 || got.AI.Agents[0].Name != "Codex" || got.AI.Agents[0].AILineChanges != 100 {
 		t.Fatalf("expected Codex agent totals, got %#v", got.AI.Agents)
 	}
+	if got.AI.AIAgentLineChanges["Codex"] != 100 {
+		t.Fatalf("expected WakaTime agent line-change map, got %#v", got.AI.AIAgentLineChanges)
+	}
+	if len(got.AI.AIAgentBreakdown) != 1 || got.AI.AIAgentBreakdown[0].Name != "Codex" || got.AI.AIAgentBreakdown[0].Lines != 100 {
+		t.Fatalf("expected WakaTime agent breakdown, got %#v", got.AI.AIAgentBreakdown)
+	}
 	if len(got.AI.Days) == 0 || got.AI.Days[len(got.AI.Days)-1].AILineChanges != 100 {
 		t.Fatalf("expected AI day totals on latest bucket, got %#v", got.AI.Days)
+	}
+}
+
+func TestComputeStatsForRangeCountsAICodingCategoryAsAISeconds(t *testing.T) {
+	now := time.Date(2026, 6, 19, 12, 0, 0, 0, time.UTC)
+	heartbeats := []Heartbeat{
+		{Entity: "agent.go", Project: "api", Category: "ai coding", Time: float64(now.Add(-2 * time.Hour).Unix())},
+		{Entity: "agent2.go", Project: "api", Category: "ai coding", Time: float64(now.Add(-2*time.Hour + 10*time.Minute).Unix())},
+		{Entity: "human.go", Project: "api", Category: "coding", Time: float64(now.Add(-time.Hour).Unix())},
+		{Entity: "human2.go", Project: "api", Category: "coding", Time: float64(now.Add(-time.Hour + 10*time.Minute).Unix())},
+	}
+
+	got, _, err := ComputeStatsForRange(heartbeats, now, 15*time.Minute, "last_7_days")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got.AI.Days[len(got.AI.Days)-1].AISeconds != 600 {
+		t.Fatalf("expected only ai coding duration to count as AI seconds, got %#v", got.AI.Days[len(got.AI.Days)-1])
+	}
+	if len(got.ProjectAI) != 1 || got.ProjectAI[0].AISeconds != 600 {
+		t.Fatalf("expected project AI duration from ai coding category only, got %#v", got.ProjectAI)
 	}
 }
 
@@ -427,6 +473,9 @@ func TestComputeStatsForRangeWithAICostsUsesAgentRates(t *testing.T) {
 	}
 	if got.AI.EstimatedCostCents != 300 {
 		t.Fatalf("expected 300 cents estimated cost, got %d", got.AI.EstimatedCostCents)
+	}
+	if got.AI.AIAgentCosts["Codex"] != 3 || got.AI.AIAgentTotalCost != 3 {
+		t.Fatalf("expected WakaTime USD cost aliases, got costs=%#v total=%f", got.AI.AIAgentCosts, got.AI.AIAgentTotalCost)
 	}
 	if len(got.AI.Agents) != 1 || got.AI.Agents[0].EstimatedCostCents != 300 {
 		t.Fatalf("expected agent-level cost, got %#v", got.AI.Agents)

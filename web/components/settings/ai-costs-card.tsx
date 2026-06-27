@@ -7,7 +7,7 @@ import { listAICosts, replaceAICosts } from "@/lib/api";
 
 export function AICostsCard() {
   const client = useQueryClient();
-  const aiCosts = useQuery({ queryKey: ["ai-costs"], queryFn: listAICosts, retry: false });
+  const aiCosts = useQuery({ queryKey: ["ai-costs"], queryFn: listAICosts, });
   const [costAgent, setCostAgent] = useState("Codex");
   const [inputCost, setInputCost] = useState(3);
   const [outputCost, setOutputCost] = useState(12);

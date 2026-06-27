@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bufio"
+	"compress/gzip"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -18,6 +20,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,11 +32,13 @@ import (
 	"github.com/keithah/stint/internal/config"
 	"github.com/keithah/stint/internal/db"
 	dumpfiles "github.com/keithah/stint/internal/dumps"
+	"github.com/keithah/stint/internal/goaleval"
 	"github.com/keithah/stint/internal/importer"
 	"github.com/keithah/stint/internal/jobs"
 	"github.com/keithah/stint/internal/pricing"
 	"github.com/keithah/stint/internal/pricingrefresh"
 	"github.com/keithah/stint/internal/services"
+	"github.com/keithah/stint/internal/summaryrows"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/oauth2"
@@ -48,6 +53,7 @@ const oauthImplicitAccessTokenTTL = 12 * time.Hour
 const leaderboardCacheTTL = time.Hour
 const sessionJWTTTL = 30 * 24 * time.Hour
 const githubOAuthStateTTL = 10 * time.Minute
+const githubOAuthRequestTimeout = 10 * time.Second
 
 type Server struct {
 	Config           config.Config
@@ -59,12 +65,22 @@ type Server struct {
 	LeaderboardCache cache.LeaderboardCache
 	Jobs             jobs.Client
 	Pricing          *pricing.Engine
+	customRulesMu    sync.Mutex
+	customRulesCache map[uuid.UUID]services.PreparedCustomRules
+	customRulesOrder []uuid.UUID
+	openAPIDocsOnce  sync.Once
+	openAPIDocsDoc   map[string]any
 }
 
 const (
-	heartbeatIngestionRateLimit = 1000
-	authenticatedReadRateLimit  = 60
-	oauthTokenCreationRateLimit = 10
+	heartbeatIngestionRateLimit        = 1000
+	authenticatedReadRateLimit         = 60
+	oauthTokenCreationRateLimit        = 10
+	authenticatedWriteRateLimit        = 120
+	jobCreationRateLimit               = 10
+	heartbeatBulkJSONBodyLimit         = "1M"
+	usageEventsBulkJSONBodyLimit       = "10M"
+	maxPreparedCustomRulesCacheEntries = 4096
 )
 
 var (
@@ -76,8 +92,11 @@ var (
 func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
+	e.IPExtractor = echo.ExtractIPDirect()
 	e.Use(middleware.Recover())
-	e.Use(middleware.Logger())
+	e.Use(middleware.RequestID())
+	e.Use(structuredRequestLogger())
+	e.Use(middleware.GzipWithConfig(middleware.GzipConfig{Level: gzip.BestSpeed}))
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     compactOrigins("http://localhost:3000", cfg.BaseURL, cfg.WebBaseURL),
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
@@ -121,26 +140,41 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 		e.Logger.Errorf("usage pricing engine unavailable, AI usage will be reported as unpriced: %v", err)
 		pricingEngine = nil
 	}
-	server := &Server{Config: cfg, Store: store, OAuth: oauthConfig, Limiter: limiter, FallbackLimiter: apimw.NewMemoryRateLimiter(), StatusCache: statusCache, LeaderboardCache: leaderboardCache, Jobs: jobClient, Pricing: pricingEngine}
+	server := &Server{Config: cfg, Store: store, OAuth: oauthConfig, Limiter: limiter, FallbackLimiter: apimw.NewMemoryRateLimiter(), StatusCache: statusCache, LeaderboardCache: leaderboardCache, Jobs: jobClient, Pricing: pricingEngine, customRulesCache: map[uuid.UUID]services.PreparedCustomRules{}}
+	refresherCtx, cancelRefresher := context.WithCancel(context.Background())
+	e.Server.RegisterOnShutdown(func() {
+		cancelRefresher()
+		closeRouterResource(e, statusCache)
+		closeRouterResource(e, leaderboardCache)
+		if jobClient != nil {
+			closeRouterResource(e, jobClient)
+		}
+	})
 	// Keep the API's pricing engine in sync with the weekly refresh so the AI
 	// cost meter reflects the latest upstream prices without a redeploy.
 	if pricingEngine != nil && store != nil {
-		go pricingrefresh.Refresher{Store: store, Engine: pricingEngine}.Run(context.Background(), 30*time.Minute)
+		go pricingrefresh.Refresher{
+			Store:  store,
+			Engine: pricingEngine,
+			OnError: func(err error) {
+				e.Logger.Warnf("pricing refresh sync failed: %v", err)
+			},
+		}.Run(refresherCtx, 30*time.Minute)
 	}
 
 	e.GET("/healthz", server.health)
 	e.GET("/healthz/ingestion", server.ingestionHealth)
-	e.GET("/auth/github/login", server.githubLogin)
-	e.GET("/auth/github/callback", server.githubCallback)
+	e.GET("/auth/github/login", server.githubLogin, server.rateLimitIP("github-oauth-login", 20, time.Minute))
+	e.GET("/auth/github/callback", server.githubCallback, server.rateLimitIP("github-oauth-callback", 20, time.Minute))
 	e.POST("/auth/logout", server.logout)
 	e.GET("/oauth/authorize", server.oauthAuthorize)
 	e.POST("/oauth/authorize", server.oauthAuthorizePost)
 	e.POST("/oauth/token", server.oauthToken, server.rateLimitOAuthToken(oauthTokenCreationRateLimit, time.Hour))
-	e.POST("/oauth/revoke", server.oauthRevoke)
+	e.POST("/oauth/revoke", server.oauthRevoke, server.rateLimitOAuthToken(oauthTokenCreationRateLimit, time.Hour))
 
 	api := e.Group("/api/v1")
 	api.GET("/meta", server.meta)
-	api.GET("/docs", server.openAPIDocs)
+	api.GET("/docs", server.openAPIDocs, server.rateLimitIP("openapi-docs", 30, time.Minute))
 	api.GET("/leaders", server.publicLeaders, server.rateLimitIP("public-read", 60, time.Minute))
 	api.GET("/editors", server.editors)
 	api.GET("/program_languages", server.programLanguages)
@@ -153,32 +187,41 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 	api.GET("/share/:token/stats", server.publicShareStatsByToken, server.rateLimitIP("share-stats", 120, time.Minute))
 	api.GET("/share/:token/summaries", server.publicShareSummariesByToken, server.rateLimitIP("share-summaries", 120, time.Minute))
 	api.POST("/dev/seed-key", server.devSeed)
-	api.POST("/dev/jobs/heartbeats-purge", server.devHeartbeatsPurge)
-	api.POST("/dev/jobs/leaderboard-update", server.devLeaderboardUpdate)
-	api.POST("/dev/jobs/goals-evaluate", server.devGoalsEvaluate)
+	api.POST("/dev/jobs/heartbeats-purge", server.devHeartbeatsPurge, server.rateLimitIP("dev-jobs", 30, time.Minute))
+	api.POST("/dev/jobs/leaderboard-update", server.devLeaderboardUpdate, server.rateLimitIP("dev-jobs", 30, time.Minute))
+	api.POST("/dev/jobs/goals-evaluate", server.devGoalsEvaluate, server.rateLimitIP("dev-jobs", 30, time.Minute))
 	readLimit := server.rateLimitAuthenticatedRead(authenticatedReadRateLimit, time.Minute)
+	ingestionLimit := func(name string) echo.MiddlewareFunc {
+		return server.rateLimitUser(name, heartbeatIngestionRateLimit, time.Minute)
+	}
+	writeLimit := func(name string) echo.MiddlewareFunc {
+		return server.rateLimitUser(name, authenticatedWriteRateLimit, time.Minute)
+	}
+	jobLimit := func(name string) echo.MiddlewareFunc {
+		return server.rateLimitUser(name, jobCreationRateLimit, time.Minute)
+	}
 	api.GET("/auth/me", server.currentUser, server.requireUser, readLimit)
 
 	current := api.Group("/users/current", server.requireUser)
 	current.GET("", server.currentUser, readLimit)
-	current.PUT("", server.updateCurrentUser, requireLocalAccountAccess)
+	current.PUT("", server.updateCurrentUser, requireLocalAccountAccess, writeLimit("user-settings"))
 	current.DELETE("", server.deleteCurrentUser, requireLocalAccountAccess)
 	current.GET("/heartbeats", server.listHeartbeats, requireScope(scopeReadHeartbeats), readLimit)
-	current.POST("/heartbeats", server.createHeartbeat, requireScope(scopeWriteHeartbeats), server.rateLimitUser("heartbeats", heartbeatIngestionRateLimit, time.Minute))
-	current.POST("/heartbeats.bulk", server.createHeartbeatsBulk, requireScope(scopeWriteHeartbeats), server.rateLimitUser("heartbeats", heartbeatIngestionRateLimit, time.Minute))
-	current.DELETE("/heartbeats.bulk", server.deleteHeartbeatsBulk, requireScope(scopeWriteHeartbeats))
-	current.POST("/usage_events.bulk", server.createUsageEventsBulk, requireScope(scopeWriteHeartbeats), server.rateLimitUser("usage_events", heartbeatIngestionRateLimit, time.Minute))
+	current.POST("/heartbeats", server.createHeartbeat, requireScope(scopeWriteHeartbeats), ingestionLimit("heartbeats"))
+	current.POST("/heartbeats.bulk", server.createHeartbeatsBulk, requireScope(scopeWriteHeartbeats), middleware.BodyLimit(heartbeatBulkJSONBodyLimit), ingestionLimit("heartbeats"))
+	current.DELETE("/heartbeats.bulk", server.deleteHeartbeatsBulk, requireScope(scopeWriteHeartbeats), writeLimit("heartbeats-delete"))
+	current.POST("/usage_events.bulk", server.createUsageEventsBulk, requireScope(scopeWriteHeartbeats), middleware.BodyLimit(usageEventsBulkJSONBodyLimit), ingestionLimit("usage_events"))
 	current.GET("/usage_events", server.listUsageEvents, requireScope(scopeReadStats), readLimit)
 	current.GET("/usage_events/summary", server.usageEventsSummary, requireScope(scopeReadStats), readLimit)
 	current.GET("/usage_events/blocks", server.usageEventsBlocks, requireScope(scopeReadStats), readLimit)
 	current.GET("/custom_pricing", server.listCustomPricing, requireScope(scopeReadStats), readLimit)
-	current.PUT("/custom_pricing", server.upsertCustomPricing, requireLocalAccountAccess)
-	current.DELETE("/custom_pricing/:model", server.deleteCustomPricing, requireLocalAccountAccess)
+	current.PUT("/custom_pricing", server.upsertCustomPricing, requireLocalAccountAccess, writeLimit("custom-pricing"))
+	current.DELETE("/custom_pricing/:model", server.deleteCustomPricing, requireLocalAccountAccess, writeLimit("custom-pricing"))
 	current.GET("/pricing/sources", server.listPricingSources, requireScope(scopeReadStats), readLimit)
 	current.GET("/pricing/models", server.listPricingModels, requireScope(scopeReadStats), readLimit)
 	current.GET("/billing_prefs", server.listBillingPrefs, requireScope(scopeReadStats), readLimit)
-	current.PUT("/billing_prefs", server.upsertBillingPref, requireLocalAccountAccess)
-	current.DELETE("/billing_prefs/:agent", server.deleteBillingPref, requireLocalAccountAccess)
+	current.PUT("/billing_prefs", server.upsertBillingPref, requireLocalAccountAccess, writeLimit("billing-prefs"))
+	current.DELETE("/billing_prefs/:agent", server.deleteBillingPref, requireLocalAccountAccess, writeLimit("billing-prefs"))
 	current.POST("/file_experts", server.fileExperts, requireScope(scopeReadStats), readLimit)
 	current.GET("/durations", server.durations, requireSummarySliceScope, readLimit)
 	current.GET("/summaries", server.summaries, requireSummaryScope, readLimit)
@@ -196,47 +239,115 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 	current.GET("/user_agents", server.listUserAgents, requireScope(scopeReadStatsEditors), readLimit)
 	current.GET("/insights/:insight_type/:range", server.insight, requireInsightScope, readLimit)
 	current.GET("/goals", server.listGoals, requireScope(scopeReadGoals), readLimit)
-	current.POST("/goals", server.createGoal, requireScope(scopeReadGoals))
+	current.POST("/goals", server.createGoal, requireScope(scopeReadGoals), writeLimit("goals"))
 	current.GET("/goals/:goal", server.getGoal, requireScope(scopeReadGoals), readLimit)
-	current.PUT("/goals/:goal", server.updateGoal, requireScope(scopeReadGoals))
-	current.DELETE("/goals/:goal", server.deleteGoal, requireScope(scopeReadGoals))
+	current.PUT("/goals/:goal", server.updateGoal, requireScope(scopeReadGoals), writeLimit("goals"))
+	current.DELETE("/goals/:goal", server.deleteGoal, requireScope(scopeReadGoals), writeLimit("goals"))
 	current.GET("/external_durations", server.listExternalDurations, requireScope(scopeReadSummaries), readLimit)
-	current.POST("/external_durations", server.createExternalDuration, requireScope(scopeWriteHeartbeats))
-	current.POST("/external_durations.bulk", server.createExternalDurationsBulk, requireScope(scopeWriteHeartbeats))
-	current.DELETE("/external_durations.bulk", server.deleteExternalDurationsBulk, requireScope(scopeWriteHeartbeats))
+	current.POST("/external_durations", server.createExternalDuration, requireScope(scopeWriteHeartbeats), writeLimit("external-durations"))
+	current.POST("/external_durations.bulk", server.createExternalDurationsBulk, requireScope(scopeWriteHeartbeats), writeLimit("external-durations"))
+	current.DELETE("/external_durations.bulk", server.deleteExternalDurationsBulk, requireScope(scopeWriteHeartbeats), writeLimit("external-durations"))
 	current.GET("/leaderboards", server.listLeaderboards, requireScope(scopeReadPrivateLeaderboards), readLimit)
-	current.POST("/leaderboards", server.createLeaderboard, requireScope(scopeWritePrivateLeaderboards))
+	current.POST("/leaderboards", server.createLeaderboard, requireScope(scopeWritePrivateLeaderboards), writeLimit("leaderboards"))
 	current.GET("/leaderboards/:board", server.getLeaderboard, requireScope(scopeReadPrivateLeaderboards), readLimit)
-	current.PUT("/leaderboards/:board", server.updateLeaderboard, requireScope(scopeWritePrivateLeaderboards))
-	current.DELETE("/leaderboards/:board", server.deleteLeaderboard, requireScope(scopeWritePrivateLeaderboards))
-	current.POST("/leaderboards/:board/members", server.addLeaderboardMember, requireScope(scopeWritePrivateLeaderboards))
-	current.DELETE("/leaderboards/:board/members/:user", server.removeLeaderboardMember, requireScope(scopeWritePrivateLeaderboards))
+	current.PUT("/leaderboards/:board", server.updateLeaderboard, requireScope(scopeWritePrivateLeaderboards), writeLimit("leaderboards"))
+	current.DELETE("/leaderboards/:board", server.deleteLeaderboard, requireScope(scopeWritePrivateLeaderboards), writeLimit("leaderboards"))
+	current.POST("/leaderboards/:board/members", server.addLeaderboardMember, requireScope(scopeWritePrivateLeaderboards), writeLimit("leaderboards"))
+	current.DELETE("/leaderboards/:board/members/:user", server.removeLeaderboardMember, requireScope(scopeWritePrivateLeaderboards), writeLimit("leaderboards"))
+	current.GET("/events", server.currentUserEvents, readLimit)
 	current.GET("/data_dumps", server.listDataDumps, requireScope(scopeReadHeartbeats), readLimit)
-	current.POST("/data_dumps", server.createDataDump, requireScope(scopeReadHeartbeats))
+	current.POST("/data_dumps", server.createDataDump, requireScope(scopeReadHeartbeats), jobLimit("data-dumps"))
 	current.GET("/data_dumps/:dump/download", server.downloadDataDump, requireScope(scopeReadHeartbeats), readLimit)
 	current.GET("/custom_rules", server.listCustomRules, requireScope(scopeReadStats), readLimit)
-	current.PUT("/custom_rules", server.replaceCustomRules, requireLocalAccountAccess)
-	current.DELETE("/custom_rules/:rule_id", server.deleteCustomRule, requireLocalAccountAccess)
+	current.PUT("/custom_rules", server.replaceCustomRules, requireLocalAccountAccess, jobLimit("custom-rules"))
+	current.DELETE("/custom_rules/:rule_id", server.deleteCustomRule, requireLocalAccountAccess, writeLimit("custom-rules"))
 	current.GET("/custom_rules_progress", server.customRulesProgress, requireScope(scopeReadStats), readLimit)
 	current.DELETE("/custom_rules_progress", server.abortCustomRulesProgress, requireLocalAccountAccess)
 	current.GET("/share_tokens", server.listShareTokens, requireLocalAccountAccess, readLimit)
-	current.POST("/share_tokens", server.createShareToken, requireLocalAccountAccess)
-	current.DELETE("/share_tokens/:id", server.deleteShareToken, requireLocalAccountAccess)
-	current.POST("/imports/wakatime", server.importWakaTimeDump, requireScope(scopeWriteHeartbeats))
+	current.POST("/share_tokens", server.createShareToken, requireLocalAccountAccess, writeLimit("share-tokens"))
+	current.DELETE("/share_tokens/:id", server.deleteShareToken, requireLocalAccountAccess, writeLimit("share-tokens"))
+	current.POST("/imports/wakatime", server.importWakaTimeDump, requireScope(scopeWriteHeartbeats), jobLimit("imports"))
 	current.GET("/ai_costs", server.listAICosts, requireScope(scopeReadStats), readLimit)
-	current.PUT("/ai_costs", server.replaceAICosts, requireLocalAccountAccess)
+	current.PUT("/ai_costs", server.replaceAICosts, requireLocalAccountAccess, writeLimit("ai-costs"))
 
 	keys := api.Group("/api_keys", server.requireUser, requireLocalAccountAccess)
 	keys.GET("", server.listAPIKeys, readLimit)
-	keys.POST("", server.createAPIKey)
-	keys.DELETE("/:id", server.revokeAPIKey)
+	keys.POST("", server.createAPIKey, writeLimit("api-keys"))
+	keys.DELETE("/:id", server.revokeAPIKey, writeLimit("api-keys"))
 
 	oauthApps := api.Group("/oauth/apps", server.requireUser, requireLocalAccountAccess)
 	oauthApps.GET("", server.listOAuthApps, readLimit)
-	oauthApps.POST("", server.createOAuthApp)
-	oauthApps.DELETE("/:id", server.deleteOAuthApp)
+	oauthApps.POST("", server.createOAuthApp, writeLimit("oauth-apps"))
+	oauthApps.DELETE("/:id", server.deleteOAuthApp, writeLimit("oauth-apps"))
 
 	return e
+}
+
+type routerResourceCloser interface {
+	Close() error
+}
+
+type requestLogEntry struct {
+	Time      string `json:"time"`
+	ID        string `json:"id"`
+	RemoteIP  string `json:"remote_ip"`
+	Host      string `json:"host"`
+	Method    string `json:"method"`
+	URI       string `json:"uri"`
+	Status    int    `json:"status"`
+	LatencyNS int64  `json:"latency_ns"`
+	BytesIn   string `json:"bytes_in"`
+	BytesOut  int64  `json:"bytes_out"`
+	Error     string `json:"error"`
+}
+
+func closeRouterResource(e *echo.Echo, resource any) {
+	closer, ok := resource.(routerResourceCloser)
+	if !ok || closer == nil {
+		return
+	}
+	if err := closer.Close(); err != nil {
+		e.Logger.Warnf("router resource close failed: %v", err)
+	}
+}
+
+func structuredRequestLogger() echo.MiddlewareFunc {
+	return middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+		LogLatency:       true,
+		LogRemoteIP:      true,
+		LogHost:          true,
+		LogMethod:        true,
+		LogURI:           true,
+		LogRequestID:     true,
+		LogStatus:        true,
+		LogError:         true,
+		LogContentLength: true,
+		LogResponseSize:  true,
+		LogValuesFunc: func(_ echo.Context, v middleware.RequestLoggerValues) error {
+			entry := requestLogEntry{
+				Time:      v.StartTime.Format(time.RFC3339Nano),
+				ID:        v.RequestID,
+				RemoteIP:  v.RemoteIP,
+				Host:      v.Host,
+				Method:    v.Method,
+				URI:       v.URI,
+				Status:    v.Status,
+				LatencyNS: v.Latency.Nanoseconds(),
+				BytesIn:   v.ContentLength,
+				BytesOut:  v.ResponseSize,
+			}
+			if v.Error != nil {
+				entry.Error = v.Error.Error()
+			}
+			raw, err := json.Marshal(entry)
+			if err != nil {
+				return err
+			}
+			raw = append(raw, '\n')
+			_, err = os.Stdout.Write(raw)
+			return err
+		},
+	})
 }
 
 func (s *Server) health(c echo.Context) error {
@@ -305,25 +416,33 @@ func clientIP(r *http.Request) string {
 }
 
 func (s *Server) openAPIDocs(c echo.Context) error {
-	return c.JSON(http.StatusOK, map[string]any{
-		"openapi": "3.1.0",
-		"info": map[string]string{
-			"title":   "Stint API",
-			"version": "0.1.0",
-		},
-		"servers": []map[string]string{{"url": s.Config.BaseURL}},
-		"components": map[string]any{
-			"securitySchemes": map[string]any{
-				"BearerAuth":       map[string]string{"type": "http", "scheme": "bearer"},
-				"BasicAuth":        map[string]string{"type": "http", "scheme": "basic"},
-				"OAuthClientBasic": map[string]string{"type": "http", "scheme": "basic"},
-				"ApiKeyQuery":      map[string]string{"type": "apiKey", "in": "query", "name": "api_key"},
-				"SessionCookie":    map[string]string{"type": "apiKey", "in": "cookie", "name": sessionCookieName},
+	setPublicMetadataCache(c)
+	return c.JSON(http.StatusOK, s.cachedOpenAPIDocs())
+}
+
+func (s *Server) cachedOpenAPIDocs() map[string]any {
+	s.openAPIDocsOnce.Do(func() {
+		s.openAPIDocsDoc = map[string]any{
+			"openapi": "3.1.0",
+			"info": map[string]string{
+				"title":   "Stint API",
+				"version": "0.1.0",
 			},
-			"schemas": openAPISchemas(),
-		},
-		"paths": openAPIPaths(),
+			"servers": []map[string]string{{"url": s.Config.BaseURL}},
+			"components": map[string]any{
+				"securitySchemes": map[string]any{
+					"BearerAuth":       map[string]string{"type": "http", "scheme": "bearer"},
+					"BasicAuth":        map[string]string{"type": "http", "scheme": "basic"},
+					"OAuthClientBasic": map[string]string{"type": "http", "scheme": "basic"},
+					"ApiKeyQuery":      map[string]string{"type": "apiKey", "in": "query", "name": "api_key"},
+					"SessionCookie":    map[string]string{"type": "apiKey", "in": "cookie", "name": sessionCookieName},
+				},
+				"schemas": openAPISchemas(),
+			},
+			"paths": openAPIPaths(),
+		}
 	})
+	return s.openAPIDocsDoc
 }
 
 type openAPIOperation struct {
@@ -554,6 +673,7 @@ func openAPIPaths() map[string]any {
 	)
 	add("/api/v1/users/current/leaderboards/{board}/members", withJSON(post("Add private leaderboard member", "leaderboards", http.StatusCreated, true), "LeaderboardMemberRequest", "LeaderboardMemberResponse"))
 	add("/api/v1/users/current/leaderboards/{board}/members/{user}", del("Remove private leaderboard member", "leaderboards", http.StatusNoContent, true))
+	add("/api/v1/users/current/events", get("Stream current-user job events", "jobs", true))
 	add("/api/v1/users/current/data_dumps",
 		withResponse(get("List data dumps", "data dumps", true), "DataDumpListResponse"),
 		withAcceptedResponse(withJSON(post("Create data dump", "data dumps", http.StatusCreated, true), "DataDumpRequest", "DataDumpResponse"), "DataDumpResponse"),
@@ -1156,11 +1276,26 @@ func openAPISchemas() map[string]any {
 		"DurationRow": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"name":     stringSchema,
-				"project":  stringSchema,
-				"language": stringSchema,
-				"time":     numberSchema,
-				"duration": numberSchema,
+				"name":                                stringSchema,
+				"project":                             stringSchema,
+				"language":                            stringSchema,
+				"time":                                numberSchema,
+				"duration":                            numberSchema,
+				"ai_additions":                        integerSchema,
+				"ai_deletions":                        integerSchema,
+				"human_additions":                     integerSchema,
+				"human_deletions":                     integerSchema,
+				"ai_agent_costs":                      map[string]any{"type": "object", "additionalProperties": numberSchema},
+				"ai_input_tokens":                     integerSchema,
+				"ai_output_tokens":                    integerSchema,
+				"ai_prompt_length_sum":                integerSchema,
+				"ai_prompt_length_avg":                integerSchema,
+				"ai_prompt_length_avg_per_session":    integerSchema,
+				"ai_prompt_length_median_per_session": integerSchema,
+				"ai_prompt_events_total":              integerSchema,
+				"ai_prompt_events_avg_per_session":    integerSchema,
+				"ai_prompt_events_median_per_session": integerSchema,
+				"ai_sessions":                         integerSchema,
 			},
 		},
 		"DurationResponse": map[string]any{
@@ -1687,24 +1822,61 @@ func openAPISchemas() map[string]any {
 				"total_cents":   integerSchema,
 			},
 		},
+		"AIAgentBreakdown": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"name":  stringSchema,
+				"lines": integerSchema,
+				"cost":  numberSchema,
+			},
+		},
+		"AIToolCost": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"name":              stringSchema,
+				"cost_cents":        integerSchema,
+				"input_tokens":      integerSchema,
+				"output_tokens":     integerSchema,
+				"cache_read_tokens": integerSchema,
+			},
+		},
 		"AIMetrics": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"ai_line_changes":         integerSchema,
-				"human_line_changes":      integerSchema,
-				"ai_percentage":           integerSchema,
-				"human_review_percentage": integerSchema,
-				"follow_up_edits":         integerSchema,
-				"ai_input_tokens":         integerSchema,
-				"ai_output_tokens":        integerSchema,
-				"prompt_count":            integerSchema,
-				"average_prompt_length":   integerSchema,
-				"median_prompt_length":    integerSchema,
-				"session_count":           integerSchema,
-				"estimated_cost_cents":    integerSchema,
-				"agents":                  map[string]any{"type": "array", "items": openAPIRef("AIStat")},
-				"days":                    map[string]any{"type": "array", "items": openAPIRef("AIStat")},
-				"costs":                   map[string]any{"type": "array", "items": openAPIRef("AICostPeriod")},
+				"ai_line_changes":                     integerSchema,
+				"human_line_changes":                  integerSchema,
+				"ai_additions":                        integerSchema,
+				"ai_deletions":                        integerSchema,
+				"human_additions":                     integerSchema,
+				"human_deletions":                     integerSchema,
+				"ai_line_changes_total":               integerSchema,
+				"ai_agent_line_changes":               map[string]any{"type": "object", "additionalProperties": integerSchema},
+				"ai_agent_costs":                      map[string]any{"type": "object", "additionalProperties": numberSchema},
+				"ai_agent_breakdown":                  map[string]any{"type": "array", "items": openAPIRef("AIAgentBreakdown")},
+				"ai_agent_total_cost":                 numberSchema,
+				"ai_percentage":                       integerSchema,
+				"human_review_percentage":             integerSchema,
+				"follow_up_edits":                     integerSchema,
+				"ai_input_tokens":                     integerSchema,
+				"ai_output_tokens":                    integerSchema,
+				"ai_prompt_length":                    integerSchema,
+				"prompt_count":                        integerSchema,
+				"average_prompt_length":               integerSchema,
+				"median_prompt_length":                integerSchema,
+				"ai_prompt_length_avg":                integerSchema,
+				"ai_prompt_length_sum":                integerSchema,
+				"ai_prompt_length_avg_per_session":    integerSchema,
+				"ai_prompt_length_median_per_session": integerSchema,
+				"ai_prompt_events_total":              integerSchema,
+				"ai_prompt_events_avg_per_session":    integerSchema,
+				"ai_prompt_events_median_per_session": integerSchema,
+				"session_count":                       integerSchema,
+				"ai_sessions":                         integerSchema,
+				"estimated_cost_cents":                integerSchema,
+				"agents":                              map[string]any{"type": "array", "items": openAPIRef("AIStat")},
+				"days":                                map[string]any{"type": "array", "items": openAPIRef("AIStat")},
+				"costs":                               map[string]any{"type": "array", "items": openAPIRef("AICostPeriod")},
+				"tool_costs":                          map[string]any{"type": "array", "items": openAPIRef("AIToolCost")},
 			},
 		},
 		"Stats": map[string]any{
@@ -1906,6 +2078,7 @@ func customRuleFieldValues() []string {
 }
 
 func (s *Server) editors(c echo.Context) error {
+	setPublicMetadataCache(c)
 	if s.Store != nil {
 		editors, err := s.Store.ListEditors(c.Request().Context())
 		if err == nil && len(editors) > 0 {
@@ -1916,6 +2089,7 @@ func (s *Server) editors(c echo.Context) error {
 }
 
 func (s *Server) programLanguages(c echo.Context) error {
+	setPublicMetadataCache(c)
 	if s.Store != nil {
 		languages, err := s.Store.ListProgramLanguages(c.Request().Context())
 		if err == nil && len(languages) > 0 {
@@ -1923,6 +2097,10 @@ func (s *Server) programLanguages(c echo.Context) error {
 		}
 	}
 	return c.JSON(http.StatusOK, map[string]any{"data": services.KnownProgramLanguages()})
+}
+
+func setPublicMetadataCache(c echo.Context) {
+	c.Response().Header().Set(echo.HeaderCacheControl, "public, max-age=300, stale-while-revalidate=3600")
 }
 
 func (s *Server) publicLeaders(c echo.Context) error {
@@ -2072,13 +2250,20 @@ func (s *Server) githubCallback(c echo.Context) error {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
-	token, err := s.OAuth.Exchange(c.Request().Context(), code)
+	oauthCtx, cancel := context.WithTimeout(c.Request().Context(), githubOAuthRequestTimeout)
+	defer cancel()
+
+	token, err := s.OAuth.Exchange(oauthCtx, code)
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, errorBody("could not exchange GitHub OAuth code"))
 	}
 
-	client := s.OAuth.Client(c.Request().Context(), token)
-	resp, err := client.Get("https://api.github.com/user")
+	client := s.OAuth.Client(oauthCtx, token)
+	userReq, err := http.NewRequestWithContext(oauthCtx, http.MethodGet, "https://api.github.com/user", nil)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorBody("could not build GitHub user request"))
+	}
+	resp, err := client.Do(userReq)
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, errorBody("could not fetch GitHub user"))
 	}
@@ -2092,11 +2277,14 @@ func (s *Server) githubCallback(c echo.Context) error {
 		return c.JSON(http.StatusBadGateway, errorBody("could not decode GitHub user"))
 	}
 	emails := []githubEmail{}
-	emailResp, err := client.Get("https://api.github.com/user/emails")
+	emailReq, err := http.NewRequestWithContext(oauthCtx, http.MethodGet, "https://api.github.com/user/emails", nil)
 	if err == nil {
-		defer emailResp.Body.Close()
-		if emailResp.StatusCode < 300 {
-			_ = json.NewDecoder(emailResp.Body).Decode(&emails)
+		emailResp, err := client.Do(emailReq)
+		if err == nil {
+			defer emailResp.Body.Close()
+			if emailResp.StatusCode < 300 {
+				_ = json.NewDecoder(emailResp.Body).Decode(&emails)
+			}
 		}
 	}
 	if err := s.ensureGitHubRegistrationAllowed(c.Request().Context(), gh.ID); err != nil {
@@ -2269,7 +2457,7 @@ func (s *Server) oauthRevoke(c echo.Context) error {
 }
 
 func (s *Server) devSeed(c echo.Context) error {
-	if !s.Config.DevSeedEnabled {
+	if !s.devRoutesEnabled() {
 		return c.JSON(http.StatusNotFound, errorBody("dev seed is disabled"))
 	}
 	githubID := int64(1)
@@ -2311,7 +2499,7 @@ func (s *Server) devSeed(c echo.Context) error {
 }
 
 func (s *Server) devHeartbeatsPurge(c echo.Context) error {
-	if !s.Config.DevSeedEnabled {
+	if !s.devRoutesEnabled() {
 		return c.JSON(http.StatusNotFound, errorBody("dev jobs are disabled"))
 	}
 	retentionDays := s.Config.HeartbeatRetentionDays
@@ -2336,7 +2524,7 @@ func (s *Server) devHeartbeatsPurge(c echo.Context) error {
 }
 
 func (s *Server) devLeaderboardUpdate(c echo.Context) error {
-	if !s.Config.DevSeedEnabled {
+	if !s.devRoutesEnabled() {
 		return c.JSON(http.StatusNotFound, errorBody("dev jobs are disabled"))
 	}
 	rangeName := strings.TrimSpace(c.QueryParam("range"))
@@ -2360,7 +2548,7 @@ func (s *Server) devLeaderboardUpdate(c echo.Context) error {
 }
 
 func (s *Server) devGoalsEvaluate(c echo.Context) error {
-	if !s.Config.DevSeedEnabled {
+	if !s.devRoutesEnabled() {
 		return c.JSON(http.StatusNotFound, errorBody("dev jobs are disabled"))
 	}
 	now := time.Time{}
@@ -2382,6 +2570,19 @@ func (s *Server) devGoalsEvaluate(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
 	return c.JSON(http.StatusAccepted, map[string]any{"data": map[string]any{"queued": true}})
+}
+
+func (s *Server) devRoutesEnabled() bool {
+	return s.Config.DevSeedEnabled && isLocalHTTPBaseURL(s.Config.BaseURL)
+}
+
+func isLocalHTTPBaseURL(rawURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return false
+	}
+	host := parsed.Hostname()
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 func (s *Server) currentUser(c echo.Context) error {
@@ -2534,17 +2735,22 @@ func (s *Server) createHeartbeatsBulk(c echo.Context) error {
 	if len(heartbeats) > 25 {
 		return c.JSON(http.StatusBadRequest, wakaError("bulk heartbeat limit is 25"))
 	}
+	rules, err := s.Store.ListCustomRules(c.Request().Context(), user.ID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
+	}
+	preparedRules, err := services.PrepareCustomRules(serviceCustomRules(rules))
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
+	}
 	responses := make([]any, 0, len(heartbeats))
+	validHeartbeats := make([]services.Heartbeat, 0, len(heartbeats))
+	validResponseIndexes := make([]int, 0, len(heartbeats))
 	for i := range heartbeats {
 		heartbeat := heartbeats[i]
 		prepHeartbeat(&heartbeat, c.Request().UserAgent())
 		var deleted bool
-		var err error
-		heartbeat, deleted, err = s.applyCustomRules(c.Request().Context(), user, heartbeat)
-		if err != nil {
-			responses = append(responses, heartbeatBulkError(http.StatusInternalServerError, err.Error()))
-			continue
-		}
+		heartbeat, deleted = services.ApplyPreparedCustomRules(heartbeat, preparedRules)
 		if deleted {
 			responses = append(responses, heartbeatBulkResult(http.StatusAccepted, map[string]any{"data": heartbeat, "deleted_by_rule": true}))
 			continue
@@ -2553,15 +2759,30 @@ func (s *Server) createHeartbeatsBulk(c echo.Context) error {
 			responses = append(responses, heartbeatBulkError(http.StatusBadRequest, err.Error()))
 			continue
 		}
-		stored, err := s.Store.InsertHeartbeat(c.Request().Context(), user.ID, heartbeat)
-		switch {
-		case errors.Is(err, db.ErrDuplicateHeartbeat):
-			responses = append(responses, heartbeatBulkResult(http.StatusAccepted, map[string]any{"data": heartbeat, "duplicate": true}))
-		case err != nil:
-			responses = append(responses, heartbeatBulkError(http.StatusInternalServerError, err.Error()))
-		default:
+		validHeartbeats = append(validHeartbeats, heartbeat)
+		validResponseIndexes = append(validResponseIndexes, len(responses))
+		responses = append(responses, nil)
+	}
+	if len(validHeartbeats) > 0 {
+		results, err := s.Store.InsertHeartbeats(c.Request().Context(), user.ID, validHeartbeats)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, wakaError(err.Error()))
+		}
+		storedAny := false
+		for i, result := range results {
+			responseIndex := validResponseIndexes[i]
+			switch {
+			case result.Duplicate:
+				responses[responseIndex] = heartbeatBulkResult(http.StatusAccepted, map[string]any{"data": result.Heartbeat, "duplicate": true})
+			case result.Err != nil:
+				responses[responseIndex] = heartbeatBulkError(http.StatusInternalServerError, result.Err.Error())
+			default:
+				storedAny = storedAny || result.Stored
+				responses[responseIndex] = heartbeatBulkResult(http.StatusCreated, map[string]any{"data": result.Heartbeat})
+			}
+		}
+		if storedAny {
 			s.enqueueStatsRecompute(c.Request().Context(), user.ID)
-			responses = append(responses, heartbeatBulkResult(http.StatusCreated, map[string]any{"data": stored}))
 		}
 	}
 	return c.JSON(http.StatusAccepted, map[string]any{"responses": responses})
@@ -3106,17 +3327,11 @@ func fileExpertShortName(name string) string {
 
 func (s *Server) allTimeSinceToday(c echo.Context) error {
 	user := userFromContext(c)
-	heartbeats, err := s.Store.AllHeartbeats(c.Request().Context(), user.ID)
+	stats, err := s.statsForResponse(c.Request().Context(), user, "all_time")
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
-	heartbeats = services.FilterWritesOnly(heartbeats, user.WritesOnly)
-	externalRows, err := s.Store.ListExternalDurations(c.Request().Context(), user.ID)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
-	}
-	stats := services.ComputeAllTimeStatsWithExternalDurations(heartbeats, toServiceExternalDurations(externalRows), time.Duration(user.TimeoutMinutes)*time.Minute)
-	return c.JSON(http.StatusOK, map[string]any{
+	return c.JSON(statsResponseStatus(stats), map[string]any{
 		"data": map[string]any{
 			"total_seconds": stats.TotalSeconds,
 			"text":          stats.HumanReadableTotal,
@@ -3151,59 +3366,16 @@ func (s *Server) projectDetail(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
-	now := time.Now()
-	var heartbeats []services.Heartbeat
-	var externalRows []db.ExternalDuration
-	if rangeName == "all_time" {
-		heartbeats, err = s.Store.AllHeartbeats(c.Request().Context(), user.ID)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
-		}
-		externalRows, err = s.Store.ListExternalDurations(c.Request().Context(), user.ID)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
-		}
-	} else {
-		heartbeats, err = s.Store.HeartbeatsForStatsRange(c.Request().Context(), user.ID, now, rangeName)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
-		}
-		window, err := services.WindowForRange(now, rangeName)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, errorBody(err.Error()))
-		}
-		externalRows, err = s.Store.ExternalDurationsBetween(c.Request().Context(), user.ID, window.Start, window.End)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
-		}
+	resolver := projectStatsResolver{
+		Store: s.Store,
+		BakeProject: func(ctx context.Context, userID uuid.UUID, location *time.Location, rangeName, projectName string, stats *services.Stats) {
+			aicostbake.BakeProject(ctx, s.Store, s.Pricing, userID, location, rangeName, projectName, stats)
+		},
 	}
-	heartbeats = services.FilterWritesOnly(heartbeats, user.WritesOnly)
-	filtered := make([]services.Heartbeat, 0, len(heartbeats))
-	for _, heartbeat := range heartbeats {
-		if heartbeat.Project == project.Name {
-			filtered = append(filtered, heartbeat)
-		}
-	}
-	projectExternal := []services.ExternalDuration{}
-	for _, duration := range toServiceExternalDurations(externalRows) {
-		if duration.Project == project.Name {
-			projectExternal = append(projectExternal, duration)
-		}
-	}
-	costs, err := s.Store.AICostRates(c.Request().Context(), user.ID)
+	stats, err := resolver.ProjectStats(c.Request().Context(), user, project, rangeName)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
-	var stats services.Stats
-	if rangeName == "all_time" {
-		stats = services.ComputeAllTimeStatsWithExternalDurationsAndAICosts(filtered, projectExternal, time.Duration(user.TimeoutMinutes)*time.Minute, costs)
-	} else {
-		stats, _, err = services.ComputeStatsForRangeWithExternalDurationsAndAICosts(filtered, projectExternal, now, time.Duration(user.TimeoutMinutes)*time.Minute, rangeName, costs)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, errorBody(err.Error()))
-		}
-	}
-	aicostbake.BakeProject(c.Request().Context(), s.Store, s.Pricing, user.ID, userLocation(user), rangeName, project.Name, &stats)
 	return c.JSON(http.StatusOK, map[string]any{"data": map[string]any{"project": project, "stats": stats}})
 }
 
@@ -3374,19 +3546,18 @@ func (s *Server) listGoals(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
-	heartbeats, err := s.Store.AllHeartbeats(c.Request().Context(), user.ID)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
-	}
-	heartbeats = services.FilterWritesOnly(heartbeats, user.WritesOnly)
-	externalRows, err := s.Store.ListExternalDurations(c.Request().Context(), user.ID)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
-	}
-	external := toServiceExternalDurations(externalRows)
-	progress := make([]services.GoalProgress, 0, len(goals))
+	now := time.Now()
+	serviceGoals := make([]services.Goal, 0, len(goals))
 	for _, goal := range goals {
-		progress = append(progress, services.ComputeGoalProgressWithExternalDurations(toServiceGoal(goal), heartbeats, external, time.Now(), time.Duration(user.TimeoutMinutes)*time.Minute))
+		serviceGoals = append(serviceGoals, toServiceGoal(goal))
+	}
+	heartbeats, external, err := s.goalProgressData(c.Request().Context(), user, serviceGoals, now)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
+	}
+	progress := make([]services.GoalProgress, 0, len(goals))
+	for _, goal := range serviceGoals {
+		progress = append(progress, services.ComputeGoalProgressWithExternalDurations(goal, heartbeats, external, now, time.Duration(user.TimeoutMinutes)*time.Minute))
 	}
 	return c.JSON(http.StatusOK, dataArray(progress))
 }
@@ -3420,18 +3591,31 @@ func (s *Server) getGoal(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
-	heartbeats, err := s.Store.AllHeartbeats(c.Request().Context(), user.ID)
+	now := time.Now()
+	serviceGoal := toServiceGoal(goal)
+	heartbeats, external, err := s.goalProgressData(c.Request().Context(), user, []services.Goal{serviceGoal}, now)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
+	}
+	progress := services.ComputeGoalProgressWithExternalDurations(serviceGoal, heartbeats, external, now, time.Duration(user.TimeoutMinutes)*time.Minute)
+	return c.JSON(http.StatusOK, wakaTimeGoalPayload(progress, user, now))
+}
+
+func (s *Server) goalProgressData(ctx context.Context, user db.User, goals []services.Goal, now time.Time) ([]services.Heartbeat, []services.ExternalDuration, error) {
+	start, end, ok := services.GoalProgressDataWindowForGoals(goals, now)
+	if !ok {
+		return nil, nil, nil
+	}
+	heartbeats, err := s.Store.HeartbeatsBetween(ctx, user.ID, float64(start.Unix()), float64(end.Unix()))
+	if err != nil {
+		return nil, nil, err
 	}
 	heartbeats = services.FilterWritesOnly(heartbeats, user.WritesOnly)
-	externalRows, err := s.Store.ListExternalDurations(c.Request().Context(), user.ID)
+	externalRows, err := s.Store.ExternalDurationsBetween(ctx, user.ID, start, end)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
+		return nil, nil, err
 	}
-	now := time.Now()
-	progress := services.ComputeGoalProgressWithExternalDurations(toServiceGoal(goal), heartbeats, toServiceExternalDurations(externalRows), now, time.Duration(user.TimeoutMinutes)*time.Minute)
-	return c.JSON(http.StatusOK, wakaTimeGoalPayload(progress, user, now))
+	return heartbeats, toServiceExternalDurations(externalRows), nil
 }
 
 func (s *Server) updateGoal(c echo.Context) error {
@@ -3507,19 +3691,29 @@ func (s *Server) createExternalDurationsBulk(c echo.Context) error {
 	if len(inputs) > 1000 {
 		return c.JSON(http.StatusBadRequest, errorBody("bulk external duration limit is 1000"))
 	}
-	responses := make([]map[string]any, 0, len(inputs))
-	for _, input := range inputs {
+	responses := make([]map[string]any, len(inputs))
+	validInputs := make([]services.ExternalDuration, 0, len(inputs))
+	validIndexes := make([]int, 0, len(inputs))
+	for index, input := range inputs {
 		if err := services.ValidateExternalDuration(input); err != nil {
-			responses = append(responses, map[string]any{"status": http.StatusBadRequest, "error": err.Error()})
+			responses[index] = map[string]any{"status": http.StatusBadRequest, "error": err.Error()}
 			continue
 		}
-		duration, err := s.Store.UpsertExternalDuration(c.Request().Context(), user.ID, input)
+		validInputs = append(validInputs, input)
+		validIndexes = append(validIndexes, index)
+	}
+	if len(validInputs) > 0 {
+		durations, err := s.Store.UpsertExternalDurations(c.Request().Context(), user.ID, validInputs)
 		if err != nil {
-			responses = append(responses, map[string]any{"status": http.StatusInternalServerError, "error": err.Error()})
-			continue
+			for _, index := range validIndexes {
+				responses[index] = map[string]any{"status": http.StatusInternalServerError, "error": err.Error()}
+			}
+		} else {
+			for i, duration := range durations {
+				responses[validIndexes[i]] = map[string]any{"status": http.StatusCreated, "data": duration}
+			}
+			s.enqueueStatsRecompute(c.Request().Context(), user.ID)
 		}
-		s.enqueueStatsRecompute(c.Request().Context(), user.ID)
-		responses = append(responses, map[string]any{"status": http.StatusCreated, "data": duration})
 	}
 	return c.JSON(http.StatusAccepted, map[string]any{"responses": responses})
 }
@@ -3774,8 +3968,10 @@ func (s *Server) downloadDataDump(c echo.Context) error {
 	if status, message, blocked := dataDumpDownloadError(selected, time.Now().UTC()); blocked {
 		return c.JSON(status, errorBody(message))
 	}
-	if raw, err := dumpfiles.ReadLocalPayload(s.Config, user.ID, selected.ID); err == nil {
-		return c.Blob(http.StatusOK, "application/json", raw)
+	path := dumpfiles.LocalPath(s.Config, user.ID, selected.ID)
+	if _, err := os.Stat(path); err == nil {
+		c.Response().Header().Set(echo.HeaderContentType, "application/json")
+		return c.File(path)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
@@ -3832,6 +4028,7 @@ func (s *Server) replaceCustomRules(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
+	s.invalidatePreparedCustomRules(user.ID)
 	total, err := s.Store.CountHeartbeats(c.Request().Context(), user.ID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
@@ -3876,6 +4073,7 @@ func (s *Server) deleteCustomRule(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
+	s.invalidatePreparedCustomRules(user.ID)
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -4066,50 +4264,15 @@ func (s *Server) publicShareSummariesByToken(c echo.Context) error {
 }
 
 func (s *Server) publicStats(ctx context.Context, user db.User, rangeName string) (services.Stats, error) {
-	if rangeName == "all_time" {
-		heartbeats, err := s.Store.AllHeartbeats(ctx, user.ID)
-		if err != nil {
+	if rangeName != "all_time" {
+		if _, err := services.WindowForRange(time.Now().In(userLocation(user)), rangeName); err != nil {
 			return services.Stats{}, err
 		}
-		heartbeats = services.FilterWritesOnly(heartbeats, user.WritesOnly)
-		externalRows, err := s.Store.ListExternalDurations(ctx, user.ID)
-		if err != nil {
-			return services.Stats{}, err
-		}
-		costs, err := s.Store.AICostRates(ctx, user.ID)
-		if err != nil {
-			return services.Stats{}, err
-		}
-		stats := services.ComputeAllTimeStatsWithExternalDurationsAndAICosts(heartbeats, toServiceExternalDurations(externalRows), time.Duration(user.TimeoutMinutes)*time.Minute, costs)
-		aicostbake.Bake(ctx, s.Store, s.Pricing, user.ID, userLocation(user), rangeName, &stats)
-		return s.applyPublicStatsPermissions(ctx, user, stats)
 	}
-	now := time.Now().In(userLocation(user))
-	if _, err := services.WindowForRange(now, rangeName); err != nil {
-		return services.Stats{}, err
-	}
-	heartbeats, err := s.Store.HeartbeatsForStatsRange(ctx, user.ID, now, rangeName)
+	stats, err := s.statsForResponse(ctx, user, rangeName)
 	if err != nil {
 		return services.Stats{}, err
 	}
-	heartbeats = services.FilterWritesOnly(heartbeats, user.WritesOnly)
-	window, err := services.WindowForRange(now, rangeName)
-	if err != nil {
-		return services.Stats{}, err
-	}
-	externalRows, err := s.Store.ExternalDurationsBetween(ctx, user.ID, window.Start, window.End)
-	if err != nil {
-		return services.Stats{}, err
-	}
-	costs, err := s.Store.AICostRates(ctx, user.ID)
-	if err != nil {
-		return services.Stats{}, err
-	}
-	stats, _, err := services.ComputeStatsForRangeWithExternalDurationsAndAICosts(heartbeats, toServiceExternalDurations(externalRows), now, time.Duration(user.TimeoutMinutes)*time.Minute, rangeName, costs)
-	if err != nil {
-		return services.Stats{}, err
-	}
-	aicostbake.Bake(ctx, s.Store, s.Pricing, user.ID, userLocation(user), rangeName, &stats)
 	return s.applyPublicStatsPermissions(ctx, user, stats)
 }
 
@@ -4260,117 +4423,18 @@ func filterAIStats(rows []services.AIStat, allow map[string]bool) []services.AIS
 	return filtered
 }
 
-type summaryFields struct {
-	Projects         bool
-	Languages        bool
-	Categories       bool
-	Dependencies     bool
-	Editors          bool
-	Machines         bool
-	OperatingSystems bool
-}
+type summaryFields = summaryrows.Fields
 
 func allSummaryFields() summaryFields {
-	return summaryFields{
-		Projects:         true,
-		Languages:        true,
-		Categories:       true,
-		Dependencies:     true,
-		Editors:          true,
-		Machines:         true,
-		OperatingSystems: true,
-	}
-}
-
-func (f summaryFields) Any() bool {
-	return f.Projects || f.Languages || f.Categories || f.Dependencies || f.Editors || f.Machines || f.OperatingSystems
+	return summaryrows.AllFields()
 }
 
 func summaryRowsForRange(heartbeats []services.Heartbeat, external []services.ExternalDuration, startDate, endDate time.Time, timeout time.Duration, fields summaryFields) []map[string]any {
-	data := []map[string]any{}
-	for day := startDate; !day.After(endDate); day = day.AddDate(0, 0, 1) {
-		next := day.AddDate(0, 0, 1)
-		var daily []services.Heartbeat
-		for _, heartbeat := range heartbeats {
-			t := time.Unix(int64(heartbeat.Time), 0).UTC()
-			if !t.Before(day) && t.Before(next) {
-				daily = append(daily, heartbeat)
-			}
-		}
-		var dailyExternal []services.ExternalDuration
-		for _, duration := range external {
-			started := time.Unix(int64(duration.StartTime), 0).UTC()
-			ended := time.Unix(int64(duration.EndTime), 0).UTC()
-			if started.Before(next) && ended.After(day) {
-				dailyExternal = append(dailyExternal, duration)
-			}
-		}
-		stats, _, _ := services.ComputeStatsForRangeWithExternalDurations(daily, dailyExternal, day.Add(12*time.Hour), timeout, "last_7_days")
-		row := map[string]any{
-			"range": map[string]string{
-				"date":  day.Format("2006-01-02"),
-				"start": day.Format(time.RFC3339),
-				"end":   next.Format(time.RFC3339),
-			},
-			"grand_total": map[string]any{"total_seconds": stats.TotalSeconds, "text": services.HumanDuration(stats.TotalSeconds)},
-		}
-		if fields.Projects {
-			row["projects"] = stats.Projects
-		}
-		if fields.Languages {
-			row["languages"] = stats.Languages
-		}
-		if fields.Categories {
-			row["categories"] = stats.Categories
-		}
-		if fields.Dependencies {
-			row["dependencies"] = stats.Dependencies
-		}
-		if fields.Editors {
-			row["editors"] = stats.Editors
-		}
-		if fields.Machines {
-			row["machines"] = stats.Machines
-		}
-		if fields.OperatingSystems {
-			row["operating_systems"] = stats.OperatingSystems
-		}
-		data = append(data, row)
-	}
-	return data
+	return summaryrows.RowsForRange(heartbeats, external, startDate, endDate, timeout, fields)
 }
 
 func dailyDumpDateRange(heartbeats []services.Heartbeat, external []services.ExternalDuration, now time.Time) (time.Time, time.Time) {
-	start := utcDate(now)
-	end := start
-	expand := func(t time.Time) {
-		day := utcDate(t)
-		if day.Before(start) {
-			start = day
-		}
-		if day.After(end) {
-			end = day
-		}
-	}
-	for _, heartbeat := range heartbeats {
-		if heartbeat.Time > 0 {
-			expand(time.Unix(int64(heartbeat.Time), 0).UTC())
-		}
-	}
-	for _, duration := range external {
-		if duration.StartTime > 0 {
-			expand(time.Unix(int64(duration.StartTime), 0).UTC())
-		}
-		if duration.EndTime > 0 {
-			expand(time.Unix(int64(duration.EndTime), 0).UTC())
-		}
-	}
-	return start, end
-}
-
-func utcDate(t time.Time) time.Time {
-	year, month, day := t.UTC().Date()
-	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+	return summaryrows.DateRange(heartbeats, external, now)
 }
 
 const (
@@ -4380,11 +4444,7 @@ const (
 
 func (s *Server) importWakaTimeDump(c echo.Context) error {
 	user := userFromContext(c)
-	raw, err := readImportBody(c)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, errorBody(err.Error()))
-	}
-	heartbeats, err := services.ExtractHeartbeatsFromWakaTimeDump(raw)
+	heartbeats, err := readImportHeartbeats(c)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, errorBody(err.Error()))
 	}
@@ -4406,6 +4466,22 @@ func (s *Server) importWakaTimeDump(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
 	return c.JSON(http.StatusAccepted, map[string]any{"data": importer.QueuedResult(len(heartbeats))})
+}
+
+func readImportHeartbeats(c echo.Context) ([]services.Heartbeat, error) {
+	if strings.HasPrefix(c.Request().Header.Get(echo.HeaderContentType), "multipart/form-data") {
+		file, err := c.FormFile("file")
+		if err != nil {
+			return nil, errors.New("missing import file")
+		}
+		src, err := file.Open()
+		if err != nil {
+			return nil, err
+		}
+		defer src.Close()
+		return services.ExtractHeartbeatsFromWakaTimeDumpReader(src, maxImportBodyBytes)
+	}
+	return services.ExtractHeartbeatsFromWakaTimeDumpReader(c.Request().Body, maxImportBodyBytes)
 }
 
 func (s *Server) listAICosts(c echo.Context) error {
@@ -4926,9 +5002,12 @@ func (s *Server) enforceRateLimit(c echo.Context, key string, limit int, window 
 
 func (s *Server) enqueueStatsRecompute(ctx context.Context, userID uuid.UUID) {
 	if s.Jobs == nil {
+		fmt.Fprintf(os.Stderr, "stats recompute enqueue skipped user_id=%s: %v\n", userID, jobs.ErrQueueUnavailable)
 		return
 	}
-	_ = s.Jobs.EnqueueStatsRecompute(ctx, userID, jobs.DefaultStatsRanges())
+	if err := s.Jobs.EnqueueStatsRecompute(ctx, userID, jobs.DefaultStatsRanges()); err != nil {
+		fmt.Fprintf(os.Stderr, "stats recompute enqueue failed user_id=%s: %v\n", userID, err)
+	}
 }
 
 func (s *Server) enqueueDataDumpProcess(ctx context.Context, userID, dumpID uuid.UUID) error {
@@ -5002,42 +5081,7 @@ func (s *Server) runGoalsEvaluate(ctx context.Context, now time.Time) (int, erro
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	users, err := s.Store.ListUsers(ctx)
-	if err != nil {
-		return 0, err
-	}
-	evaluated := 0
-	for _, user := range users {
-		userNow := now
-		if location, err := time.LoadLocation(user.Timezone); err == nil {
-			userNow = now.In(location)
-		}
-		goals, err := s.Store.ListGoals(ctx, user.ID)
-		if err != nil {
-			return evaluated, err
-		}
-		for _, goal := range goals {
-			if !goal.IsEnabled {
-				continue
-			}
-			start, end := services.GoalEvaluationWindow(goal.Delta, userNow)
-			heartbeats, err := s.Store.AllHeartbeats(ctx, user.ID)
-			if err != nil {
-				return evaluated, err
-			}
-			heartbeats = services.FilterWritesOnly(heartbeats, user.WritesOnly)
-			externalRows, err := s.Store.ListExternalDurations(ctx, user.ID)
-			if err != nil {
-				return evaluated, err
-			}
-			progress := services.ComputeGoalProgressForWindowWithExternalDurations(toServiceGoal(goal), heartbeats, toServiceExternalDurations(externalRows), start, end, time.Duration(user.TimeoutMinutes)*time.Minute)
-			if _, err := s.Store.UpsertGoalEvaluation(ctx, user.ID, goal, progress, start, end); err != nil {
-				return evaluated, err
-			}
-			evaluated++
-		}
-	}
-	return evaluated, nil
+	return goaleval.Evaluator{Store: s.Store}.Evaluate(ctx, now)
 }
 
 func (s *Server) sessionUser(c echo.Context) (db.User, bool) {
@@ -5194,23 +5238,31 @@ func (s *Server) leaderboardEntries(ctx context.Context, users []db.User, rangeN
 	}
 	entries := make([]services.LeaderboardEntry, 0, len(users))
 	now := time.Now()
+	window, err := services.WindowForRange(now, rangeName)
+	if err != nil {
+		return nil, err
+	}
+	filteredUsers := make([]db.User, 0, len(users))
+	userIDs := make([]uuid.UUID, 0, len(users))
 	for _, user := range users {
 		if !leaderboardCountryMatches(user, country) {
 			continue
 		}
-		heartbeats, err := s.Store.HeartbeatsForStatsRange(ctx, user.ID, now, rangeName)
-		if err != nil {
-			return nil, err
-		}
+		filteredUsers = append(filteredUsers, user)
+		userIDs = append(userIDs, user.ID)
+	}
+	heartbeatsByUser, err := s.Store.HeartbeatsForStatsRangeByUser(ctx, userIDs, now, rangeName)
+	if err != nil {
+		return nil, err
+	}
+	externalByUser, err := s.Store.ExternalDurationsBetweenByUser(ctx, userIDs, window.Start, window.End)
+	if err != nil {
+		return nil, err
+	}
+	for _, user := range filteredUsers {
+		heartbeats := heartbeatsByUser[user.ID]
 		heartbeats = services.FilterWritesOnly(heartbeats, user.WritesOnly)
-		window, err := services.WindowForRange(now, rangeName)
-		if err != nil {
-			return nil, err
-		}
-		externalRows, err := s.Store.ExternalDurationsBetween(ctx, user.ID, window.Start, window.End)
-		if err != nil {
-			return nil, err
-		}
+		externalRows := externalByUser[user.ID]
 		stats, _, err := services.ComputeStatsForRangeWithExternalDurations(heartbeats, toServiceExternalDurations(externalRows), now, time.Duration(user.TimeoutMinutes)*time.Minute, rangeName)
 		if err != nil {
 			return nil, err
@@ -5289,12 +5341,59 @@ func leaderboardMeta(cached bool, rangeName, language, country string) map[strin
 }
 
 func (s *Server) applyCustomRules(ctx context.Context, user db.User, heartbeat services.Heartbeat) (services.Heartbeat, bool, error) {
+	preparedRules, ok := s.preparedCustomRules(user.ID)
+	if ok {
+		updated, deleted := services.ApplyPreparedCustomRules(heartbeat, preparedRules)
+		return updated, deleted, nil
+	}
 	rules, err := s.Store.ListCustomRules(ctx, user.ID)
 	if err != nil {
 		return heartbeat, false, err
 	}
-	updated, deleted := services.ApplyCustomRules(heartbeat, serviceCustomRules(rules))
+	preparedRules, err = services.PrepareCustomRules(serviceCustomRules(rules))
+	if err != nil {
+		return heartbeat, false, err
+	}
+	s.cachePreparedCustomRules(user.ID, preparedRules)
+	updated, deleted := services.ApplyPreparedCustomRules(heartbeat, preparedRules)
 	return updated, deleted, nil
+}
+
+func (s *Server) preparedCustomRules(userID uuid.UUID) (services.PreparedCustomRules, bool) {
+	s.customRulesMu.Lock()
+	defer s.customRulesMu.Unlock()
+	rules, ok := s.customRulesCache[userID]
+	return rules, ok
+}
+
+func (s *Server) cachePreparedCustomRules(userID uuid.UUID, rules services.PreparedCustomRules) {
+	s.customRulesMu.Lock()
+	defer s.customRulesMu.Unlock()
+	if _, exists := s.customRulesCache[userID]; !exists {
+		s.customRulesOrder = append(s.customRulesOrder, userID)
+	}
+	s.customRulesCache[userID] = rules
+	s.evictPreparedCustomRulesIfFull()
+}
+
+func (s *Server) invalidatePreparedCustomRules(userID uuid.UUID) {
+	s.customRulesMu.Lock()
+	defer s.customRulesMu.Unlock()
+	delete(s.customRulesCache, userID)
+	for i, cachedUserID := range s.customRulesOrder {
+		if cachedUserID == userID {
+			s.customRulesOrder = append(s.customRulesOrder[:i], s.customRulesOrder[i+1:]...)
+			return
+		}
+	}
+}
+
+func (s *Server) evictPreparedCustomRulesIfFull() {
+	for len(s.customRulesCache) > maxPreparedCustomRulesCacheEntries && len(s.customRulesOrder) > 0 {
+		evictUserID := s.customRulesOrder[0]
+		s.customRulesOrder = s.customRulesOrder[1:]
+		delete(s.customRulesCache, evictUserID)
+	}
 }
 
 func serviceCustomRules(rules []db.CustomRule) []services.CustomRule {
@@ -5498,7 +5597,24 @@ func readImportBody(c echo.Context) ([]byte, error) {
 }
 
 func readAllImportBody(src io.Reader) ([]byte, error) {
-	limited := io.LimitReader(src, maxImportBodyBytes+1)
+	buffered := bufio.NewReader(src)
+	header, _ := buffered.Peek(2)
+	if len(header) == 2 && header[0] == 0x1f && header[1] == 0x8b {
+		reader, err := gzip.NewReader(buffered)
+		if err != nil {
+			return nil, err
+		}
+		defer reader.Close()
+		expanded, err := io.ReadAll(io.LimitReader(reader, maxImportBodyBytes+1))
+		if err != nil {
+			return nil, err
+		}
+		if len(expanded) > maxImportBodyBytes {
+			return nil, fmt.Errorf("import file is too large after decompression; limit is %d MiB", maxImportBodyBytes>>20)
+		}
+		return expanded, nil
+	}
+	limited := io.LimitReader(buffered, maxImportBodyBytes+1)
 	raw, err := io.ReadAll(limited)
 	if err != nil {
 		return nil, err

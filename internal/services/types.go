@@ -210,11 +210,29 @@ type ExternalDuration struct {
 }
 
 type Duration struct {
-	Name            string  `json:"name"`
-	Project         string  `json:"project,omitempty"`
-	Language        string  `json:"language,omitempty"`
-	Time            float64 `json:"time"`
-	DurationSeconds int     `json:"duration"`
+	Name                           string             `json:"name"`
+	Project                        string             `json:"project,omitempty"`
+	Language                       string             `json:"language,omitempty"`
+	Time                           float64            `json:"time"`
+	DurationSeconds                int                `json:"duration"`
+	AIAdditions                    int                `json:"ai_additions"`
+	AIDeletions                    int                `json:"ai_deletions"`
+	HumanAdditions                 int                `json:"human_additions"`
+	HumanDeletions                 int                `json:"human_deletions"`
+	AIAgentCosts                   map[string]float64 `json:"ai_agent_costs"`
+	AIInputTokens                  int                `json:"ai_input_tokens"`
+	AIOutputTokens                 int                `json:"ai_output_tokens"`
+	AIPromptLengthSum              int                `json:"ai_prompt_length_sum"`
+	AIPromptLengthAvg              int                `json:"ai_prompt_length_avg"`
+	AIPromptLengthAvgPerSession    int                `json:"ai_prompt_length_avg_per_session"`
+	AIPromptLengthMedianPerSession int                `json:"ai_prompt_length_median_per_session"`
+	AIPromptEventsTotal            int                `json:"ai_prompt_events_total"`
+	AIPromptEventsAvgPerSession    int                `json:"ai_prompt_events_avg_per_session"`
+	AIPromptEventsMedianPerSession int                `json:"ai_prompt_events_median_per_session"`
+	AISessions                     int                `json:"ai_sessions"`
+	isAI                           bool
+	aiPromptEventsBySession        map[string]int
+	aiPromptLengthTotalsBySession  map[string]int
 }
 
 type SliceTotal struct {
@@ -296,6 +314,12 @@ type AICostPeriod struct {
 	TotalCents   int    `json:"total_cents"`
 }
 
+type AIAgentBreakdown struct {
+	Name  string  `json:"name"`
+	Lines int     `json:"lines"`
+	Cost  float64 `json:"cost"`
+}
+
 // AIToolCost is the cache-aware cost and token mix for one usage-events agent
 // (the fine-grained "tool" taxonomy: codex, claude, opencode, gemini). It backs
 // the AI panel's "by tool" grouping; the heartbeat "by agent" taxonomy (gpt,
@@ -309,22 +333,39 @@ type AIToolCost struct {
 }
 
 type AIMetrics struct {
-	AILineChanges         int            `json:"ai_line_changes"`
-	HumanLineChanges      int            `json:"human_line_changes"`
-	AIPercentage          int            `json:"ai_percentage"`
-	HumanReviewPercentage int            `json:"human_review_percentage"`
-	FollowUpEdits         int            `json:"follow_up_edits"`
-	AIInputTokens         int            `json:"ai_input_tokens"`
-	AIOutputTokens        int            `json:"ai_output_tokens"`
-	AIPromptLength        int            `json:"ai_prompt_length"`
-	PromptCount           int            `json:"prompt_count"`
-	AveragePromptLength   int            `json:"average_prompt_length"`
-	MedianPromptLength    int            `json:"median_prompt_length"`
-	SessionCount          int            `json:"session_count"`
-	EstimatedCostCents    int            `json:"estimated_cost_cents"`
-	Agents                []AIStat       `json:"agents"`
-	Days                  []AIStat       `json:"days"`
-	Costs                 []AICostPeriod `json:"costs"`
+	AILineChanges                  int                `json:"ai_line_changes"`
+	HumanLineChanges               int                `json:"human_line_changes"`
+	AIAdditions                    int                `json:"ai_additions"`
+	AIDeletions                    int                `json:"ai_deletions"`
+	HumanAdditions                 int                `json:"human_additions"`
+	HumanDeletions                 int                `json:"human_deletions"`
+	AILineChangesTotal             int                `json:"ai_line_changes_total"`
+	AIAgentLineChanges             map[string]int     `json:"ai_agent_line_changes"`
+	AIAgentCosts                   map[string]float64 `json:"ai_agent_costs"`
+	AIAgentBreakdown               []AIAgentBreakdown `json:"ai_agent_breakdown"`
+	AIAgentTotalCost               float64            `json:"ai_agent_total_cost"`
+	AIPercentage                   int                `json:"ai_percentage"`
+	HumanReviewPercentage          int                `json:"human_review_percentage"`
+	FollowUpEdits                  int                `json:"follow_up_edits"`
+	AIInputTokens                  int                `json:"ai_input_tokens"`
+	AIOutputTokens                 int                `json:"ai_output_tokens"`
+	AIPromptLength                 int                `json:"ai_prompt_length"`
+	PromptCount                    int                `json:"prompt_count"`
+	AveragePromptLength            int                `json:"average_prompt_length"`
+	MedianPromptLength             int                `json:"median_prompt_length"`
+	AIPromptLengthAvg              int                `json:"ai_prompt_length_avg"`
+	AIPromptLengthSum              int                `json:"ai_prompt_length_sum"`
+	AIPromptLengthAvgPerSession    int                `json:"ai_prompt_length_avg_per_session"`
+	AIPromptLengthMedianPerSession int                `json:"ai_prompt_length_median_per_session"`
+	AIPromptEventsTotal            int                `json:"ai_prompt_events_total"`
+	AIPromptEventsAvgPerSession    int                `json:"ai_prompt_events_avg_per_session"`
+	AIPromptEventsMedianPerSession int                `json:"ai_prompt_events_median_per_session"`
+	SessionCount                   int                `json:"session_count"`
+	AISessions                     int                `json:"ai_sessions"`
+	EstimatedCostCents             int                `json:"estimated_cost_cents"`
+	Agents                         []AIStat           `json:"agents"`
+	Days                           []AIStat           `json:"days"`
+	Costs                          []AICostPeriod     `json:"costs"`
 	// ToolCosts is the accurate per-tool cost breakdown from usage_events,
 	// powering the AI panel's "by tool" grouping. Empty when no usage events.
 	ToolCosts []AIToolCost `json:"tool_costs"`

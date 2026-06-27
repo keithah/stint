@@ -20,4 +20,4 @@ assert.match(source, /disabled=\{create\.isPending \|\| !canCreateAPIKey\}/);
 assert.match(source, /disabled=\{createApp\.isPending \|\| !canCreateOAuthApp\}/);
 assert.match(source, /disabled=\{createShare\.isPending \|\| !canCreateShareToken\}/);
 assert.match(source, /function isHTTPURL\(value: string\) \{\s+try \{\s+const parsed = new URL\(value\);\s+return parsed\.protocol === "http:" \|\| parsed\.protocol === "https:";\s+\} catch \{\s+return false;\s+\}\s+\}/);
-assert.match(packageJSON, /app\/\(console\)\/settings\/named-resources-validation\.test\.ts/);
+assert.match(packageJSON, /scripts\/run-tests\.mjs/);

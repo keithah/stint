@@ -1,59 +1,150 @@
 package services
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 )
 
 func ExtractHeartbeatsFromWakaTimeDump(raw []byte) ([]Heartbeat, error) {
-	raw, err := maybeGunzipWakaTimeDump(raw)
+	return ExtractHeartbeatsFromWakaTimeDumpReader(bytes.NewReader(raw), 0)
+}
+
+func ExtractHeartbeatsFromWakaTimeDumpReader(src io.Reader, maxBytes int64) ([]Heartbeat, error) {
+	reader, closeReader, err := wakaTimeDumpReader(src)
 	if err != nil {
 		return nil, err
 	}
-	var direct []Heartbeat
-	if err := json.Unmarshal(raw, &direct); err == nil && len(direct) > 0 {
+	if closeReader != nil {
+		defer closeReader()
+	}
+	if maxBytes > 0 {
+		reader = &limitedDecodeReader{reader: reader, max: maxBytes}
+	}
+	decoder := json.NewDecoder(reader)
+	token, err := decoder.Token()
+	if err != nil {
+		return nil, errors.New("import file does not contain heartbeat data")
+	}
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil, errors.New("import file does not contain heartbeat data")
+	}
+	switch delim {
+	case '[':
+		var direct []Heartbeat
+		for decoder.More() {
+			var heartbeat Heartbeat
+			if err := decoder.Decode(&heartbeat); err != nil {
+				return nil, err
+			}
+			direct = append(direct, heartbeat)
+		}
+		if _, err := decoder.Token(); err != nil {
+			return nil, err
+		}
+		if len(direct) == 0 {
+			return nil, errors.New("import file does not contain heartbeat data")
+		}
 		return normalizeImportedHeartbeats(direct), nil
+	case '{':
+		return extractWakaTimeObjectHeartbeats(decoder)
+	default:
+		return nil, errors.New("import file does not contain heartbeat data")
 	}
+}
 
-	var wrapped struct {
-		Data       []Heartbeat `json:"data"`
-		Heartbeats []Heartbeat `json:"heartbeats"`
-		Days       []struct {
-			Heartbeats []Heartbeat `json:"heartbeats"`
-		} `json:"days"`
-		User map[string]any `json:"user"`
+func wakaTimeDumpReader(src io.Reader) (io.Reader, func() error, error) {
+	buffered := bufio.NewReader(src)
+	header, _ := buffered.Peek(2)
+	if len(header) < 2 || header[0] != 0x1f || header[1] != 0x8b {
+		return buffered, nil, nil
 	}
-	if err := json.Unmarshal(raw, &wrapped); err != nil {
+	reader, err := gzip.NewReader(buffered)
+	if err != nil {
+		return nil, nil, err
+	}
+	return reader, reader.Close, nil
+}
+
+func extractWakaTimeObjectHeartbeats(decoder *json.Decoder) ([]Heartbeat, error) {
+	var data []Heartbeat
+	var heartbeats []Heartbeat
+	var days []struct {
+		Heartbeats []Heartbeat `json:"heartbeats"`
+	}
+	var user map[string]any
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, err
+		}
+		key, ok := token.(string)
+		if !ok {
+			return nil, errors.New("import file does not contain heartbeat data")
+		}
+		switch key {
+		case "data":
+			if err := decoder.Decode(&data); err != nil {
+				return nil, err
+			}
+		case "heartbeats":
+			if err := decoder.Decode(&heartbeats); err != nil {
+				return nil, err
+			}
+		case "days":
+			if err := decoder.Decode(&days); err != nil {
+				return nil, err
+			}
+		case "user":
+			if err := decoder.Decode(&user); err != nil {
+				return nil, err
+			}
+		default:
+			var discard json.RawMessage
+			if err := decoder.Decode(&discard); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
 		return nil, err
 	}
-	dayHeartbeats := heartbeatsFromWakaTimeDays(wrapped.Days)
+	dayHeartbeats := heartbeatsFromWakaTimeDays(days)
 	switch {
-	case len(wrapped.Data) > 0:
-		return normalizeImportedHeartbeats(wrapped.Data), nil
-	case len(wrapped.Heartbeats) > 0:
-		return normalizeImportedHeartbeats(wrapped.Heartbeats), nil
+	case len(data) > 0:
+		return normalizeImportedHeartbeats(data), nil
+	case len(heartbeats) > 0:
+		return normalizeImportedHeartbeats(heartbeats), nil
 	case len(dayHeartbeats) > 0:
 		return normalizeImportedHeartbeats(dayHeartbeats), nil
-	case len(wrapped.User) > 0:
+	case len(user) > 0:
 		return nil, errors.New("import file contains WakaTime profile metadata but no heartbeat rows; export Heartbeats from WakaTime settings")
 	default:
 		return nil, errors.New("import file does not contain heartbeat data")
 	}
 }
 
-func maybeGunzipWakaTimeDump(raw []byte) ([]byte, error) {
-	if len(raw) < 2 || raw[0] != 0x1f || raw[1] != 0x8b {
-		return raw, nil
+type limitedDecodeReader struct {
+	reader io.Reader
+	max    int64
+	read   int64
+}
+
+func (r *limitedDecodeReader) Read(p []byte) (int, error) {
+	if r.read >= r.max {
+		return 0, fmt.Errorf("import file is too large; limit is %d MiB", r.max>>20)
 	}
-	reader, err := gzip.NewReader(bytes.NewReader(raw))
-	if err != nil {
-		return nil, err
+	if remaining := r.max - r.read; int64(len(p)) > remaining {
+		p = p[:remaining]
 	}
-	defer reader.Close()
-	return io.ReadAll(reader)
+	n, err := r.reader.Read(p)
+	r.read += int64(n)
+	return n, err
 }
 
 func normalizeImportedHeartbeats(heartbeats []Heartbeat) []Heartbeat {

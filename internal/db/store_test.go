@@ -239,6 +239,43 @@ func TestOAuthRefreshTokenQueriesRequireUnexpiredTokens(t *testing.T) {
 	}
 }
 
+func TestAuthTokenUpgradeLogicIsCentralized(t *testing.T) {
+	sourceBytes, err := os.ReadFile("store.go")
+	if err != nil {
+		t.Fatalf("could not read store.go: %v", err)
+	}
+	source := string(sourceBytes)
+	for _, functionName := range []string{"AuthByAPIKey", "VerifyOAuthAppSecret", "ExchangeOAuthAuthorizationCode", "RefreshOAuthToken", "RevokeOAuthToken", "AuthByOAuthAccessToken", "UserByShareToken", "UserByShareTokenOnly"} {
+		body := functionSource(source, functionName)
+		if strings.Contains(body, "NeedsUpgrade") {
+			t.Fatalf("%s must delegate token hash upgrade branching to verifyTokenHash", functionName)
+		}
+	}
+	helperBytes, err := os.ReadFile("token_hash.go")
+	if err != nil {
+		t.Fatalf("could not read token_hash.go: %v", err)
+	}
+	if !strings.Contains(string(helperBytes), "func (s *Store) verifyTokenHash") {
+		t.Fatal("expected a centralized verifyTokenHash helper")
+	}
+}
+
+func TestBulkHeartbeatInsertUsesCopyStaging(t *testing.T) {
+	sourceBytes, err := os.ReadFile("heartbeat_ingest.go")
+	if err != nil {
+		t.Fatalf("could not read heartbeat_ingest.go: %v", err)
+	}
+	body := functionSource(string(sourceBytes), "insertHeartbeatsWithCopyStaging")
+	for _, want := range []string{"CREATE TEMP TABLE tmp_heartbeat_ingest", "tx.CopyFrom", "ON CONFLICT DO NOTHING"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("InsertHeartbeats must use PostgreSQL COPY staging; missing %q", want)
+		}
+	}
+	if strings.Contains(body, "SendBatch") {
+		t.Fatal("InsertHeartbeats must not use per-row pgx batch inserts")
+	}
+}
+
 func TestRevokeOAuthTokenScopesLookupToAuthenticatedClient(t *testing.T) {
 	sourceBytes, err := os.ReadFile("store.go")
 	if err != nil {
@@ -436,6 +473,49 @@ func TestUpsertExternalDurationValidatesInputBeforeInsert(t *testing.T) {
 	body := functionSource(string(sourceBytes), "UpsertExternalDuration")
 	if !strings.Contains(body, "services.ValidateExternalDuration") {
 		t.Fatal("UpsertExternalDuration must validate external duration input before insert")
+	}
+}
+
+func TestUpsertExternalDurationsBatchesAndMarksStatsStaleOnce(t *testing.T) {
+	sourceBytes, err := os.ReadFile("store.go")
+	if err != nil {
+		t.Fatalf("could not read store.go: %v", err)
+	}
+	body := functionSource(string(sourceBytes), "UpsertExternalDurations")
+	if !strings.Contains(body, "services.ValidateExternalDuration") {
+		t.Fatal("UpsertExternalDurations must validate external duration input before insert")
+	}
+	if !strings.Contains(body, "SendBatch") {
+		t.Fatal("UpsertExternalDurations must batch database writes")
+	}
+	if got := strings.Count(body, "MarkStatsStale(ctx, userID)"); got != 1 {
+		t.Fatalf("UpsertExternalDurations must mark stats stale once, got %d calls", got)
+	}
+}
+
+func TestOptimizerIndexesIncludeLeaderboardMemberLookup(t *testing.T) {
+	migrationBytes, err := os.ReadFile("migrations/0031_optimizer_indexes.sql")
+	if err != nil {
+		t.Fatalf("could not read optimizer indexes migration: %v", err)
+	}
+	migration := string(migrationBytes)
+	if !strings.Contains(migration, "leaderboard_members_user_id_idx") ||
+		!strings.Contains(migration, "ON leaderboard_members (user_id, leaderboard_id)") {
+		t.Fatal("optimizer indexes must include leaderboard_members lookup by user_id")
+	}
+}
+
+func TestRunMigrationsUsesBoundedAdvisoryLockContexts(t *testing.T) {
+	sourceBytes, err := os.ReadFile("store.go")
+	if err != nil {
+		t.Fatalf("could not read store.go: %v", err)
+	}
+	body := functionSource(string(sourceBytes), "RunMigrations")
+	if !strings.Contains(body, "context.WithTimeout(ctx, migrationLockTimeout)") {
+		t.Fatal("RunMigrations should use a timeout while acquiring the advisory lock")
+	}
+	if !strings.Contains(body, "context.WithTimeout(context.Background(), migrationUnlockTimeout)") {
+		t.Fatal("RunMigrations should use a timeout while releasing the advisory lock")
 	}
 }
 
@@ -726,5 +806,23 @@ func TestCustomRulesProgressAbortedStatusIsTerminal(t *testing.T) {
 	}
 	if customRulesProgressIsAborted(CustomRulesProgress{Status: "Completed"}) {
 		t.Fatal("expected Completed custom rules progress not to be treated as aborted")
+	}
+}
+
+func TestProjectStatsCacheSchemaAndInvalidationArePresent(t *testing.T) {
+	migration, err := os.ReadFile("migrations/0030_project_stats_cache.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(migration), "CREATE TABLE IF NOT EXISTS project_stats_cache") {
+		t.Fatal("expected project stats cache migration")
+	}
+	sourceBytes, err := os.ReadFile("store.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(sourceBytes)
+	if !strings.Contains(source, "UPDATE project_stats_cache SET is_up_to_date = false") {
+		t.Fatal("expected MarkStatsStale to invalidate project stats cache")
 	}
 }

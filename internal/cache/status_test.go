@@ -61,3 +61,35 @@ func TestMemoryLeaderboardCacheExpiresEntries(t *testing.T) {
 		t.Fatal("expected cached leaderboard to expire")
 	}
 }
+
+func TestMemoryLeaderboardCacheCapsEntries(t *testing.T) {
+	cache := NewMemoryLeaderboardCache()
+	ctx := context.Background()
+
+	for i := 0; i < maxMemoryLeaderboardEntries+10; i++ {
+		key := "last_7_days:lang" + string(rune('a'+i))
+		if err := cache.Set(ctx, key, []services.LeaderboardEntry{{Username: "alice"}}, time.Hour); err != nil {
+			t.Fatalf("Set returned error: %v", err)
+		}
+	}
+
+	if got := len(cache.entries); got > maxMemoryLeaderboardEntries {
+		t.Fatalf("cache entries = %d, want at most %d", got, maxMemoryLeaderboardEntries)
+	}
+}
+
+func TestMemoryStatusCacheCapsEntries(t *testing.T) {
+	cache := NewMemoryStatusCache()
+	ctx := context.Background()
+
+	for i := 0; i < maxMemoryStatusEntries+10; i++ {
+		key := "user-" + string(rune('a'+i))
+		if err := cache.Set(ctx, key, services.StatusBarStats{TotalSeconds: i}, time.Hour); err != nil {
+			t.Fatalf("Set returned error: %v", err)
+		}
+	}
+
+	if got := len(cache.entries); got > maxMemoryStatusEntries {
+		t.Fatalf("cache entries = %d, want at most %d", got, maxMemoryStatusEntries)
+	}
+}

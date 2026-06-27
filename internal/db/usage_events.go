@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/keithah/stint/internal/usage"
 	"github.com/keithah/stint/internal/usagestats"
 )
@@ -52,43 +51,88 @@ func (s *Store) InsertUsageEvents(ctx context.Context, userID uuid.UUID, events 
 		rows = append(rows, row{event: event, ts: ts.UTC()})
 	}
 
-	// Upsert: a re-ingested event with corrected token/cost counts (e.g. the
-	// Claude streaming-output reconciliation) must update the stored row, not
-	// be dropped. `RETURNING (xmax = 0)` is true for freshly-inserted rows and
-	// false for updated ones, so we still report inserted vs. duplicate. One
-	// column list lives here, in the single INSERT statement.
-	const query = `INSERT INTO usage_events (
-		user_id, event_id, message_id, request_id, agent, session_id, project, model,
-		input_tokens, output_tokens, cache_create_5m_tokens, cache_create_1h_tokens,
-		cache_read_tokens, reasoning_tokens, cost_usd_provided, billing_type, ts, tz_offset_minutes
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-	ON CONFLICT (user_id, event_id) DO UPDATE SET
-		message_id = EXCLUDED.message_id, request_id = EXCLUDED.request_id,
-		agent = EXCLUDED.agent, session_id = EXCLUDED.session_id, project = EXCLUDED.project,
-		model = EXCLUDED.model, input_tokens = EXCLUDED.input_tokens,
-		output_tokens = EXCLUDED.output_tokens, cache_create_5m_tokens = EXCLUDED.cache_create_5m_tokens,
-		cache_create_1h_tokens = EXCLUDED.cache_create_1h_tokens, cache_read_tokens = EXCLUDED.cache_read_tokens,
-		reasoning_tokens = EXCLUDED.reasoning_tokens, cost_usd_provided = EXCLUDED.cost_usd_provided,
-		billing_type = EXCLUDED.billing_type, ts = EXCLUDED.ts, tz_offset_minutes = EXCLUDED.tz_offset_minutes
-	RETURNING (xmax = 0)`
-
-	batch := &pgx.Batch{}
+	eventIDs := make([]string, 0, len(rows))
+	messageIDs := make([]string, 0, len(rows))
+	requestIDs := make([]string, 0, len(rows))
+	agents := make([]string, 0, len(rows))
+	sessionIDs := make([]string, 0, len(rows))
+	projects := make([]string, 0, len(rows))
+	models := make([]string, 0, len(rows))
+	inputTokens := make([]int, 0, len(rows))
+	outputTokens := make([]int, 0, len(rows))
+	cacheCreate5mTokens := make([]int, 0, len(rows))
+	cacheCreate1hTokens := make([]int, 0, len(rows))
+	cacheReadTokens := make([]int, 0, len(rows))
+	reasoningTokens := make([]int, 0, len(rows))
+	costs := make([]*float64, 0, len(rows))
+	billingTypes := make([]string, 0, len(rows))
+	timestamps := make([]time.Time, 0, len(rows))
+	tzOffsets := make([]int, 0, len(rows))
 	for _, r := range rows {
 		e := r.event
-		batch.Queue(query,
-			userID, e.EventID, nullEmpty(e.MessageID), nullEmpty(e.RequestID), e.Agent,
-			e.SessionID, nullEmpty(e.Project), e.Model,
-			e.InputTokens, e.OutputTokens, e.CacheCreate5mTokens, e.CacheCreate1hTokens,
-			e.CacheReadTokens, e.ReasoningTokens, e.CostUSDProvided, nullEmpty(string(e.BillingType)),
-			r.ts, e.TZOffsetMinutes,
-		)
+		eventIDs = append(eventIDs, e.EventID)
+		messageIDs = append(messageIDs, e.MessageID)
+		requestIDs = append(requestIDs, e.RequestID)
+		agents = append(agents, e.Agent)
+		sessionIDs = append(sessionIDs, e.SessionID)
+		projects = append(projects, e.Project)
+		models = append(models, e.Model)
+		inputTokens = append(inputTokens, e.InputTokens)
+		outputTokens = append(outputTokens, e.OutputTokens)
+		cacheCreate5mTokens = append(cacheCreate5mTokens, e.CacheCreate5mTokens)
+		cacheCreate1hTokens = append(cacheCreate1hTokens, e.CacheCreate1hTokens)
+		cacheReadTokens = append(cacheReadTokens, e.CacheReadTokens)
+		reasoningTokens = append(reasoningTokens, e.ReasoningTokens)
+		costs = append(costs, e.CostUSDProvided)
+		billingTypes = append(billingTypes, string(e.BillingType))
+		timestamps = append(timestamps, r.ts)
+		tzOffsets = append(tzOffsets, e.TZOffsetMinutes)
 	}
 
-	br := s.Pool.SendBatch(ctx, batch)
-	defer br.Close()
-	for range rows {
+	const query = `WITH input AS (
+		SELECT $1::uuid AS user_id, *
+		FROM unnest(
+			$2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[],
+			$9::int[], $10::int[], $11::int[], $12::int[], $13::int[], $14::int[],
+			$15::double precision[], $16::text[], $17::timestamptz[], $18::int[]
+		) AS t(
+			event_id, message_id, request_id, agent, session_id, project, model,
+			input_tokens, output_tokens, cache_create_5m_tokens, cache_create_1h_tokens,
+			cache_read_tokens, reasoning_tokens, cost_usd_provided, billing_type, ts, tz_offset_minutes
+		)
+	)
+	INSERT INTO usage_events (
+			user_id, event_id, message_id, request_id, agent, session_id, project, model,
+			input_tokens, output_tokens, cache_create_5m_tokens, cache_create_1h_tokens,
+			cache_read_tokens, reasoning_tokens, cost_usd_provided, billing_type, ts, tz_offset_minutes
+		)
+		SELECT user_id, event_id, nullif(message_id, ''), nullif(request_id, ''), agent,
+			session_id, nullif(project, ''), model, input_tokens, output_tokens,
+			cache_create_5m_tokens, cache_create_1h_tokens, cache_read_tokens,
+			reasoning_tokens, cost_usd_provided, nullif(billing_type, ''), ts, tz_offset_minutes
+		FROM input
+		ON CONFLICT (user_id, event_id) DO UPDATE SET
+			message_id = EXCLUDED.message_id, request_id = EXCLUDED.request_id,
+			agent = EXCLUDED.agent, session_id = EXCLUDED.session_id, project = EXCLUDED.project,
+		model = EXCLUDED.model, input_tokens = EXCLUDED.input_tokens,
+			output_tokens = EXCLUDED.output_tokens, cache_create_5m_tokens = EXCLUDED.cache_create_5m_tokens,
+			cache_create_1h_tokens = EXCLUDED.cache_create_1h_tokens, cache_read_tokens = EXCLUDED.cache_read_tokens,
+			reasoning_tokens = EXCLUDED.reasoning_tokens, cost_usd_provided = EXCLUDED.cost_usd_provided,
+			billing_type = EXCLUDED.billing_type, ts = EXCLUDED.ts, tz_offset_minutes = EXCLUDED.tz_offset_minutes
+		RETURNING (xmax = 0)`
+
+	resultRows, err := s.Pool.Query(ctx, query,
+		userID, eventIDs, messageIDs, requestIDs, agents, sessionIDs, projects, models,
+		inputTokens, outputTokens, cacheCreate5mTokens, cacheCreate1hTokens,
+		cacheReadTokens, reasoningTokens, costs, billingTypes, timestamps, tzOffsets,
+	)
+	if err != nil {
+		return result, err
+	}
+	defer resultRows.Close()
+	for resultRows.Next() {
 		var inserted bool
-		if err := br.QueryRow().Scan(&inserted); err != nil {
+		if err := resultRows.Scan(&inserted); err != nil {
 			return result, err
 		}
 		if inserted {
@@ -97,7 +141,7 @@ func (s *Store) InsertUsageEvents(ctx context.Context, userID uuid.UUID, events 
 			result.Duplicates++
 		}
 	}
-	return result, nil
+	return result, resultRows.Err()
 }
 
 // UsageAggregate is one pre-summed group of usage events. Tokens are summed in
