@@ -17,24 +17,23 @@ Sourced from the live WakaTime API docs (`wakatime.com/developers`) and the
 
 ## 1. Executive summary
 
-Stint already does the hard part. **Ingestion is fully compatible**: the
-heartbeat handler accepts every documented WakaTime AI field (and several
-extras). The gap is on the **read side** — Stint's stats/durations JSON uses
-its own field names and is missing WakaTime's new per-session prompt metrics
-and additions/deletions split.
+Stint accepts every documented WakaTime AI heartbeat field and now mirrors the
+new WakaTime read-side AI fields additively in stats and durations responses.
+The remaining caveat is the additions/deletions split: WakaTime's heartbeat
+wire field is a combined line-change count, so Stint exposes that combined
+count as additions and keeps deletions at zero until a true split is available.
 
 | Layer | Status |
 |---|---|
-| Heartbeat ingestion (`POST …/heartbeats.bulk`) | ✅ Compatible today |
-| `"ai coding"` category handling | ⚠️ Accepted but not surfaced as AI time |
-| Stats response (`GET …/stats`) AI block | ⚠️ Different field names; missing metrics |
-| Durations response (`GET …/durations`) AI fields | ❌ Not exposed at all |
-| Prompt Insights (per-session avg/median) | ❌ Not computed |
+| Heartbeat ingestion (`POST .../heartbeats.bulk`) | Implemented |
+| `"ai coding"` category handling | Implemented |
+| Stats response (`GET .../stats`) AI block | Implemented |
+| Durations response (`GET .../durations`) AI fields | Implemented |
+| Prompt Insights (per-session avg/median) | Implemented |
 
-Recommended strategy: **additive mirroring.** Keep Stint's native fields,
-and emit WakaTime-named aliases alongside them so the existing dashboard keeps
-working while WakaTime-compatible clients see the data they expect. Nothing
-below is a breaking change.
+The implemented strategy is **additive mirroring**. Stint keeps its native
+fields and emits WakaTime-named aliases alongside them so the existing dashboard
+keeps working while WakaTime-compatible clients see the data they expect.
 
 ---
 
@@ -98,85 +97,74 @@ ai_sessions
 | Stint field (`json`) | Notes |
 |---|---|
 | `ai_line_changes`, `human_line_changes` | combined counts |
+| `ai_additions`, `ai_deletions`, `human_additions`, `human_deletions` | WakaTime aliases; combined counts are emitted as additions, deletions stay zero |
+| `ai_line_changes_total`, `ai_agent_line_changes` | WakaTime line-change totals |
 | `ai_percentage`, `human_review_percentage`, `follow_up_edits` | derived |
 | `ai_input_tokens`, `ai_output_tokens`, `ai_prompt_length` | totals |
-| `prompt_count`, `average_prompt_length`, `median_prompt_length` | overall, not per-session |
-| `session_count` | = WakaTime `ai_sessions` |
-| `estimated_cost_cents` | integer **cents**, not USD float |
+| `prompt_count`, `average_prompt_length`, `median_prompt_length` | native overall prompt metrics |
+| `ai_prompt_length_avg`, `ai_prompt_length_sum`, `ai_prompt_length_avg_per_session`, `ai_prompt_length_median_per_session` | WakaTime prompt length metrics |
+| `ai_prompt_events_total`, `ai_prompt_events_avg_per_session`, `ai_prompt_events_median_per_session` | WakaTime prompt event metrics |
+| `session_count`, `ai_sessions` | native and WakaTime session counts |
+| `estimated_cost_cents` | native integer cents |
+| `ai_agent_costs`, `ai_agent_breakdown`, `ai_agent_total_cost` | WakaTime USD-float agent cost shape |
 | `agents[]` (`AIStat`), `days[]`, `costs[]` (`AICostPeriod`) | per-agent / per-day / period spend |
 | `project_ai[]` | per-project AI breakdown |
 
 AI *time* (`ai_seconds`) is derived from durations whose heartbeats carry AI
-fields — **not** from `category == "ai coding"`.
+fields or explicitly use `category == "ai coding"`.
 
 ---
 
-## 4. Gap analysis
+## 4. Compatibility notes
 
-**G1 — Response field-name mismatch.** Stint emits `ai_line_changes` /
-`estimated_cost_cents`; WakaTime clients look for `ai_additions`/`ai_deletions`
-and `ai_agent_costs`/`ai_agent_total_cost` in **USD floats**. A WakaTime-shaped
-reader finds nothing.
+**C1 — Response field-name mirroring.** Stint emits its native fields plus
+WakaTime aliases in `AIMetrics`: `ai_additions`, `ai_deletions`,
+`human_additions`, `human_deletions`, `ai_line_changes_total`,
+`ai_agent_line_changes`, `ai_agent_costs`, `ai_agent_breakdown`,
+`ai_agent_total_cost`, and `ai_sessions`.
 
-**G2 — additions/deletions split.** Stint stores a single combined
+**C2 — additions/deletions split.** Stint stores a single combined
 `ai_line_changes`. The wire field is also combined, so a true add/delete split
-isn't directly derivable. Decision needed (§6).
+isn't directly derivable. Stint currently exposes the combined count as
+`ai_additions` / `human_additions` and returns zero deletions.
 
-**G3 — Prompt Insights (the headline new feature) missing.** No
-`ai_prompt_events_total`, `…_avg_per_session`, `…_median_per_session`, nor
-`ai_prompt_length_avg_per_session` / `…_median_per_session` / `…_sum`. Stint has
-overall length avg/median + a prompt count + session count, but nothing grouped
-**per session**. (Stint's own `docs/SPEC.md` §8 already lists "median prompts
-per session" as intended — this closes that gap too.)
+**C3 — Prompt Insights.** Stint groups prompt counts and prompt-length sums by
+`ai_session`, then computes `ai_prompt_events_total`,
+`ai_prompt_events_avg_per_session`, `ai_prompt_events_median_per_session`,
+`ai_prompt_length_avg`, `ai_prompt_length_sum`,
+`ai_prompt_length_avg_per_session`, and
+`ai_prompt_length_median_per_session`.
 
-**G4 — Durations carry no AI fields.** `services.Duration` is
-`{name, project, language, time, duration}`. WakaTime's durations now include
-the AI family.
+**C4 — Durations AI fields.** `services.Duration` includes the WakaTime
+per-duration AI family: line aliases, agent cost map, token totals, prompt
+length/event metrics, and `ai_sessions`.
 
-**G5 — `"ai coding"` category not first-class.** Stored but not counted in the
-`categories` slice as AI time, and AI-seconds ignore it. WakaTime treats it as a
-real category.
+**C5 — `"ai coding"` category.** Stint treats explicit `category == "ai coding"`
+as AI activity even when no other AI fields are present.
 
-**G6 — Agent cost shape.** Stint has per-agent `AIStat.estimated_cost_cents`
-and `AICostPeriod`; WakaTime wants `ai_agent_costs` map + `ai_agent_breakdown`
-array + `ai_agent_total_cost`, all USD floats, plus `ai_agent_line_changes` /
-`ai_line_changes_total`.
+**C6 — Agent cost shape.** Stint keeps per-agent
+`AIStat.estimated_cost_cents` and `AICostPeriod`, and also emits WakaTime's USD
+float aliases: `ai_agent_costs`, `ai_agent_breakdown`, and
+`ai_agent_total_cost`.
 
 ---
 
-## 5. Implementation plan (phased, additive)
+## 5. Verification coverage
 
-**Phase 0 — Lock ingestion parity (tests only).** Add a round-trip test (and a
-case in `scripts/smoke-wakatime.sh`) sending a heartbeat with every WakaTime AI
-field incl. `category:"ai coding"`, asserting all persist and feed stats. Low
-risk; proves the claim in §3.
+The read-side compatibility behavior is covered by service and OpenAPI tests:
 
-**Phase 1 — `"ai coding"` as a real category (G5).** Count `category=="ai
-coding"` heartbeats toward the `categories` breakdown and toward AI seconds
-(union with the existing "has AI fields" rule). Keeps Stint's heuristic while
-honoring the explicit category.
+- `TestComputeStatsForRangeAggregatesAIMetrics`
+- `TestComputeStatsForRangeCountsAICodingCategoryAsAISeconds`
+- `TestComputeStatsForRangeWithAICostsUsesAgentRates`
+- `TestComputeDurationsCarriesWakaTimeAIFields`
+- OpenAPI schema tests for `AIMetrics` and `DurationRow`
 
-**Phase 2 — WakaTime-named stats aliases (G1, G6).** Extend the `AIMetrics`
-JSON (additively) with: `ai_additions`/`ai_deletions`, `human_additions`/
-`human_deletions`, `ai_line_changes_total`, `ai_agent_line_changes`,
-`ai_agent_costs` (USD), `ai_agent_breakdown`, `ai_agent_total_cost` (USD),
-`ai_sessions`. Cents→USD is `cents/100.0`.
-
-**Phase 3 — Prompt Insights (G3).** During aggregation, group prompt counts and
-prompt-length sums by `ai_session`, then compute `ai_prompt_events_total`,
-`…_avg_per_session`, `…_median_per_session`, `ai_prompt_length_avg`,
-`…_avg_per_session`, `…_median_per_session`, `…_sum`. Surface on the AI dashboard
-panel (`web/components/ai-panel.tsx`).
-
-**Phase 4 — Durations AI fields (G4).** Add the per-duration AI family to
-`services.Duration` and the durations computation, mirroring the stats names.
-
-**Phase 5 — Verify.** Unit tests for the per-session math (incl. empty/single-
-session edge cases); extend `smoke-wakatime.sh`; re-run `ccusage-crosscheck.sh`
-to confirm cost totals are unchanged.
-
-Suggested order: Phase 0 → 2 → 3 (highest user value: the new dashboard
-metrics) → 1 → 4.
+The integration smoke path still exercises ingestion and WakaTime-compatible
+client commands; keep extending it when new first-party plugin payloads appear.
+Stint CLI AI sync coverage also pins source-specific transcript details such as
+Codex user-prompt extraction from IDE/harness wrapper text, Claude
+system-reminder cleanup, Claude subscription-plan metadata, successful direct
+and shell `apply_patch` file heartbeats, and tool-call read/write metadata.
 
 ---
 
@@ -187,11 +175,9 @@ metrics) → 1 → 4.
    from successive `lines` (total-lines-in-file) deltas; (c) extend the wire
    with separate add/remove fields for Stint-aware plugins. Recommendation: (a)
    now for compatibility, revisit (b) if the dashboard needs a true split.
-2. **Cost units.** Keep `estimated_cost_cents` (native) and **add** USD-float
-   WakaTime fields, rather than replacing — avoids breaking the current UI.
-3. **Per-session prompt counts.** Requires a per-`ai_session` prompt-event
-   tally. Confirm how `prompt_count` is currently incremented (per heartbeat
-   with `ai_prompt_length>0`?) and reuse that signal grouped by session.
+2. **Cost units.** Keep `estimated_cost_cents` (native) and add USD-float
+   WakaTime fields rather than replacing them; this avoids breaking the current
+   UI.
 
 ---
 

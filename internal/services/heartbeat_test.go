@@ -25,6 +25,9 @@ func TestPrepareHeartbeatFillsDefaultsAndCommitAliases(t *testing.T) {
 	if heartbeat.Type != "file" {
 		t.Fatalf("expected default type file, got %q", heartbeat.Type)
 	}
+	if heartbeat.Category != "coding" {
+		t.Fatalf("expected default category coding, got %q", heartbeat.Category)
+	}
 	if heartbeat.CommitHash != "abc123" {
 		t.Fatalf("expected commit_hash from revision, got %q", heartbeat.CommitHash)
 	}
@@ -51,6 +54,16 @@ func TestPrepareHeartbeatFillsDefaultsAndCommitAliases(t *testing.T) {
 	}
 	if heartbeat.MachineName != "vscode-linux" {
 		t.Fatalf("expected derived machine fallback, got %q", heartbeat.MachineName)
+	}
+}
+
+func TestPrepareHeartbeatKeepsExplicitCategory(t *testing.T) {
+	heartbeat := Heartbeat{Entity: "/tmp/main_test.go", Time: 123, Category: "writing tests"}
+
+	PrepareHeartbeat(&heartbeat, HeartbeatDefaults{})
+
+	if heartbeat.Category != "writing tests" {
+		t.Fatalf("expected explicit category to be preserved, got %q", heartbeat.Category)
 	}
 }
 

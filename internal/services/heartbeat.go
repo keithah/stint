@@ -26,6 +26,9 @@ func PrepareHeartbeat(heartbeat *Heartbeat, defaults HeartbeatDefaults) {
 	if heartbeat.Type == "" {
 		heartbeat.Type = "file"
 	}
+	if heartbeat.Category == "" {
+		heartbeat.Category = "coding"
+	}
 	if heartbeat.CommitHash == "" {
 		heartbeat.CommitHash = heartbeat.Revision
 	}

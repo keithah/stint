@@ -124,6 +124,15 @@ func TestPostgresHandlerIntegrationStoresWakaTimeHeartbeat(t *testing.T) {
 		"entity":  "/workspace/stint/main.go",
 		"project": "stint",
 	}, http.StatusOK, "handler-integration")
+	assertAuthenticatedPOST(t, router, rawKey, "/api/v1/plugins/errors", map[string]any{
+		"architecture":  "amd64",
+		"cli_version":   "dev",
+		"error_message": "integration diagnostics",
+		"logs":          "log line",
+		"platform":      "linux",
+		"plugin":        "stint-cli/dev",
+		"stacktrace":    "stack",
+	}, http.StatusCreated, `"ok":true`)
 }
 
 func TestPostgresHandlerIntegrationManagementEndpoints(t *testing.T) {

@@ -207,7 +207,7 @@ function IntegrationsContent() {
               ]}
             />
             <div className="mt-4 rounded border border-line bg-ink p-3 text-xs leading-5 text-zinc-500">
-              For multi-endpoint configs, use <span className="text-zinc-300">[api_urls]</span> and add <span className="text-zinc-300">.* = {apiURL}|waka_your_stint_key</span>.
+              For multi-endpoint configs, use <span className="text-zinc-300">[api_urls]</span> and add <span className="text-zinc-300">.* = {apiURL}|waka_your_stint_key</span>. The native CLI also reads <span className="text-zinc-300">[DEFAULT]</span> top-level values, keeps runtime files directly under <span className="text-zinc-300">$WAKATIME_HOME/</span>, validates and normalizes <span className="text-zinc-300">api_url</span>, treats <span className="text-zinc-300">timeout = 0</span> as no HTTP timeout, treats non-integer <span className="text-zinc-300">heartbeat_rate_limit_seconds</span> config as the WakaTime default, treats negative <span className="text-zinc-300">heartbeat_rate_limit_seconds</span> as disabled, <span className="text-zinc-300">projectmap</span> with capture placeholders, <span className="text-zinc-300">.wakatime-project</span> <span className="text-zinc-300">{"{project}"}</span> interpolation from Git remotes, Git submodule maps, <span className="text-zinc-300">project_api_key</span>, <span className="text-zinc-300">api_key_vault_cmd</span>, WakaTime legacy aliases like <span className="text-zinc-300">apikey</span>, <span className="text-zinc-300">--api-key</span>, and <span className="text-zinc-300">settings.ignore</span>, case-insensitive scalar setting keys, quoted scalar values, ordered first-match project and API-key maps, all-match ordered api_urls fanout, and regex config, comma-separated include/exclude flags, newline-separated regex lists with commas preserved inside patterns, Perl-style lookahead regex fallback, HTTP/HTTPS/SOCKS/NTLM proxy settings, SSL options, machine/timezone request headers, dependency detection with WakaTime order and caps using the resolved or explicit language, WakaTime language aliases like <span className="text-zinc-300">CSharp</span>, <span className="text-zinc-300">CPP</span>, <span className="text-zinc-300">ObjectiveC</span>, and <span className="text-zinc-300">Visual Basic .NET</span>, and including side-effect and multi-line JavaScript/TypeScript imports, Scala grouped imports, multiline HTML script sources, Rust <span className="text-zinc-300">extern crate</span> declarations, and <span className="text-zinc-300">Gruntfile</span> as <span className="text-zinc-300">grunt</span>, WakaTime-style 5 MiB automatic local file-stat reads for language, dependency, and line metadata with unsaved file entities skipping automatic line and dependency detection, Vim modelines for <span className="text-zinc-300">--guess-language</span>, C-family, Objective-C, Matlab, Delphi, and F#/Forth language disambiguation, WakaTime top-language aliases such as <span className="text-zinc-300">crontab</span>, <span className="text-zinc-300">.ruby-version</span>, <span className="text-zinc-300">.Rprofile</span>, <span className="text-zinc-300">.sublime-settings</span>, <span className="text-zinc-300">.vue</span>, <span className="text-zinc-300">.svh</span>, <span className="text-zinc-300">.xaml</span>, <span className="text-zinc-300">.xpl</span>, <span className="text-zinc-300">.inc</span>, <span className="text-zinc-300">.i</span>, <span className="text-zinc-300">.j</span>, <span className="text-zinc-300">.mo</span>, <span className="text-zinc-300">.re</span>, <span className="text-zinc-300">.swg</span>, and <span className="text-zinc-300">.vm</span>, dependency hiding, <span className="text-zinc-300">hide_project_names</span> .wakatime-project aliases, <span className="text-zinc-300">hide_project_folder</span> filename fallback, automatic SSH/SFTP remote stats with credential stripping and WakaTime-style remote filter skipping, <span className="text-zinc-300">--local-file</span> overrides, and SSH config options such as <span className="text-zinc-300">HostName</span>, <span className="text-zinc-300">User</span>, <span className="text-zinc-300">Port</span>, <span className="text-zinc-300">IdentityFile</span>, <span className="text-zinc-300">UserKnownHostsFile</span>, <span className="text-zinc-300">HostKeyAlias</span>, and <span className="text-zinc-300">StrictHostKeyChecking</span>.
             </div>
           </Panel>
 
@@ -233,9 +233,9 @@ function IntegrationsContent() {
 const clients = [
   {
     name: "Stint CLI",
-    status: "planned",
-    description: "A native client with first-class model, provider, and token telemetry.",
-    bullets: ["Existing payload parity", "Extended AI metadata", "Local agent adapters"]
+    status: "live",
+    description: "Use the native CLI for WakaTime-style heartbeats, status checks, projects, goals, file experts, and offline sync.",
+    bullets: ["Drop-in root flags", "Git/Hg/SVN detection", "BoltDB offline queue"]
   },
   {
     name: "WakaTime CLI",
@@ -265,17 +265,129 @@ const clients = [
     name: "Vim/Neovim",
     status: "compatible",
     description: "Terminal editors can send standard activity check-ins to Stint.",
-    bullets: ["Shared ~/.wakatime.cfg", "Shell CLI support", "Branch and language inference"]
+    bullets: ["Shared ~/.wakatime.cfg", "Project .wakatime overrides", "Branch and language inference"]
   }
 ] as const;
 
 function integrationConfigs(apiURL: string, apiKey: string) {
   return [
     {
+      id: "stint-cli-config",
+      name: "Stint CLI",
+      description: "Build the native client, initialize config, then send a compatibility heartbeat.",
+      lines: [
+        "make stint",
+        `bin/stint config init --api-url ${apiURL} --api-key ${apiKey}`,
+        "bin/stint api-keys",
+        'bin/stint api-keys create "Editor key" --scope write_heartbeats --scope read_stats',
+        "bin/stint api-keys delete API_KEY_ID",
+        "bin/stint oauth-apps",
+        'bin/stint oauth-apps create "Local OAuth app" --redirect-uri http://localhost:3000/callback --scope read_stats',
+        "bin/stint oauth-apps delete OAUTH_APP_ID",
+        "bin/stint oauth token --client-id OAUTH_CLIENT_ID --client-secret OAUTH_CLIENT_SECRET --code AUTH_CODE --redirect-uri http://localhost:3000/callback",
+        "bin/stint oauth token --client-id OAUTH_CLIENT_ID --client-secret OAUTH_CLIENT_SECRET --refresh-token REFRESH_TOKEN",
+        "bin/stint oauth revoke ACCESS_OR_REFRESH_TOKEN --client-id OAUTH_CLIENT_ID --client-secret OAUTH_CLIENT_SECRET",
+        "bin/stint account",
+        "bin/stint account update account.json",
+        "bin/stint account delete --confirm",
+        "bin/stint meta",
+        "bin/stint api-docs",
+        "bin/stint leaders",
+        "bin/stint leaders --language Go --country US",
+        "bin/stint editors",
+        "bin/stint program-languages",
+        "bin/stint users public-username",
+        "bin/stint users public-username stats last_7_days",
+        "bin/stint users public-username stats --range last_30_days",
+        "bin/stint users public-username summaries",
+        "bin/stint users public-username summaries --start 2026-06-01 --end 2026-06-30",
+        "bin/stint share SHARE_TOKEN stats",
+        "bin/stint share SHARE_TOKEN stats --range last_7_days",
+        "bin/stint share SHARE_TOKEN summaries",
+        "bin/stint share SHARE_TOKEN summaries --start 2026-06-01 --end 2026-06-30",
+        "bin/stint health",
+        "bin/stint health ingestion",
+        "bin/stint dev seed-key --github-id 4001 --username local-dev",
+        "bin/stint dev heartbeats-purge --retention-days 0",
+        "bin/stint dev leaderboard-update --range last_7_days",
+        "bin/stint dev goals-evaluate",
+        'bin/stint heartbeat --entity "$PWD/main.go" --write --project stint',
+        'bin/stint heartbeat --entity "$PWD/main.go" --category "ai coding" --ai-model gpt-5-codex --ai-provider openai --ai-agent codex --metadata \'{"source":"manual"}\'',
+        'bin/stint heartbeats "$(date +%F)"',
+        "bin/stint today",
+        "bin/stint today --output json",
+        "bin/stint today-goal 00000000-0000-4000-8000-000000000000",
+        "bin/stint stats last_7_days",
+        'bin/stint durations "$(date +%F)" --slice-by language',
+        'bin/stint summaries 2026-06-01 2026-06-30',
+        "bin/stint projects stint",
+        "bin/stint projects stint commits --branch main",
+        "bin/stint projects stint commits COMMIT_HASH",
+        "bin/stint all-time",
+        "bin/stint machine-names",
+        "bin/stint user-agents",
+        "bin/stint goals",
+        "bin/stint goals create goal.json",
+        "bin/stint goals update GOAL_ID goal.json",
+        "bin/stint goals delete GOAL_ID",
+        "bin/stint insights languages last_7_days",
+        "bin/stint external-durations",
+        "bin/stint external-durations create external-duration.json",
+        "bin/stint external-durations bulk external-durations.json",
+        "bin/stint external-durations delete 00000000-0000-4000-8000-000000000000",
+        "bin/stint external-durations delete --ids id-1,id-2",
+        "bin/stint custom-pricing",
+        "bin/stint custom-pricing upsert custom-pricing.json",
+        "bin/stint custom-pricing delete gpt-5-codex",
+        "bin/stint pricing-sources",
+        "bin/stint pricing-models",
+        "bin/stint billing-prefs",
+        "bin/stint billing-prefs upsert billing-pref.json",
+        "bin/stint billing-prefs delete codex",
+        "bin/stint ai-costs",
+        "bin/stint ai-costs replace ai-costs.json",
+        "bin/stint leaderboards",
+        "bin/stint leaderboards create leaderboard.json",
+        "bin/stint leaderboards update BOARD_ID leaderboard.json",
+        "bin/stint leaderboards add-member BOARD_ID github-username",
+        "bin/stint leaderboards remove-member BOARD_ID USER_ID",
+        "bin/stint leaderboards delete BOARD_ID",
+        "bin/stint share-tokens",
+        'bin/stint share-tokens create "Public read"',
+        "bin/stint share-tokens delete SHARE_TOKEN_ID",
+        "bin/stint events",
+        'bin/stint usage-events --start "$(date +%F)" --end "$(date +%F)"',
+        "bin/stint usage-events summary --range last_30_days --cost-mode calculate",
+        "bin/stint usage-events blocks --range last_7_days",
+        "bin/stint data-dumps create heartbeats",
+        "bin/stint data-dumps create daily",
+        "bin/stint data-dumps",
+        "bin/stint data-dumps download DUMP_ID",
+        "bin/stint custom-rules",
+        "bin/stint custom-rules replace custom-rules.json",
+        "bin/stint custom-rules delete RULE_ID",
+        "bin/stint custom-rules progress",
+        "bin/stint custom-rules abort",
+        "bin/stint import wakatime ~/Downloads/wakatime-dump.json",
+        "gzip -dc ~/Downloads/wakatime-dump.json.gz | bin/stint import wakatime --stdin",
+        'bin/stint file-experts "$PWD/main.go"',
+        "bin/stint doctor",
+        "bin/stint collect",
+        'bin/stint --file-experts --entity "$PWD/main.go"',
+        "bin/stint --offline-count",
+        "bin/stint --print-offline-heartbeats 10",
+        "bin/stint --sync-ai-activity",
+        "bin/stint --sync-ai-heartbeats",
+        "bin/stint offline count",
+        "bin/stint offline print",
+        "bin/stint offline sync"
+      ]
+    },
+    {
       id: "vscode-config",
       name: "VS Code",
       description: "Install the editor extension, then use this shared config.",
-      lines: ["[settings]", `api_url = ${apiURL}`, `api_key = ${apiKey}`, "heartbeat_rate_limit_seconds = 30"]
+      lines: ["[settings]", `api_url = ${apiURL}`, `api_key = ${apiKey}`, "import_cfg = ~/.wakatime/private.cfg", "heartbeat_rate_limit_seconds = 30", "status_bar_enabled = true", "status_bar_show_categories = true", "status_bar_coding_activity = true"]
     },
     {
       id: "jetbrains-config",
@@ -305,8 +417,8 @@ function integrationConfigs(apiURL: string, apiKey: string) {
 
 const roadmap = [
   { title: "Model-aware ingestion", state: "live", description: "Heartbeats can include ai_model, llm_model, ai_provider, token counts, and structured metadata." },
-  { title: "Native Stint CLI", state: "next", description: "A forkable client can enrich standard editor payloads without breaking existing plugins." },
-  { title: "Integration catalog", state: "next", description: "Per-editor setup cards, copyable configs, and validation checks will move here from Settings." }
+  { title: "Native Stint CLI", state: "live", description: "The local client sends WakaTime-shaped heartbeats, layers imported and project .wakatime configs, syncs offline activity, automatically emits native AI heartbeats from Codex successful direct and shell apply-patch calls, Claude, Continue dev data, Amp apply-patch logs, Gemini project-root tool calls, Kiro workspace actions, Antigravity, Copilot CLI session-state, Copilot workspace storage, Qoder history, Qwen Code function-call tools, Windsurf Next, OpenCode SQLite, Cody SQLite chat history, and other local AI logs/state unless --sync-ai-disabled or settings.sync_ai_disabled is set, records internal.ai_logs_last_parsed_at for repeat AI sync, and preserves prompt length, subscription plan, Codex prompt wrapper cleanup, read/write intent, and ai_line_changes where transcript tools expose them. Stint also accepts WakaTime-shaped diagnostics for verbose command failures." },
+  { title: "Integration catalog", state: "live", description: "Per-editor setup cards, copyable configs, and validation checks are available here for native CLI, WakaTime CLI, VS Code, JetBrains, Vim/Neovim, and shell smoke tests." }
 ] as const;
 
 function coverageCount(rows: UserAgent[], field: "ai_model" | "ai_provider") {

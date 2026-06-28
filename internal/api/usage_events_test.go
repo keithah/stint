@@ -179,7 +179,7 @@ func TestUsageEventsBulkRejectsOversizedBodyBeforeJSONBind(t *testing.T) {
 		SessionSecret: "test-session-secret-with-enough-bytes",
 	}, store)
 
-	payload := bytes.Repeat([]byte(" "), 12<<20)
+	payload := bytes.Repeat([]byte(" "), 26<<20)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/current/usage_events.bulk", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", basicAPIKey(rawKey))

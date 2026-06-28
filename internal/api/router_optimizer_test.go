@@ -30,7 +30,7 @@ func TestOptimizerRouteWiring(t *testing.T) {
 	assertContains(t, text, `s.Store.UpsertExternalDurations(c.Request().Context(), user.ID, validInputs)`)
 	assertContains(t, text, `current.GET("/events", server.currentUserEvents, readLimit)`)
 	assertContains(t, text, `middleware.BodyLimit(usageEventsBulkJSONBodyLimit)`)
-	assertContains(t, text, `usageEventsBulkJSONBodyLimit       = "10M"`)
+	assertContains(t, text, `usageEventsBulkJSONBodyLimit       = "25M"`)
 	if strings.Contains(text, `duration, err := s.Store.UpsertExternalDuration(c.Request().Context(), user.ID, input)`) &&
 		strings.Contains(functionSource(text, "createExternalDurationsBulk"), "UpsertExternalDuration") {
 		t.Fatal("createExternalDurationsBulk should use the batched store method")

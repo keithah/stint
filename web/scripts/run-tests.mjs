@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 const root = resolve(new URL("..", import.meta.url).pathname);
 const sucraseNode = resolve(root, "node_modules/.bin/sucrase-node");
 const concurrency = Math.max(2, Math.min(8, cpus().length));
+const matchFilters = parseMatchFilters(process.argv.slice(2));
 
 async function collectTests(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -40,7 +41,17 @@ function runTest(file) {
   });
 }
 
-const tests = (await collectTests(root)).sort();
+const allTests = (await collectTests(root)).sort();
+const tests = matchFilters.length === 0
+  ? allTests
+  : allTests.filter((file) => {
+      const name = relative(root, file);
+      return matchFilters.some((filter) => name.includes(filter));
+    });
+if (tests.length === 0) {
+  process.stderr.write(`no test files matched: ${matchFilters.join(", ")}\n`);
+  process.exit(1);
+}
 let next = 0;
 let failed = false;
 
@@ -65,4 +76,24 @@ async function worker() {
 await Promise.all(Array.from({ length: Math.min(concurrency, tests.length) }, worker));
 if (!failed) {
   process.stdout.write(`ran ${tests.length} test files\n`);
+}
+
+function parseMatchFilters(args) {
+  const filters = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--match") {
+      if (i + 1 >= args.length) {
+        process.stderr.write("--match requires a value\n");
+        process.exit(1);
+      }
+      filters.push(args[++i]);
+      continue;
+    }
+    if (arg.startsWith("--match=")) {
+      filters.push(arg.slice("--match=".length));
+      continue;
+    }
+  }
+  return filters.filter(Boolean);
 }

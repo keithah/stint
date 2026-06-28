@@ -46,12 +46,216 @@ scripts/generate-sqlc.sh
 
 ## Editor Config
 
+Build the native CLI:
+
+```bash
+make stint
+bin/stint config init --api-url http://localhost:8080/api/v1 --api-key waka_00000000-0000-4000-8000-000000000000
+bin/stint api-keys
+bin/stint api-keys create "Editor key" --scope write_heartbeats --scope read_stats
+bin/stint api-keys delete API_KEY_ID
+bin/stint oauth-apps
+bin/stint oauth-apps create "Local OAuth app" --redirect-uri http://localhost:3000/callback --scope read_stats
+bin/stint oauth-apps delete OAUTH_APP_ID
+bin/stint oauth token --client-id OAUTH_CLIENT_ID --client-secret OAUTH_CLIENT_SECRET --code AUTH_CODE --redirect-uri http://localhost:3000/callback
+bin/stint oauth token --client-id OAUTH_CLIENT_ID --client-secret OAUTH_CLIENT_SECRET --refresh-token REFRESH_TOKEN
+bin/stint oauth revoke ACCESS_OR_REFRESH_TOKEN --client-id OAUTH_CLIENT_ID --client-secret OAUTH_CLIENT_SECRET
+bin/stint account
+bin/stint account update account.json
+bin/stint account delete --confirm
+bin/stint meta
+bin/stint api-docs
+bin/stint leaders
+bin/stint leaders --language Go --country US
+bin/stint editors
+bin/stint program-languages
+bin/stint users public-username
+bin/stint users public-username stats last_7_days
+bin/stint users public-username stats --range last_30_days
+bin/stint users public-username summaries
+bin/stint users public-username summaries --start 2026-06-01 --end 2026-06-30
+bin/stint share SHARE_TOKEN stats
+bin/stint share SHARE_TOKEN stats --range last_7_days
+bin/stint share SHARE_TOKEN summaries
+bin/stint share SHARE_TOKEN summaries --start 2026-06-01 --end 2026-06-30
+bin/stint health
+bin/stint health ingestion
+bin/stint dev seed-key --github-id 4001 --username local-dev
+bin/stint dev heartbeats-purge --retention-days 0
+bin/stint dev leaderboard-update --range last_7_days
+bin/stint dev goals-evaluate
+bin/stint heartbeat --entity "$PWD/main.go" --write --project stint
+bin/stint heartbeat --entity "$PWD/main.go" --category "ai coding" --ai-model gpt-5-codex --ai-provider openai --ai-agent codex --metadata '{"source":"manual"}'
+bin/stint heartbeats "$(date +%F)"
+bin/stint durations "$(date +%F)" --slice-by language
+bin/stint summaries "$(date -u -v-6d +%F 2>/dev/null || date -u -d '6 days ago' +%F)" "$(date +%F)"
+bin/stint projects stint
+bin/stint projects stint commits --branch main
+bin/stint projects stint commits COMMIT_HASH
+bin/stint all-time
+bin/stint machine-names
+bin/stint user-agents
+bin/stint goals
+bin/stint goals create goal.json
+bin/stint goals update GOAL_ID goal.json
+bin/stint goals delete GOAL_ID
+bin/stint insights languages last_7_days
+bin/stint external-durations
+bin/stint external-durations create external-duration.json
+bin/stint external-durations bulk external-durations.json
+bin/stint external-durations delete 00000000-0000-4000-8000-000000000000
+bin/stint external-durations delete --ids id-1,id-2
+bin/stint custom-pricing
+bin/stint custom-pricing upsert custom-pricing.json
+bin/stint custom-pricing delete gpt-5-codex
+bin/stint pricing-sources
+bin/stint pricing-models
+bin/stint billing-prefs
+bin/stint billing-prefs upsert billing-pref.json
+bin/stint billing-prefs delete codex
+bin/stint ai-costs
+bin/stint ai-costs replace ai-costs.json
+bin/stint leaderboards
+bin/stint leaderboards create leaderboard.json
+bin/stint leaderboards update BOARD_ID leaderboard.json
+bin/stint leaderboards add-member BOARD_ID github-username
+bin/stint leaderboards remove-member BOARD_ID USER_ID
+bin/stint leaderboards delete BOARD_ID
+bin/stint share-tokens
+bin/stint share-tokens create "Public read"
+bin/stint share-tokens delete SHARE_TOKEN_ID
+bin/stint events
+bin/stint usage-events --start "$(date +%F)" --end "$(date +%F)"
+bin/stint usage-events summary --range last_30_days --cost-mode calculate
+bin/stint usage-events blocks --range last_7_days
+bin/stint data-dumps create heartbeats
+bin/stint data-dumps create daily
+bin/stint data-dumps
+bin/stint data-dumps download DUMP_ID
+bin/stint custom-rules
+bin/stint custom-rules replace custom-rules.json
+bin/stint custom-rules delete RULE_ID
+bin/stint custom-rules progress
+bin/stint custom-rules abort
+bin/stint import wakatime ~/Downloads/wakatime-dump.json
+gzip -dc ~/Downloads/wakatime-dump.json.gz | bin/stint import wakatime --stdin
+bin/stint doctor
+bin/stint collect
+bin/stint offline count
+bin/stint offline print
+bin/stint offline sync
+bin/stint --sync-ai-activity
+```
+
+Package builds can stamp version metadata with `make stint VERSION=1.2.3 COMMIT="$(git rev-parse --short HEAD)" BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"`; verify it with `bin/stint --version --verbose`.
+
+Use `make stint-install` to install both `stint` and the `stint-collect` helper used by `stint collect`.
+The CLI uses WakaTime-compatible resource paths: `~/.wakatime.cfg` for config,
+`~/.wakatime/offline_heartbeats.bdb` for queued heartbeats, and
+`~/.wakatime/wakatime.log` for request logs. When `WAKATIME_HOME` is set,
+config lives at `$WAKATIME_HOME/.wakatime.cfg`, while queue, log, internal
+config, and metrics files live directly under `$WAKATIME_HOME/`. Offline sync
+also migrates WakaTime's old `.wakatime.bdb` legacy queue, deduplicates
+near-identical queued heartbeats, drops permanent 400-level heartbeat results,
+and requeues transient failures or missing per-heartbeat results.
+Like `wakatime-cli`, Stint also loads `settings.import_cfg` after the main
+config and applies the nearest project `.wakatime` file for file heartbeats, so
+per-project API keys, filters, privacy settings, and rate limits can override
+shared defaults. `[DEFAULT]` keys are treated as top-level WakaTime config
+values, section names plus scalar setting keys are case-insensitive, and quoted
+scalar values are read without their surrounding quotes. When
+`git.project_from_git_remote = true`, the CLI uses the Git `origin` repository
+path as the default project name, including `.wakatime-project` `{project}`
+placeholder interpolation.
+Compatibility aliases such as `apikey`, `settings.ignore`, `hidefilenames`,
+`hide_projectnames`, and `hide_branchnames` are accepted, and regex-based
+filters, project maps, API key maps, and API URL fanout match case-insensitively
+like `wakatime-cli`; overlapping `projectmap`, `project_api_key`, and
+`git_submodule_projectmap` entries use the first matching entry in file order,
+while all matching `api_urls` entries fan out in file order. The `--include`
+and `--exclude` flags accept comma-separated patterns; config regex lists are
+newline-separated, so commas inside a regex are preserved.
+`--config-write key=value,with,commas` preserves the comma-containing value like
+WakaTime's `StringToString` flag parser, and native config subcommands accept
+the WakaTime `--config-section` section flag.
+Perl-style regex features such as lookahead are accepted when Go's native regex
+engine cannot compile the pattern.
+When `hide_project_names` matches a file or project path, the CLI creates or
+reuses a `.wakatime-project` alias so the heartbeat does not expose the original
+project name.
+Proxy settings accept `http://`, `https://`, `socks5://`, bare `host:port`, and
+WakaTime-style NTLM credential strings such as `domain\\user:password`.
+`api_url`, `api-url`, and `apiurl` values are validated and normalized before
+requests are built.
+`timeout = 0` disables the HTTP client timeout like `wakatime-cli`; positive
+values are seconds. `heartbeat_rate_limit_seconds = 0` disables heartbeat
+rate limiting, non-integer config values fall back to the WakaTime default, and
+negative values disable rate limiting like `wakatime-cli`.
+Remote `ssh://` and `sftp://` file entities are preserved in the sent heartbeat;
+when `--local-file` is omitted, the CLI downloads up to 512 KB over SFTP with an
+`scp` fallback for local stats. Pass `--local-file /path/to/local-copy` when an
+editor already has a local mirror for line counts, language detection,
+dependencies, and project detection. Automatic local file stats follow WakaTime
+and read at most the first 5 MiB for language, dependency, and line metadata;
+`--guess-language` also honors Vim modelines such as `vim: ft=python`, and
+C-family headers are disambiguated from matching source files or neighboring
+C/C++ files. Objective-C, Matlab, and Delphi ambiguities use the same
+neighbor-file hints as `wakatime-cli`, and `.fs` files are scored as F# or
+Forth from their contents. WakaTime's top-language filename aliases and display
+names are normalized for common cases such as `crontab`, `.ruby-version`,
+`.Rprofile`, `.sublime-settings`, `.vue`, `.svh`, `.xaml`, `.xpl`, `.inc`,
+`.i`, `.j`, `.mo`, `.re`, `.swg`, and `.vm`.
+`~/.ssh/config` host aliases are honored for `HostName`, `User`, `Port`,
+`IdentityFile`, `UserKnownHostsFile`,
+`HostKeyAlias`, and `StrictHostKeyChecking`. Credentials embedded in remote URLs
+are stripped before the heartbeat is sent. Remote entities follow WakaTime by
+skipping local file-existence and `.wakatime-project` include-only filtering.
+Dependency lists preserve WakaTime's first-seen parser order, deduplicate
+repeated names, follow the resolved or explicit heartbeat language when choosing
+the parser, honor WakaTime language aliases such as `CSharp`, `CPP`,
+`ObjectiveC`, and `Visual Basic .NET`, include `npm`/`bower` package-manager
+markers for supported JSON manifests, detect side-effect and multi-line JavaScript/TypeScript imports plus
+Scala grouped imports, multiline HTML script sources, Rust `extern crate`
+declarations, detect Gruntfile activity as `grunt`, and cap payloads at 1000
+entries.
+Unsaved file entities follow WakaTime by skipping automatic line and dependency
+detection while still allowing the heartbeat itself to be sent.
+With `--verbose --send-diagnostics-on-errors`, command failures post a
+WakaTime-shaped diagnostics payload to `/plugins/errors` using the configured
+API URL and key.
+Heartbeat payloads include WakaTime-compatible `user_agent` and
+`project_root_count` fields, plus Stint AI metadata flags such as `--ai-model`,
+`--ai-provider`, `--ai-agent`, `--ai-agent-version`, `--commit-hash`,
+`--ai-subscription-plan`, `--plugin-version`, `--editor`, and `--metadata`.
+Normal heartbeat sends accept either `--key` or the WakaTime-style `--api-key`
+alias for API credentials.
+Normal heartbeat sends also scan supported local AI transcript sources unless
+`--sync-ai-disabled` is set or `settings.sync_ai_disabled = true` is configured,
+matching `wakatime-cli`'s default AI sync behavior.
+Use `bin/stint --sync-ai-activity` when you want to sync AI activity without
+sending a file heartbeat. AI file heartbeats respect the same include/exclude
+filters as normal file heartbeats. Supported sources include Codex, Claude,
+Continue dev data with session workspace mapping, Amp, Copilot CLI and VS Code workspace storage, Gemini, Antigravity
+Desktop/IDE/CLI, Pi, Qoder history, Qwen Code, OpenCode, Kiro, Cline, Roo Code,
+and Cody file-based logs, plus lightweight Cursor, Windsurf and Windsurf Next,
+Goose, Qoder, OpenCode, and Cody SQLite chat-history readers. Where local tool logs
+expose enough detail, including Codex successful direct and shell `apply_patch`
+calls, Amp `apply_patch` logs, Gemini project-root tool calls, Kiro workspace
+actions, and Qwen Code function-call tools, Stint preserves prompt length,
+subscription plan, read/write intent, and WakaTime-compatible `ai_line_changes`
+on generated file heartbeats. Repeat AI sync uses
+`internal.ai_logs_last_parsed_at` in `wakatime-internal.cfg`, with legacy
+`internal.ai_sync_after` as a fallback. Codex and Claude prompt lengths strip
+IDE, harness, and system-reminder wrapper text so Prompt Insights reflect the
+typed user request.
+
 Use this in `~/.wakatime.cfg`:
 
 ```ini
 [settings]
 api_url = http://localhost:8080/api/v1
 api_key = waka_00000000-0000-4000-8000-000000000000
+import_cfg = ~/.wakatime/private.cfg
 hide_file_names = false
 timeout = 15
 ```
@@ -98,7 +302,7 @@ Current-user profile responses include email only for browser sessions, first-pa
 Granular summary scopes are enforced by requested data: `/durations?slice_by=language` accepts `read_summaries.languages`, project durations accept `read_summaries.projects`, and `/summaries` only includes granted project, language, category, dependency, editor, machine, or operating-system breakdowns while always returning the daily grand total.
 Account-management routes such as profile updates, API key management, OAuth app registration, share token management, custom rule mutations, and AI cost writes require local-account access: a browser session, first-party JWT, or full-scope local API key.
 
-The backend serves an OpenAPI 3.1 document at `/api/v1/docs` with per-method route metadata, auth requirements, required path parameters, query parameters for date ranges, filters, pagination, and share `callback`, OAuth form bodies, JSON request bodies for mutation endpoints, plus reusable schemas for the core heartbeat, stats, settings, goals, sharing, imports, and maintenance payloads. `GET /api/v1/meta` returns the detected client IP, runtime hostname, configured base URL, and `/api/v1` URL for connected clients.
+The backend serves an OpenAPI 3.1 document at `/api/v1/docs` with per-method route metadata, auth requirements, required path parameters, query parameters for date ranges, filters, pagination, and share `callback`, OAuth form bodies, JSON request bodies for mutation endpoints, plus reusable schemas for the core heartbeat, stats, settings, goals, sharing, imports, diagnostics, and maintenance payloads. `GET /api/v1/meta` returns the detected client IP, runtime hostname, configured base URL, and `/api/v1` URL for connected clients.
 
 ## Rate Limits
 
@@ -125,6 +329,7 @@ Data dumps require `STORAGE_TYPE=local` and write completed JSON snapshots under
 - `GET /api/v1/leaders`
 - `GET /api/v1/editors`
 - `GET /api/v1/program_languages`
+- `POST /api/v1/plugins/errors`
 - `GET /api/v1/auth/me`
 - `GET /api/v1/users/:user`
 - `GET /api/v1/users/:user/stats`, `GET /api/v1/users/:user/stats/:range`

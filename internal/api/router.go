@@ -79,7 +79,7 @@ const (
 	authenticatedWriteRateLimit        = 120
 	jobCreationRateLimit               = 10
 	heartbeatBulkJSONBodyLimit         = "1M"
-	usageEventsBulkJSONBodyLimit       = "10M"
+	usageEventsBulkJSONBodyLimit       = "25M"
 	maxPreparedCustomRulesCacheEntries = 4096
 )
 
@@ -200,6 +200,7 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 	jobLimit := func(name string) echo.MiddlewareFunc {
 		return server.rateLimitUser(name, jobCreationRateLimit, time.Minute)
 	}
+	api.POST("/plugins/errors", server.pluginErrors, server.requireUser, requireScope(scopeWriteHeartbeats), middleware.BodyLimit("256K"), writeLimit("plugin-errors"))
 	api.GET("/auth/me", server.currentUser, server.requireUser, readLimit)
 
 	current := api.Group("/users/current", server.requireUser)
@@ -400,6 +401,46 @@ func (s *Server) meta(c echo.Context) error {
 	})
 }
 
+type pluginErrorRequest struct {
+	Architecture string `json:"architecture"`
+	CLIVersion   string `json:"cli_version"`
+	ErrorMessage string `json:"error_message"`
+	IsPanic      bool   `json:"is_panic"`
+	Logs         string `json:"logs"`
+	Platform     string `json:"platform"`
+	Plugin       string `json:"plugin"`
+	Stacktrace   string `json:"stacktrace"`
+}
+
+func (s *Server) pluginErrors(c echo.Context) error {
+	var payload pluginErrorRequest
+	if err := c.Bind(&payload); err != nil {
+		return c.JSON(http.StatusBadRequest, wakaError("invalid diagnostics payload"))
+	}
+	if strings.TrimSpace(payload.ErrorMessage) == "" && strings.TrimSpace(payload.Stacktrace) == "" && strings.TrimSpace(payload.Logs) == "" {
+		return c.JSON(http.StatusBadRequest, wakaError("diagnostics payload is empty"))
+	}
+	authInfo, _ := c.Get("auth").(authContext)
+	c.Logger().Warnf("plugin diagnostics user=%s plugin=%q cli=%q platform=%q arch=%q panic=%t error=%q",
+		authInfo.Subject,
+		truncateLogField(payload.Plugin, 80),
+		truncateLogField(payload.CLIVersion, 40),
+		truncateLogField(payload.Platform, 40),
+		truncateLogField(payload.Architecture, 40),
+		payload.IsPanic,
+		truncateLogField(payload.ErrorMessage, 300),
+	)
+	return c.JSON(http.StatusCreated, map[string]any{"data": map[string]any{"ok": true}})
+}
+
+func truncateLogField(value string, limit int) string {
+	value = strings.TrimSpace(strings.ReplaceAll(value, "\n", " "))
+	if limit <= 0 || len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "..."
+}
+
 func clientIP(r *http.Request) string {
 	for _, header := range []string{"X-Forwarded-For", "X-Real-IP"} {
 		for _, candidate := range strings.Split(r.Header.Get(header), ",") {
@@ -585,6 +626,7 @@ func openAPIPaths() map[string]any {
 	add("/api/v1/leaders", withRateLimit(withQueryParams(withResponse(get("Get public leaderboard", "leaderboards", false), "PublicLeaderboardResponse"), "language", "country")))
 	add("/api/v1/editors", withResponse(get("List known editors", "metadata", false), "EditorListResponse"))
 	add("/api/v1/program_languages", withResponse(get("List known programming languages", "metadata", false), "ProgramLanguageListResponse"))
+	add("/api/v1/plugins/errors", withJSON(post("Ingest WakaTime plugin diagnostics", "metadata", http.StatusCreated, true), "PluginErrorRequest", "PluginErrorResponse"))
 	add("/api/v1/users/{user}", withRateLimit(withResponse(get("Get public user profile", "users", false), "PublicUserResponse")))
 	add("/api/v1/users/{user}/summaries", withRateLimit(withQueryParams(withResponse(get("Get public user summaries", "summaries", false), "PublicSummaryResponse"), "start", "end")))
 	add("/api/v1/users/{user}/stats", withRateLimit(withResponse(get("Get public user stats", "stats", false), "PublicStatsResponse")))
@@ -1128,6 +1170,28 @@ func openAPISchemas() map[string]any {
 			"type": "object",
 			"properties": map[string]any{
 				"data": map[string]any{"type": "array", "items": openAPIRef("ProgramLanguage")},
+			},
+		},
+		"PluginErrorRequest": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"architecture":  stringSchema,
+				"cli_version":   stringSchema,
+				"error_message": stringSchema,
+				"is_panic":      booleanSchema,
+				"logs":          stringSchema,
+				"platform":      stringSchema,
+				"plugin":        stringSchema,
+				"stacktrace":    stringSchema,
+			},
+		},
+		"PluginErrorResponse": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"data": map[string]any{
+					"type":       "object",
+					"properties": map[string]any{"ok": booleanSchema},
+				},
 			},
 		},
 		"APIKeyCreateRequest": map[string]any{
