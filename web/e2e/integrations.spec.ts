@@ -10,12 +10,6 @@ const recipes = [
   { name: "Shell CLI", expected: "curl -X POST" }
 ];
 
-const roadmapRecipes = [
-  { name: "Model-aware ingestion", expected: "ai_input_tokens" },
-  { name: "Native Stint CLI", expected: "bin/stint config init" },
-  { name: "Integration catalog", expected: "Create integration key" }
-];
-
 test("integration names reveal full setup instructions", async ({ page }) => {
   await page.route("**/api/v1/meta", async (route) => {
     await route.fulfill({
@@ -46,8 +40,5 @@ test("integration names reveal full setup instructions", async ({ page }) => {
     await expect(page.locator("#integration-instructions")).toContainText(recipe.expected);
   }
 
-  for (const recipe of roadmapRecipes) {
-    await page.getByRole("button", { name: `Show ${recipe.name} roadmap instructions` }).click();
-    await expect(page.locator("#integration-instructions")).toContainText(recipe.expected);
-  }
+  await expect(page.getByText("Stint client roadmap")).toHaveCount(0);
 });

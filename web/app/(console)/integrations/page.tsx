@@ -213,27 +213,6 @@ function IntegrationsContent() {
             </div>
           </Panel>
 
-          <Panel title="Stint client roadmap" icon={PlugZap}>
-            <div className="space-y-3">
-              {roadmap.map((item) => (
-                <button
-                  key={item.title}
-                  className={`w-full rounded border p-4 text-left transition hover:border-accent/60 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/60 ${selectedIntegration === item.recipeId ? "border-accent/60 bg-accent/10" : "border-line bg-ink"}`}
-                  type="button"
-                  onClick={() => setSelectedIntegration(item.recipeId)}
-                  aria-label={`Show ${item.title} roadmap instructions`}
-                  aria-pressed={selectedIntegration === item.recipeId}
-                  aria-controls="integration-instructions"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-medium text-zinc-100">{item.title}</h3>
-                    <span className="rounded border border-accent/30 bg-accent/10 px-2 py-1 text-[11px] uppercase tracking-[0.14em] text-accent">{item.state}</span>
-                  </div>
-                  <p className="mt-2 text-sm leading-5 text-zinc-500">{item.description}</p>
-                </button>
-              ))}
-            </div>
-          </Panel>
         </div>
       </section>
     </div>
@@ -407,33 +386,6 @@ function integrationConfigs(apiURL: string, apiKey: string) {
       ]
     },
     {
-      id: "model-aware-ingestion-config",
-      name: "Model-aware ingestion",
-      description: "Send WakaTime-shaped heartbeats with Stint AI metadata so dashboards can group activity by model, provider, agent, tokens, and cost rules.",
-      lines: [
-        `curl -X POST ${apiURL}/users/current/heartbeats \\`,
-        `  -H "Authorization: Bearer ${apiKey}" \\`,
-        '  -H "Content-Type: application/json" \\',
-        '  -d \'[{',
-        '    "entity": "~/src/stint/main.go",',
-        '    "type": "file",',
-        '    "category": "ai coding",',
-        '    "time": 1781887600,',
-        '    "project": "stint",',
-        '    "language": "Go",',
-        '    "ai_model": "gpt-5-codex",',
-        '    "llm_model": "gpt-5-codex",',
-        '    "ai_provider": "openai",',
-        '    "llm_provider": "openai",',
-        '    "ai_agent": "codex",',
-        '    "ai_agent_version": "1.0.0",',
-        '    "ai_input_tokens": 1200,',
-        '    "ai_output_tokens": 320,',
-        '    "metadata": { "source": "custom-client" }',
-        "  }]\'"
-      ]
-    },
-    {
       id: "wakatime-cli-config",
       name: "WakaTime CLI",
       description: "Install or keep the upstream CLI, then point its shared WakaTime config at Stint.",
@@ -531,29 +483,9 @@ function integrationConfigs(apiURL: string, apiKey: string) {
         '  -H "Content-Type: application/json" \\',
         '  -d \'{"entity":"~/src/stint/main.go","type":"file","time":1781887600,"project":"stint","language":"Go"}\''
       ]
-    },
-    {
-      id: "integration-catalog-config",
-      name: "Integration catalog",
-      description: "Use this page as the operator checklist: create a key, pick an integration name, copy its recipe, then validate it from the connection health panel.",
-      lines: [
-        "Open Stint > Integrations.",
-        "Click Create integration key.",
-        "Click Stint CLI, WakaTime CLI, Codex, VS Code, JetBrains, Vim/Neovim, or Shell CLI.",
-        "Copy the selected instructions.",
-        "Run the setup on the target machine.",
-        "Return to Stint > Integrations and confirm Clients seen, Model coverage, Provider coverage, and Last seen update.",
-        "Use Manage keys to rotate or revoke integration credentials."
-      ]
     }
   ] as const;
 }
-
-const roadmap = [
-  { title: "Model-aware ingestion", state: "live", recipeId: "model-aware-ingestion-config", description: "Heartbeats can include ai_model, llm_model, ai_provider, token counts, and structured metadata." },
-  { title: "Native Stint CLI", state: "live", recipeId: "stint-cli-config", description: "The local client sends WakaTime-shaped heartbeats, layers imported and project .wakatime configs, syncs offline activity, automatically emits native AI heartbeats from Codex successful direct and shell apply-patch calls, Claude, Continue dev data, Amp apply-patch logs, Gemini project-root tool calls, Kiro workspace actions, Antigravity, Copilot CLI session-state, Copilot workspace storage, Qoder history, Qwen Code function-call tools, Windsurf Next, OpenCode SQLite, Cody SQLite chat history, and other local AI logs/state unless --sync-ai-disabled or settings.sync_ai_disabled is set, records internal.ai_logs_last_parsed_at for repeat AI sync, and preserves prompt length, subscription plan, Codex prompt wrapper cleanup, read/write intent, and ai_line_changes where transcript tools expose them. Stint also accepts WakaTime-shaped diagnostics for verbose command failures." },
-  { title: "Integration catalog", state: "live", recipeId: "integration-catalog-config", description: "Per-editor setup cards, copyable configs, and validation checks are available here for native CLI, WakaTime CLI, VS Code, JetBrains, Vim/Neovim, and shell smoke tests." }
-] as const;
 
 function coverageCount(rows: UserAgent[], field: "ai_model" | "ai_provider") {
   return rows.filter((row) => Boolean(row[field]?.trim())).length;

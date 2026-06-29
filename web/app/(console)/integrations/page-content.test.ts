@@ -9,11 +9,11 @@ assertIncludes("integrations page documents WakaTime CLI recipe", source, "wakat
 assertIncludes("integrations page documents WakaTime CLI offline sync", source, "wakatime-cli --sync-offline-activity");
 assertIncludes("integrations page documents Codex recipe", source, "bin/stint --sync-ai-activity --agent codex");
 assertIncludes("integrations page documents Codex heartbeat recipe", source, "--ai-agent codex");
-assertIncludes("integrations page documents model-aware ingestion recipe", source, "model-aware-ingestion-config");
 assertIncludes("integrations page documents model-aware token fields", source, "ai_input_tokens");
-assertIncludes("integrations page documents model-aware structured metadata", source, '"metadata": { "source": "custom-client" }');
-assertIncludes("integrations page documents integration catalog recipe", source, "integration-catalog-config");
-assertIncludes("integrations page makes roadmap items selectable", source, "setSelectedIntegration(item.recipeId)");
+assertExcludes("integrations page removes completed roadmap panel", source, "Stint client roadmap");
+assertExcludes("integrations page removes roadmap data model", source, "const roadmap");
+assertExcludes("integrations page removes hidden model-aware roadmap recipe", source, "model-aware-ingestion-config");
+assertExcludes("integrations page removes hidden catalog roadmap recipe", source, "integration-catalog-config");
 assertIncludes("integrations page documents api-keys command", source, "bin/stint api-keys");
 assertIncludes("integrations page documents api-keys create command", source, 'bin/stint api-keys create "Editor key" --scope write_heartbeats --scope read_stats');
 assertIncludes("integrations page documents api-keys delete command", source, "bin/stint api-keys delete API_KEY_ID");
@@ -128,29 +128,15 @@ assertIncludes("integrations page documents status bar coding activity", source,
 assertIncludes("integrations page documents hide_project_folder", source, "hide_project_folder");
 assertIncludes("integrations page documents SSH host key alias support", source, "HostKeyAlias");
 assertIncludes("integrations page documents strict host key checking support", source, "StrictHostKeyChecking");
-assertIncludes("integrations page documents Antigravity AI sync support", source, "Antigravity");
-assertIncludes("integrations page documents Codex apply-patch support", source, "Codex successful direct and shell apply-patch calls");
-assertIncludes("integrations page documents Amp apply-patch AI sync support", source, "Amp apply-patch logs");
-assertIncludes("integrations page documents Continue dev data AI sync support", source, "Continue dev data");
-assertIncludes("integrations page documents Gemini project-root tool call support", source, "Gemini project-root tool calls");
-assertIncludes("integrations page documents Kiro workspace action support", source, "Kiro workspace actions");
-assertIncludes("integrations page documents Copilot CLI AI sync support", source, "Copilot CLI session-state");
-assertIncludes("integrations page documents Copilot workspace AI sync support", source, "Copilot workspace storage");
-assertIncludes("integrations page documents Qoder history AI sync support", source, "Qoder history");
-assertIncludes("integrations page documents Qwen Code function-call support", source, "Qwen Code function-call tools");
-assertIncludes("integrations page documents Windsurf Next SQLite support", source, "Windsurf Next");
-assertIncludes("integrations page documents OpenCode SQLite support", source, "OpenCode SQLite");
-assertIncludes("integrations page documents Cody SQLite chat history support", source, "Cody SQLite chat history");
-assertIncludes("integrations page documents WakaTime AI sync state key", source, "internal.ai_logs_last_parsed_at");
-assertIncludes("integrations page documents Codex prompt cleanup", source, "Codex prompt wrapper cleanup");
-assertIncludes("integrations page documents AI subscription plan metadata", source, "subscription plan");
-assertIncludes("integrations page documents AI read/write intent", source, "read/write intent");
-assertIncludes("integrations page documents AI line change metadata", source, "ai_line_changes");
-assertIncludes("integrations page documents prompt length metadata", source, "prompt length");
-assertIncludes("integrations page marks integration catalog live", source, 'title: "Integration catalog", state: "live"');
 
 function assertIncludes(name: string, sourceText: string, needle: string) {
   if (!sourceText.includes(needle)) {
     throw new Error(`${name}: expected source to include ${needle}`);
+  }
+}
+
+function assertExcludes(name: string, sourceText: string, needle: string) {
+  if (sourceText.includes(needle)) {
+    throw new Error(`${name}: expected source not to include ${needle}`);
   }
 }
