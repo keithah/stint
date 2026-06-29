@@ -3,6 +3,17 @@ import { readFileSync } from "node:fs";
 const source = readFileSync("app/(console)/integrations/page.tsx", "utf8");
 
 assertIncludes("integrations page exposes native Stint CLI recipe", source, "bin/stint config init");
+assertIncludes("integrations page makes integration cards selectable", source, "setSelectedIntegration");
+assertIncludes("integrations page exposes selected instructions region", source, "integration-instructions");
+assertIncludes("integrations page documents WakaTime CLI recipe", source, "wakatime-cli --entity");
+assertIncludes("integrations page documents WakaTime CLI offline sync", source, "wakatime-cli --sync-offline-activity");
+assertIncludes("integrations page documents Codex recipe", source, "bin/stint --sync-ai-activity --agent codex");
+assertIncludes("integrations page documents Codex heartbeat recipe", source, "--ai-agent codex");
+assertIncludes("integrations page documents model-aware ingestion recipe", source, "model-aware-ingestion-config");
+assertIncludes("integrations page documents model-aware token fields", source, "ai_input_tokens");
+assertIncludes("integrations page documents model-aware structured metadata", source, '"metadata": { "source": "custom-client" }');
+assertIncludes("integrations page documents integration catalog recipe", source, "integration-catalog-config");
+assertIncludes("integrations page makes roadmap items selectable", source, "setSelectedIntegration(item.recipeId)");
 assertIncludes("integrations page documents api-keys command", source, "bin/stint api-keys");
 assertIncludes("integrations page documents api-keys create command", source, 'bin/stint api-keys create "Editor key" --scope write_heartbeats --scope read_stats');
 assertIncludes("integrations page documents api-keys delete command", source, "bin/stint api-keys delete API_KEY_ID");

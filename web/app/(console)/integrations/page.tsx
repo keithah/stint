@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Bot, Cable, Check, CheckCircle2, Clipboard, Code2, KeyRound, PlugZap, Plus, Radar, ShieldCheck, TerminalSquare } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/ui";
-import { createKey, listEditors, listKeys, listUserAgents, serverMeta, wakatimeAPIURL, type UserAgent } from "@/lib/api";
+import { createKey, listEditors, listKeys, listUserAgents, serverMeta, type UserAgent } from "@/lib/api";
 
 export default function IntegrationsPage() {
   return (
@@ -17,12 +17,13 @@ function IntegrationsContent() {
   const queryClient = useQueryClient();
   const [latestKey, setLatestKey] = useState("");
   const [copied, setCopied] = useState("");
+  const [selectedIntegration, setSelectedIntegration] = useState("stint-cli-config");
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const meta = useQuery({ queryKey: ["server-meta"], queryFn: serverMeta, staleTime: 60000 });
   const keys = useQuery({ queryKey: ["api-keys"], queryFn: listKeys, });
   const editors = useQuery({ queryKey: ["editors"], queryFn: listEditors, staleTime: 3600000 });
   const userAgents = useQuery({ queryKey: ["user-agents"], queryFn: listUserAgents, staleTime: 60000 });
-  const apiURL = meta.data?.data.api_url || wakatimeAPIURL() || "https://stint.fyi/api/v1";
+  const apiURL = meta.data?.data.api_url || "https://stint.fyi/api/v1";
   const displayKey = latestKey || "waka_your_stint_key";
   const keyCount = keys.data?.data.length ?? 0;
   const editorCount = editors.data?.data.length ?? 0;
@@ -31,6 +32,7 @@ function IntegrationsContent() {
   const modelCoverage = coverageCount(agentRows, "ai_model");
   const providerCoverage = coverageCount(agentRows, "ai_provider");
   const configs = useMemo(() => integrationConfigs(apiURL, displayKey), [apiURL, displayKey]);
+  const selectedConfig = configs.find((config) => config.id === selectedIntegration) ?? configs[0];
   const createIntegrationKey = useMutation({
     mutationFn: () => createKey("Integrations page", ["write_heartbeats", "read_stats", "read_summaries"]),
     onSuccess: (result) => {
@@ -98,22 +100,22 @@ function IntegrationsContent() {
           <Panel title="Editor clients" icon={TerminalSquare} action={<Link className="text-sm text-accent hover:text-sky-300" href="/settings">Create key</Link>}>
             <div className="grid gap-3 md:grid-cols-2">
               {clients.map((client) => (
-                <ClientCard key={client.name} {...client} />
+                <ClientCard
+                  key={client.name}
+                  {...client}
+                  selected={selectedIntegration === client.recipeId}
+                  onSelect={() => setSelectedIntegration(client.recipeId)}
+                />
               ))}
             </div>
           </Panel>
 
-          <Panel title="Setup recipes" icon={Clipboard}>
-            <div className="grid gap-3">
-              {configs.map((config) => (
-                <IntegrationRecipe
-                  key={config.name}
-                  config={config}
-                  copied={copied === config.id}
-                  onCopy={() => copyText(config.id, config.lines.join("\n"))}
-                />
-              ))}
-            </div>
+          <Panel title={`${selectedConfig.name} instructions`} icon={Clipboard}>
+            <IntegrationRecipe
+              config={selectedConfig}
+              copied={copied === selectedConfig.id}
+              onCopy={() => copyText(selectedConfig.id, selectedConfig.lines.join("\n"))}
+            />
           </Panel>
 
           <Panel title="Extended AI telemetry" icon={Bot}>
@@ -214,13 +216,21 @@ function IntegrationsContent() {
           <Panel title="Stint client roadmap" icon={PlugZap}>
             <div className="space-y-3">
               {roadmap.map((item) => (
-                <div key={item.title} className="rounded border border-line bg-ink p-4">
+                <button
+                  key={item.title}
+                  className={`w-full rounded border p-4 text-left transition hover:border-accent/60 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/60 ${selectedIntegration === item.recipeId ? "border-accent/60 bg-accent/10" : "border-line bg-ink"}`}
+                  type="button"
+                  onClick={() => setSelectedIntegration(item.recipeId)}
+                  aria-label={`Show ${item.title} roadmap instructions`}
+                  aria-pressed={selectedIntegration === item.recipeId}
+                  aria-controls="integration-instructions"
+                >
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="font-medium text-zinc-100">{item.title}</h3>
                     <span className="rounded border border-accent/30 bg-accent/10 px-2 py-1 text-[11px] uppercase tracking-[0.14em] text-accent">{item.state}</span>
                   </div>
                   <p className="mt-2 text-sm leading-5 text-zinc-500">{item.description}</p>
-                </div>
+                </button>
               ))}
             </div>
           </Panel>
@@ -232,40 +242,53 @@ function IntegrationsContent() {
 
 const clients = [
   {
+    recipeId: "stint-cli-config",
     name: "Stint CLI",
     status: "live",
     description: "Use the native CLI for WakaTime-style heartbeats, status checks, projects, goals, file experts, and offline sync.",
     bullets: ["Drop-in root flags", "Git/Hg/SVN detection", "BoltDB offline queue"]
   },
   {
+    recipeId: "wakatime-cli-config",
     name: "WakaTime CLI",
     status: "supported",
     description: "Use the official CLI and existing editor plugins by changing the API URL and key.",
     bullets: ["Heartbeat ingestion", "Durations and summaries", "User-Agent editor parsing"]
   },
   {
+    recipeId: "codex-config",
     name: "Codex",
     status: "supported",
     description: "Codex heartbeats are parsed for editor, OS, agent, and version labels when available.",
     bullets: ["Agent attribution", "Token cost metrics", "Project and branch detection"]
   },
   {
+    recipeId: "vscode-config",
     name: "VS Code",
     status: "compatible",
     description: "Use the existing extension, then point the shared config file at Stint.",
     bullets: ["Extension marketplace", "Project/language charts", "Machine and OS breakdowns"]
   },
   {
+    recipeId: "jetbrains-config",
     name: "JetBrains",
     status: "compatible",
     description: "JetBrains IDEs work through the existing plugin and the same config file.",
     bullets: ["Basic and Bearer auth", "Project/language charts", "Machine and OS breakdowns"]
   },
   {
+    recipeId: "vim-config",
     name: "Vim/Neovim",
     status: "compatible",
     description: "Terminal editors can send standard activity check-ins to Stint.",
     bullets: ["Shared ~/.wakatime.cfg", "Project .wakatime overrides", "Branch and language inference"]
+  },
+  {
+    recipeId: "shell-cli-config",
+    name: "Shell CLI",
+    status: "compatible",
+    description: "Use curl or any HTTP client to send WakaTime-shaped heartbeats directly.",
+    bullets: ["Bearer auth", "JSON payloads", "Smoke-test friendly"]
   }
 ] as const;
 
@@ -384,22 +407,119 @@ function integrationConfigs(apiURL: string, apiKey: string) {
       ]
     },
     {
+      id: "model-aware-ingestion-config",
+      name: "Model-aware ingestion",
+      description: "Send WakaTime-shaped heartbeats with Stint AI metadata so dashboards can group activity by model, provider, agent, tokens, and cost rules.",
+      lines: [
+        `curl -X POST ${apiURL}/users/current/heartbeats \\`,
+        `  -H "Authorization: Bearer ${apiKey}" \\`,
+        '  -H "Content-Type: application/json" \\',
+        '  -d \'[{',
+        '    "entity": "~/src/stint/main.go",',
+        '    "type": "file",',
+        '    "category": "ai coding",',
+        '    "time": 1781887600,',
+        '    "project": "stint",',
+        '    "language": "Go",',
+        '    "ai_model": "gpt-5-codex",',
+        '    "llm_model": "gpt-5-codex",',
+        '    "ai_provider": "openai",',
+        '    "llm_provider": "openai",',
+        '    "ai_agent": "codex",',
+        '    "ai_agent_version": "1.0.0",',
+        '    "ai_input_tokens": 1200,',
+        '    "ai_output_tokens": 320,',
+        '    "metadata": { "source": "custom-client" }',
+        "  }]\'"
+      ]
+    },
+    {
+      id: "wakatime-cli-config",
+      name: "WakaTime CLI",
+      description: "Install or keep the upstream CLI, then point its shared WakaTime config at Stint.",
+      lines: [
+        "pipx install wakatime",
+        "mkdir -p ~/.wakatime",
+        "cat > ~/.wakatime.cfg <<'EOF'",
+        "[settings]",
+        `api_url = ${apiURL}`,
+        `api_key = ${apiKey}`,
+        "heartbeat_rate_limit_seconds = 30",
+        "offline = true",
+        "EOF",
+        'wakatime-cli --entity "$PWD/main.go" --write --plugin shell/1.0.0',
+        "wakatime-cli --today",
+        "wakatime-cli --offline-count",
+        "wakatime-cli --sync-offline-activity"
+      ]
+    },
+    {
+      id: "codex-config",
+      name: "Codex",
+      description: "Use the native Stint CLI to sync local Codex sessions and emit model-aware AI activity.",
+      lines: [
+        "make stint",
+        `bin/stint config init --api-url ${apiURL} --api-key ${apiKey}`,
+        "bin/stint --sync-ai-activity --agent codex",
+        "bin/stint --sync-ai-heartbeats --agent codex",
+        'bin/stint heartbeat --entity "$PWD/main.go" --category "ai coding" --ai-agent codex --ai-provider openai --ai-model gpt-5-codex --write',
+        "bin/stint today --output json",
+        "bin/stint user-agents"
+      ]
+    },
+    {
       id: "vscode-config",
       name: "VS Code",
       description: "Install the editor extension, then use this shared config.",
-      lines: ["[settings]", `api_url = ${apiURL}`, `api_key = ${apiKey}`, "import_cfg = ~/.wakatime/private.cfg", "heartbeat_rate_limit_seconds = 30", "status_bar_enabled = true", "status_bar_show_categories = true", "status_bar_coding_activity = true"]
+      lines: [
+        "Install the WakaTime extension from the VS Code Marketplace.",
+        "mkdir -p ~/.wakatime",
+        "cat > ~/.wakatime.cfg <<'EOF'",
+        "[settings]",
+        `api_url = ${apiURL}`,
+        `api_key = ${apiKey}`,
+        "import_cfg = ~/.wakatime/private.cfg",
+        "heartbeat_rate_limit_seconds = 30",
+        "status_bar_enabled = true",
+        "status_bar_show_categories = true",
+        "status_bar_coding_activity = true",
+        "EOF",
+        "Reload VS Code, edit a file, then check Stint > Integrations for the latest user agent."
+      ]
     },
     {
       id: "jetbrains-config",
       name: "JetBrains",
       description: "Install the activity plugin from JetBrains Marketplace and reuse the same API URL.",
-      lines: ["[settings]", `api_url = ${apiURL}`, `api_key = ${apiKey}`, "hide_project_names = false"]
+      lines: [
+        "Install the WakaTime plugin from JetBrains Marketplace.",
+        "mkdir -p ~/.wakatime",
+        "cat > ~/.wakatime.cfg <<'EOF'",
+        "[settings]",
+        `api_url = ${apiURL}`,
+        `api_key = ${apiKey}`,
+        "heartbeat_rate_limit_seconds = 30",
+        "hide_project_names = false",
+        "EOF",
+        "Restart the IDE, open a project, edit a file, then check Stint > Integrations for the JetBrains user agent."
+      ]
     },
     {
       id: "vim-config",
       name: "Vim/Neovim",
       description: "Keep a single config file for terminal editor plugins.",
-      lines: ["[settings]", `api_url = ${apiURL}`, `api_key = ${apiKey}`, "debug = false"]
+      lines: [
+        "Install vim-wakatime for Vim or Neovim.",
+        "mkdir -p ~/.wakatime",
+        "cat > ~/.wakatime.cfg <<'EOF'",
+        "[settings]",
+        `api_url = ${apiURL}`,
+        `api_key = ${apiKey}`,
+        "heartbeat_rate_limit_seconds = 30",
+        "debug = false",
+        "EOF",
+        "Open Vim or Neovim, edit a tracked file, then run :WakaTimeApiKey if the plugin asks for a key."
+      ]
     },
     {
       id: "shell-cli-config",
@@ -411,14 +531,28 @@ function integrationConfigs(apiURL: string, apiKey: string) {
         '  -H "Content-Type: application/json" \\',
         '  -d \'{"entity":"~/src/stint/main.go","type":"file","time":1781887600,"project":"stint","language":"Go"}\''
       ]
+    },
+    {
+      id: "integration-catalog-config",
+      name: "Integration catalog",
+      description: "Use this page as the operator checklist: create a key, pick an integration name, copy its recipe, then validate it from the connection health panel.",
+      lines: [
+        "Open Stint > Integrations.",
+        "Click Create integration key.",
+        "Click Stint CLI, WakaTime CLI, Codex, VS Code, JetBrains, Vim/Neovim, or Shell CLI.",
+        "Copy the selected instructions.",
+        "Run the setup on the target machine.",
+        "Return to Stint > Integrations and confirm Clients seen, Model coverage, Provider coverage, and Last seen update.",
+        "Use Manage keys to rotate or revoke integration credentials."
+      ]
     }
   ] as const;
 }
 
 const roadmap = [
-  { title: "Model-aware ingestion", state: "live", description: "Heartbeats can include ai_model, llm_model, ai_provider, token counts, and structured metadata." },
-  { title: "Native Stint CLI", state: "live", description: "The local client sends WakaTime-shaped heartbeats, layers imported and project .wakatime configs, syncs offline activity, automatically emits native AI heartbeats from Codex successful direct and shell apply-patch calls, Claude, Continue dev data, Amp apply-patch logs, Gemini project-root tool calls, Kiro workspace actions, Antigravity, Copilot CLI session-state, Copilot workspace storage, Qoder history, Qwen Code function-call tools, Windsurf Next, OpenCode SQLite, Cody SQLite chat history, and other local AI logs/state unless --sync-ai-disabled or settings.sync_ai_disabled is set, records internal.ai_logs_last_parsed_at for repeat AI sync, and preserves prompt length, subscription plan, Codex prompt wrapper cleanup, read/write intent, and ai_line_changes where transcript tools expose them. Stint also accepts WakaTime-shaped diagnostics for verbose command failures." },
-  { title: "Integration catalog", state: "live", description: "Per-editor setup cards, copyable configs, and validation checks are available here for native CLI, WakaTime CLI, VS Code, JetBrains, Vim/Neovim, and shell smoke tests." }
+  { title: "Model-aware ingestion", state: "live", recipeId: "model-aware-ingestion-config", description: "Heartbeats can include ai_model, llm_model, ai_provider, token counts, and structured metadata." },
+  { title: "Native Stint CLI", state: "live", recipeId: "stint-cli-config", description: "The local client sends WakaTime-shaped heartbeats, layers imported and project .wakatime configs, syncs offline activity, automatically emits native AI heartbeats from Codex successful direct and shell apply-patch calls, Claude, Continue dev data, Amp apply-patch logs, Gemini project-root tool calls, Kiro workspace actions, Antigravity, Copilot CLI session-state, Copilot workspace storage, Qoder history, Qwen Code function-call tools, Windsurf Next, OpenCode SQLite, Cody SQLite chat history, and other local AI logs/state unless --sync-ai-disabled or settings.sync_ai_disabled is set, records internal.ai_logs_last_parsed_at for repeat AI sync, and preserves prompt length, subscription plan, Codex prompt wrapper cleanup, read/write intent, and ai_line_changes where transcript tools expose them. Stint also accepts WakaTime-shaped diagnostics for verbose command failures." },
+  { title: "Integration catalog", state: "live", recipeId: "integration-catalog-config", description: "Per-editor setup cards, copyable configs, and validation checks are available here for native CLI, WakaTime CLI, VS Code, JetBrains, Vim/Neovim, and shell smoke tests." }
 ] as const;
 
 function coverageCount(rows: UserAgent[], field: "ai_model" | "ai_provider") {
@@ -468,9 +602,16 @@ function TelemetryPill({ label, value }: { label: string; value?: string }) {
   );
 }
 
-function ClientCard({ name, status, description, bullets }: { name: string; status: string; description: string; bullets: readonly string[] }) {
+function ClientCard({ name, status, description, bullets, selected, onSelect }: { name: string; status: string; description: string; bullets: readonly string[]; selected: boolean; onSelect: () => void }) {
   return (
-    <div className="rounded border border-line bg-ink p-4">
+    <button
+      className={`rounded border p-4 text-left transition hover:border-accent/60 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/60 ${selected ? "border-accent/60 bg-accent/10" : "border-line bg-ink"}`}
+      type="button"
+      onClick={onSelect}
+      aria-label={`Show ${name} integration instructions`}
+      aria-pressed={selected}
+      aria-controls="integration-instructions"
+    >
       <div className="flex items-start justify-between gap-3">
         <h3 className="font-medium text-zinc-100">{name}</h3>
         <span className="rounded border border-line px-2 py-1 text-[11px] uppercase tracking-[0.14em] text-zinc-400">{status}</span>
@@ -483,13 +624,13 @@ function ClientCard({ name, status, description, bullets }: { name: string; stat
           </div>
         ))}
       </div>
-    </div>
+    </button>
   );
 }
 
 function IntegrationRecipe({ config, copied, onCopy }: { config: ReturnType<typeof integrationConfigs>[number]; copied: boolean; onCopy: () => void }) {
   return (
-    <div className="rounded border border-line bg-ink p-4">
+    <div id="integration-instructions" className="rounded border border-line bg-ink p-4">
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-medium text-zinc-100">{config.name}</h3>
