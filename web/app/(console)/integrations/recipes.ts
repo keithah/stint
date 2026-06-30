@@ -22,8 +22,16 @@ export const clients = [
     name: "Codex",
     status: "supported",
     description:
-      "Sync Codex sessions so Stint can show agent, model, project, and cost context.",
-    bullets: ["Codex attribution", "Token metadata", "Project detection"],
+      "Track Codex CLI and Codex Desktop sessions with Stint-owned setup first.",
+    bullets: ["Codex CLI", "Codex Desktop", "Model and token context"],
+  },
+  {
+    recipeId: "claude-code-config",
+    name: "Claude Code",
+    status: "supported",
+    description:
+      "Track Claude Code CLI and Claude Desktop coding sessions with Stint.",
+    bullets: ["Claude Code CLI", "Claude Desktop", "Model and token context"],
   },
   {
     recipeId: "vscode-config",
@@ -119,7 +127,7 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
           commands: [stintInstallCommand, "stint --version"],
         },
         {
-          title: "Use a marketplace plugin",
+          title: "Use WakaTime-compatible plugin",
           badge: "Editors",
           description:
             "If you only want editor tracking, install the WakaTime plugin for your editor and use the config below.",
@@ -186,7 +194,7 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
           ],
         },
         {
-          title: "Use a marketplace plugin",
+          title: "Use WakaTime-compatible plugin",
           badge: "Editors",
           description:
             "Most WakaTime editor plugins install the CLI for you. Install the plugin first, then paste the Stint settings.",
@@ -234,43 +242,44 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
       id: "codex-config",
       name: "Codex",
       description:
-        "Best choice if you use Codex and want Stint to show AI coding activity with model and token context.",
+        "Best choice if you use Codex CLI or Codex Desktop and want Stint to show AI coding activity with model and token context.",
       options: [
         {
-          title: "Install with one command",
+          title: "Install Stint-owned plugin",
           badge: "Recommended",
           description:
-            "Install Stint CLI once. It can read local Codex activity and send model-aware heartbeats.",
-          commands: [stintInstallCommand],
-        },
-        {
-          title: "Use a marketplace plugin",
-          badge: "Editor",
-          description:
-            "If you use Codex inside an editor, install that editor's WakaTime plugin too so normal coding time is tracked.",
+            "Use Stint for VS Code or Stint for JetBrains when Codex runs inside your editor. The Stint-owned plugin path is the primary setup.",
           link: {
-            label: "Use VS Code instructions",
-            href: "#vscode-config",
+            label: "Install Stint for VS Code",
+            href: "https://github.com/keithah/stint/releases/latest",
           },
         },
         {
-          title: "Manual setup",
-          badge: "Advanced",
+          title: "Install Stint CLI",
+          badge: "CLI and Desktop",
           description:
-            "Send one model-aware heartbeat yourself when you want to test AI telemetry.",
-          commands: [
-            'stint heartbeat --entity "$PWD/README.md" --category "ai coding" --ai-agent codex --ai-provider openai --ai-model gpt-5-codex --write',
-          ],
+            "Install Stint CLI once. It can read local Codex CLI and Codex Desktop activity and send model-aware heartbeats.",
+          commands: [stintInstallCommand],
+        },
+        {
+          title: "Use WakaTime-compatible plugin",
+          badge: "Compatibility",
+          description:
+            "If you already use the WakaTime extension in the editor where Codex runs, keep it and point its config at Stint.",
+          link: {
+            label: "Use WakaTime-compatible VS Code setup",
+            href: "#vscode-config",
+          },
         },
       ],
       steps: [
         {
           title: "Step 1",
-          body: "Install Stint CLI and save your integration key.",
+          body: "Install a Stint-owned editor plugin when Codex runs inside your editor, or install Stint CLI for Codex CLI and Codex Desktop sessions.",
         },
         {
           title: "Step 2",
-          body: "Run the Codex sync command after a session. Stint reads local session details and attaches agent metadata.",
+          body: "Run the Codex sync command after a Codex CLI or Codex Desktop session. Stint reads local session details and attaches agent metadata.",
         },
         {
           title: "Step 3",
@@ -293,47 +302,111 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
       ],
     },
     {
+      id: "claude-code-config",
+      name: "Claude Code",
+      description:
+        "Best choice if you use Claude Code CLI or Claude Desktop and want Stint to show AI coding sessions with agent, model, token, and project context.",
+      options: [
+        {
+          title: "Install Stint-owned plugin",
+          badge: "Recommended",
+          description:
+            "Use Stint for VS Code or Stint for JetBrains when Claude runs inside your editor. The Stint-owned plugin path is the primary setup.",
+          link: {
+            label: "Install Stint for VS Code",
+            href: "https://github.com/keithah/stint/releases/latest",
+          },
+        },
+        {
+          title: "Install Stint CLI",
+          badge: "CLI and Desktop",
+          description:
+            "Install Stint CLI once. It can read local Claude Code CLI and Claude Desktop activity and send model-aware heartbeats.",
+          commands: [stintInstallCommand],
+        },
+        {
+          title: "Use WakaTime-compatible plugin",
+          badge: "Compatibility",
+          description:
+            "If you already use a WakaTime-compatible editor plugin with Claude, keep it and point its config at Stint.",
+          link: {
+            label: "Use WakaTime-compatible VS Code setup",
+            href: "#vscode-config",
+          },
+        },
+      ],
+      steps: [
+        {
+          title: "Step 1",
+          body: "Install a Stint-owned editor plugin when Claude runs inside your editor, or install Stint CLI for Claude Code CLI and Claude Desktop sessions.",
+        },
+        {
+          title: "Step 2",
+          body: "Run the Claude sync command after a Claude Code CLI or Claude Desktop session. Stint reads local session details and attaches agent metadata.",
+        },
+        {
+          title: "Step 3",
+          body: "Open AI Costs or Dashboard to confirm the Claude model, provider, and token fields are visible.",
+        },
+      ],
+      verify: [
+        `stint config init --api-url ${apiURL} --api-key ${apiKey}`,
+        "stint --sync-ai-activity --ai-agent claude",
+        'stint heartbeat --entity "$PWD/README.md" --category "ai coding" --ai-agent claude --ai-provider anthropic --ai-model claude-code --metadata \'{"source":"manual"}\'',
+        "stint user-agents",
+      ],
+      screenshot: {
+        src: "/integrations/screenshots/claude-code.svg",
+        alt: "Stint integration guide showing Claude Code telemetry",
+        caption: "Claude Code CLI and Claude Desktop activity show up with agent, provider, and model fields.",
+      },
+      notes: [
+        "Claude Code support covers CLI and Desktop-style local activity sources through Stint CLI AI sync.",
+        "Model-aware fields include `ai_model`, `llm_model`, `ai_provider`, `ai_input_tokens`, `ai_output_tokens`, and structured metadata.",
+      ],
+    },
+    {
       id: "vscode-config",
       name: "VS Code",
       description:
-        "Best choice for VS Code users who want a normal Marketplace install and a simple Stint key paste.",
+        "Best choice for VS Code users who want Stint-owned setup first, with WakaTime compatibility available.",
       options: [
         {
-          title: "Install with one command",
+          title: "Install Stint-owned plugin",
+          badge: "Recommended",
+          description:
+            "Install Stint for VS Code from the Stint release package while the marketplace listing is being prepared.",
+          link: {
+            label: "Install Stint for VS Code",
+            href: "https://github.com/keithah/stint/releases/latest",
+          },
+        },
+        {
+          title: "Install Stint CLI",
           badge: "CLI option",
           description:
             "Use Stint CLI if you prefer terminal setup or need AI activity sync alongside VS Code.",
           commands: [stintInstallCommand],
         },
         {
-          title: "Use a marketplace plugin",
-          badge: "Recommended",
+          title: "Use WakaTime-compatible plugin",
+          badge: "Compatibility",
           description:
             "Install from the VS Code Marketplace, then paste your Stint API key when the extension asks.",
           link: {
-            label: "Open VS Code Marketplace",
+            label: "Open WakaTime VS Code Marketplace",
             href: "https://marketplace.visualstudio.com/items?itemName=WakaTime.vscode-wakatime",
           },
-        },
-        {
-          title: "Manual setup",
-          badge: "Config file",
-          description:
-            "If the extension does not prompt you, create the shared config file below and reload VS Code.",
-          commands: [
-            ...configBlock,
-            "code --install-extension WakaTime.vscode-wakatime",
-          ],
         },
       ],
       steps: [
         {
           title: "Step 1",
-          body: "Install the WakaTime extension from the VS Code Marketplace.",
+          body: "Install Stint for VS Code, or use the WakaTime-compatible extension if you already have it.",
         },
         {
           title: "Step 2",
-          body: "When VS Code asks for an API key, paste your Stint integration key.",
+          body: "When VS Code asks for an API key, paste your Stint integration key. If using the compatibility path, create the shared config file below.",
         },
         {
           title: "Step 3",
@@ -342,6 +415,8 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
       ],
       verify: [
         ...configBlock,
+        "Install Stint for VS Code",
+        "Or install WakaTime with: code --install-extension WakaTime.vscode-wakatime",
         "Reload VS Code",
         "Open a project and edit a file",
         "Check this page for a VS Code user agent",
@@ -356,41 +431,44 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
       id: "jetbrains-config",
       name: "JetBrains",
       description:
-        "Best choice for IntelliJ IDEA, PyCharm, WebStorm, GoLand, and other JetBrains IDEs.",
+        "Best choice for IntelliJ IDEA, PyCharm, WebStorm, GoLand, and other JetBrains IDEs with Stint-owned setup first.",
       options: [
         {
-          title: "Install with one command",
+          title: "Install Stint-owned plugin",
+          badge: "Recommended",
+          description:
+            "Install Stint for JetBrains from the Stint release package while the marketplace listing is being prepared.",
+          link: {
+            label: "Install Stint for JetBrains",
+            href: "https://github.com/keithah/stint/releases/latest",
+          },
+        },
+        {
+          title: "Install Stint CLI",
           badge: "CLI option",
           description:
             "Use Stint CLI for terminal and AI activity, then add the JetBrains plugin for editor time.",
           commands: [stintInstallCommand],
         },
         {
-          title: "Use a marketplace plugin",
-          badge: "Recommended",
+          title: "Use WakaTime-compatible plugin",
+          badge: "Compatibility",
           description:
             "Install from JetBrains Marketplace inside your IDE, then use your Stint key.",
           link: {
-            label: "Open JetBrains Marketplace",
+            label: "Open WakaTime JetBrains Marketplace",
             href: "https://plugins.jetbrains.com/plugin/7425-wakatime",
           },
-        },
-        {
-          title: "Manual setup",
-          badge: "Config file",
-          description:
-            "Create the shared config file first, then restart the IDE after installing the plugin.",
-          commands: configBlock,
         },
       ],
       steps: [
         {
           title: "Step 1",
-          body: "Open Settings, then Plugins, then Marketplace. Search for WakaTime and install it.",
+          body: "Install Stint for JetBrains, or use the WakaTime-compatible plugin if you already have that workflow.",
         },
         {
           title: "Step 2",
-          body: "Paste your Stint key when the IDE asks for a WakaTime API key.",
+          body: "Paste your Stint key when the IDE asks for an API key. If using the compatibility path, create the shared config file below.",
         },
         {
           title: "Step 3",
@@ -399,6 +477,8 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
       ],
       verify: [
         ...configBlock,
+        "Install Stint for JetBrains",
+        "Or install the WakaTime-compatible JetBrains plugin",
         "Restart your JetBrains IDE",
         "Open a project and edit a file",
         "Check this page for a JetBrains user agent",

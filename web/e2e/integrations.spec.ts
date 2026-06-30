@@ -1,13 +1,14 @@
 import { expect, test } from "@playwright/test";
 
 const recipes = [
-  { name: "Stint CLI", expected: "curl -fsSL https://stint.fyi/install.sh | sh" },
-  { name: "WakaTime CLI", expected: "wakatime-cli --entity" },
-  { name: "Codex", expected: "stint --sync-ai-activity --ai-agent codex" },
-  { name: "VS Code", expected: "Install from the VS Code Marketplace" },
-  { name: "JetBrains", expected: "Install from JetBrains Marketplace" },
-  { name: "Vim/Neovim", expected: "Install vim-wakatime" },
-  { name: "Shell CLI", expected: "curl -X POST" }
+  { name: "Stint CLI", expected: "curl -fsSL https://stint.fyi/install.sh | sh", stintOwned: false, compatibility: true },
+  { name: "WakaTime CLI", expected: "wakatime-cli --entity", stintOwned: false, compatibility: true },
+  { name: "Codex", expected: "Codex Desktop", stintOwned: true, compatibility: true },
+  { name: "Claude Code", expected: "Claude Desktop", stintOwned: true, compatibility: true },
+  { name: "VS Code", expected: "Stint for VS Code", stintOwned: true, compatibility: true },
+  { name: "JetBrains", expected: "Stint for JetBrains", stintOwned: true, compatibility: true },
+  { name: "Vim/Neovim", expected: "Install vim-wakatime", stintOwned: false, compatibility: false },
+  { name: "Shell CLI", expected: "curl -X POST", stintOwned: false, compatibility: false }
 ];
 
 test("integration names reveal full setup instructions", async ({ page }) => {
@@ -38,8 +39,12 @@ test("integration names reveal full setup instructions", async ({ page }) => {
   for (const recipe of recipes) {
     await page.getByRole("button", { name: `Show ${recipe.name} integration instructions` }).click();
     await expect(page.locator("#integration-instructions")).toContainText(recipe.expected);
-    await expect(page.locator("#integration-instructions")).toContainText("Install with one command");
-    await expect(page.locator("#integration-instructions")).toContainText("Manual setup");
+    if (recipe.stintOwned) {
+      await expect(page.locator("#integration-instructions")).toContainText("Install Stint-owned plugin");
+    }
+    if (recipe.compatibility) {
+      await expect(page.locator("#integration-instructions")).toContainText("Use WakaTime-compatible plugin");
+    }
     await expect(page.locator("#integration-instructions img")).toHaveCount(1);
   }
 

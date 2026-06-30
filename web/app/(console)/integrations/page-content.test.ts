@@ -18,6 +18,15 @@ assertIncludes("integrations page documents WakaTime CLI recipe", source, "wakat
 assertIncludes("integrations page documents WakaTime CLI offline sync", source, "wakatime-cli --sync-offline-activity");
 assertIncludes("integrations page documents Codex recipe", source, "stint --sync-ai-activity --ai-agent codex");
 assertIncludes("integrations page documents Codex heartbeat recipe", source, "--ai-agent codex");
+assertIncludes("integrations page documents Codex CLI setup", source, "Codex CLI");
+assertIncludes("integrations page documents Codex Desktop setup", source, "Codex Desktop");
+assertIncludes("integrations page documents Claude Code", source, "Claude Code");
+assertIncludes("integrations page documents Claude CLI setup", source, "Claude Code CLI");
+assertIncludes("integrations page documents Claude Desktop setup", source, "Claude Desktop");
+assertIncludes("integrations page makes Stint plugin first class", source, "Install Stint-owned plugin");
+assertIncludes("integrations page includes WakaTime compatibility option", source, "Use WakaTime-compatible plugin");
+assertIncludes("integrations page documents Stint VS Code package", source, "Stint for VS Code");
+assertIncludes("integrations page documents Stint JetBrains package", source, "Stint for JetBrains");
 assertIncludes("integrations page documents model-aware token fields", source, "ai_input_tokens");
 assertIncludes("integrations page documents VS Code marketplace", source, "https://marketplace.visualstudio.com/items?itemName=WakaTime.vscode-wakatime");
 assertIncludes("integrations page documents JetBrains marketplace", source, "https://plugins.jetbrains.com/plugin/7425-wakatime");
