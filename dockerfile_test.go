@@ -34,3 +34,17 @@ func TestDockerfileHealthchecksMatchRuntimeTargets(t *testing.T) {
 		t.Fatal("collector target should disable the inherited api HTTP healthcheck")
 	}
 }
+
+func TestWebDockerfileHealthcheckUsesReachableNextBinding(t *testing.T) {
+	sourceBytes, err := os.ReadFile("web/Dockerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(sourceBytes)
+	if !strings.Contains(source, "ENV HOSTNAME=0.0.0.0") {
+		t.Fatal("web image should bind Next to all interfaces so its container healthcheck can reach 127.0.0.1")
+	}
+	if !strings.Contains(source, "http://127.0.0.1:3000/healthz") {
+		t.Fatal("web image should healthcheck the lightweight /healthz route")
+	}
+}
