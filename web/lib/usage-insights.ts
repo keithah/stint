@@ -44,13 +44,17 @@ export function cachingDollarSavings(
 // (OpenRouter free tier, a $0 custom price) is a legitimate "cheapest", so any
 // model with a non-negative cost counts — only truly absent data yields null.
 export function modelCostExtremes(byModel: UsageSlice[]): { mostExpensive: UsageSlice | null; cheapest: UsageSlice | null } {
-  const priced = byModel.filter((row) => row.cost_usd >= 0);
-  if (priced.length === 0) {
-    return { mostExpensive: null, cheapest: null };
-  }
-  let mostExpensive = priced[0];
-  let cheapest = priced[0];
-  for (const row of priced) {
+  let mostExpensive: UsageSlice | null = null;
+  let cheapest: UsageSlice | null = null;
+  for (const row of byModel) {
+    if (row.cost_usd < 0) {
+      continue;
+    }
+    if (!mostExpensive || !cheapest) {
+      mostExpensive = row;
+      cheapest = row;
+      continue;
+    }
     if (row.cost_usd > mostExpensive.cost_usd) {
       mostExpensive = row;
     }

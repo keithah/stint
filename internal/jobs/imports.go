@@ -10,23 +10,21 @@ import (
 
 const TypeWakaTimeImport = "wakatime_import:process"
 
-type HeartbeatImportPayload = services.Heartbeat
-
 type WakaTimeImportPayload struct {
-	UserID                 uuid.UUID                `json:"user_id"`
-	Heartbeats             []HeartbeatImportPayload `json:"heartbeats"`
-	DefaultEditor          string                   `json:"default_editor,omitempty"`
-	DefaultEditorVersion   string                   `json:"default_editor_version,omitempty"`
-	DefaultOperatingSystem string                   `json:"default_operating_system,omitempty"`
-	DefaultArchitecture    string                   `json:"default_architecture,omitempty"`
-	DefaultPlugin          string                   `json:"default_plugin,omitempty"`
-	DefaultPluginVersion   string                   `json:"default_plugin_version,omitempty"`
+	UserID                 uuid.UUID `json:"user_id"`
+	ImportID               uuid.UUID `json:"import_id"`
+	DefaultEditor          string    `json:"default_editor,omitempty"`
+	DefaultEditorVersion   string    `json:"default_editor_version,omitempty"`
+	DefaultOperatingSystem string    `json:"default_operating_system,omitempty"`
+	DefaultArchitecture    string    `json:"default_architecture,omitempty"`
+	DefaultPlugin          string    `json:"default_plugin,omitempty"`
+	DefaultPluginVersion   string    `json:"default_plugin_version,omitempty"`
 }
 
-func NewWakaTimeImportTask(userID uuid.UUID, heartbeats []HeartbeatImportPayload, defaults services.HeartbeatDefaults) (*asynq.Task, error) {
+func NewWakaTimeImportTask(userID, importID uuid.UUID, defaults services.HeartbeatDefaults) (*asynq.Task, error) {
 	payload, err := json.Marshal(WakaTimeImportPayload{
 		UserID:                 userID,
-		Heartbeats:             heartbeats,
+		ImportID:               importID,
 		DefaultEditor:          defaults.Editor,
 		DefaultEditorVersion:   defaults.EditorVersion,
 		DefaultOperatingSystem: defaults.OperatingSystem,

@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
 
-const source = readFileSync("app/(console)/integrations/page.tsx", "utf8");
+const source = [
+  readFileSync("app/(console)/integrations/page.tsx", "utf8"),
+  readFileSync("app/(console)/integrations/recipes.ts", "utf8")
+].join("\n");
 
 assertIncludes("integrations page exposes native Stint CLI recipe", source, "bin/stint config init");
 assertIncludes("integrations page makes integration cards selectable", source, "setSelectedIntegration");
+assertIncludes("integrations page links every setup card to a stable hash", source, 'const href = `#${recipeId}`');
 assertIncludes("integrations page exposes selected instructions region", source, "integration-instructions");
 assertIncludes("integrations page documents WakaTime CLI recipe", source, "wakatime-cli --entity");
 assertIncludes("integrations page documents WakaTime CLI offline sync", source, "wakatime-cli --sync-offline-activity");

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/keithah/stint/internal/db"
+	"github.com/keithah/stint/internal/jobs"
 	"github.com/keithah/stint/internal/services"
 	"github.com/labstack/echo/v4"
 )
@@ -132,11 +133,46 @@ func TestProjectStatsResolverRecomputesStaleCacheAndWritesFreshStats(t *testing.
 	if stats.TotalSeconds <= 0 {
 		t.Fatalf("expected recomputed project stats, got %#v", stats)
 	}
-	if store.heartbeatsForRangeCalls != 1 {
-		t.Fatalf("expected one range heartbeat load, got %d", store.heartbeatsForRangeCalls)
+	if store.projectHeartbeatsForRangeCalls != 1 {
+		t.Fatalf("expected one project-scoped range heartbeat load, got %d", store.projectHeartbeatsForRangeCalls)
+	}
+	if store.heartbeatsForRangeCalls != 0 {
+		t.Fatalf("expected no all-project range heartbeat load, got %d", store.heartbeatsForRangeCalls)
+	}
+	if store.projectExternalBetweenCalls != 1 {
+		t.Fatalf("expected one project-scoped external-duration load, got %d", store.projectExternalBetweenCalls)
 	}
 	if store.upsertCalls != 1 {
 		t.Fatalf("expected recomputed stats to be cached, got %d upserts", store.upsertCalls)
+	}
+}
+
+func TestProjectStatsResolverReturnsStaleCacheAndEnqueuesRecompute(t *testing.T) {
+	userID := uuid.New()
+	store := &projectStatsFakeStore{
+		cached: services.Stats{TotalSeconds: 42, IsUpToDate: false},
+		found:  true,
+	}
+	enqueued := 0
+	resolver := projectStatsResolver{
+		Store: store,
+		EnqueueRecompute: func(context.Context, db.User, db.Project, string) {
+			enqueued++
+		},
+	}
+
+	stats, err := resolver.ProjectStats(context.Background(), db.User{ID: userID, TimeoutMinutes: 15}, db.Project{Name: "stint"}, "last_30_days")
+	if err != nil {
+		t.Fatalf("ProjectStats returned error: %v", err)
+	}
+	if stats.TotalSeconds != 42 || stats.IsUpToDate {
+		t.Fatalf("expected stale cached stats to be returned, got %#v", stats)
+	}
+	if enqueued != 1 {
+		t.Fatalf("expected one background recompute enqueue, got %d", enqueued)
+	}
+	if store.heartbeatsForRangeCalls != 0 || store.upsertCalls != 0 {
+		t.Fatalf("stale cache response should not recompute synchronously, got heartbeats=%d upserts=%d", store.heartbeatsForRangeCalls, store.upsertCalls)
 	}
 }
 
@@ -158,16 +194,30 @@ func TestProjectStatsResolverUsesUserTimezoneForRangeWindows(t *testing.T) {
 	}
 }
 
+func TestServerEnqueuesProjectStatsRecomputeJob(t *testing.T) {
+	userID := uuid.New()
+	queue := &projectStatsQueueRecorder{}
+	server := &Server{Jobs: queue}
+
+	server.enqueueProjectStatsRecompute(context.Background(), db.User{ID: userID}, db.Project{Name: "stint"}, "last_30_days")
+
+	if queue.userID != userID || queue.project != "stint" || queue.rangeName != "last_30_days" {
+		t.Fatalf("unexpected queued project stats job: %#v", queue)
+	}
+}
+
 type projectStatsFakeStore struct {
-	cached                  services.Stats
-	found                   bool
-	heartbeats              []services.Heartbeat
-	externalRows            []db.ExternalDuration
-	heartbeatsForRangeCalls int
-	upsertCalls             int
-	rangeNow                time.Time
-	externalStart           time.Time
-	externalEnd             time.Time
+	cached                         services.Stats
+	found                          bool
+	heartbeats                     []services.Heartbeat
+	externalRows                   []db.ExternalDuration
+	heartbeatsForRangeCalls        int
+	projectHeartbeatsForRangeCalls int
+	projectExternalBetweenCalls    int
+	upsertCalls                    int
+	rangeNow                       time.Time
+	externalStart                  time.Time
+	externalEnd                    time.Time
 }
 
 func (s *projectStatsFakeStore) ProjectStatsCache(context.Context, uuid.UUID, string, string) (services.Stats, bool, error) {
@@ -179,7 +229,11 @@ func (s *projectStatsFakeStore) UpsertProjectStatsCache(context.Context, uuid.UU
 	return nil
 }
 
-func (s *projectStatsFakeStore) AllHeartbeats(context.Context, uuid.UUID) ([]services.Heartbeat, error) {
+func (s *projectStatsFakeStore) HeartbeatsForAllTimeStats(context.Context, uuid.UUID) ([]services.Heartbeat, error) {
+	return s.heartbeats, nil
+}
+
+func (s *projectStatsFakeStore) HeartbeatsForProject(context.Context, uuid.UUID, string) ([]services.Heartbeat, error) {
 	return s.heartbeats, nil
 }
 
@@ -189,7 +243,17 @@ func (s *projectStatsFakeStore) HeartbeatsForStatsRange(_ context.Context, _ uui
 	return s.heartbeats, nil
 }
 
+func (s *projectStatsFakeStore) HeartbeatsForProjectStatsRange(_ context.Context, _ uuid.UUID, _ string, now time.Time, _ string) ([]services.Heartbeat, error) {
+	s.rangeNow = now
+	s.projectHeartbeatsForRangeCalls++
+	return s.heartbeats, nil
+}
+
 func (s *projectStatsFakeStore) ListExternalDurations(context.Context, uuid.UUID) ([]db.ExternalDuration, error) {
+	return s.externalRows, nil
+}
+
+func (s *projectStatsFakeStore) ListExternalDurationsForProject(context.Context, uuid.UUID, string) ([]db.ExternalDuration, error) {
 	return s.externalRows, nil
 }
 
@@ -199,6 +263,27 @@ func (s *projectStatsFakeStore) ExternalDurationsBetween(_ context.Context, _ uu
 	return s.externalRows, nil
 }
 
+func (s *projectStatsFakeStore) ExternalDurationsForProjectBetween(_ context.Context, _ uuid.UUID, _ string, start time.Time, end time.Time) ([]db.ExternalDuration, error) {
+	s.externalStart = start
+	s.externalEnd = end
+	s.projectExternalBetweenCalls++
+	return s.externalRows, nil
+}
+
 func (s *projectStatsFakeStore) AICostRates(context.Context, uuid.UUID) (map[string]services.AICostRate, error) {
 	return nil, nil
+}
+
+type projectStatsQueueRecorder struct {
+	jobs.NoopClient
+	userID    uuid.UUID
+	project   string
+	rangeName string
+}
+
+func (q *projectStatsQueueRecorder) EnqueueProjectStatsRecompute(_ context.Context, userID uuid.UUID, project, rangeName string) error {
+	q.userID = userID
+	q.project = project
+	q.rangeName = rangeName
+	return nil
 }

@@ -35,9 +35,10 @@ type Client struct {
 }
 
 const (
-	wakaTimeAPIURL  = "https://api.wakatime.com/api/v1"
-	wakaTimeAPIIPv4 = "143.244.210.202"
-	wakaTimeAPIIPv6 = "2604:a880:4:1d0::2a7:b000"
+	maxClientResponseBytes = 8 << 20
+	wakaTimeAPIURL         = "https://api.wakatime.com/api/v1"
+	wakaTimeAPIIPv4        = "143.244.210.202"
+	wakaTimeAPIIPv6        = "2604:a880:4:1d0::2a7:b000"
 )
 
 var (
@@ -439,9 +440,12 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 
 func (c *Client) readResponse(req *http.Request, resp *http.Response) ([]byte, error) {
 	defer resp.Body.Close()
-	body, readErr := io.ReadAll(resp.Body)
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxClientResponseBytes+1))
 	if readErr != nil {
 		return nil, readErr
+	}
+	if len(body) > maxClientResponseBytes {
+		return nil, fmt.Errorf("%s %s: response body exceeds %d bytes", req.Method, req.URL.String(), maxClientResponseBytes)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		c.logf("%s %s status=%d", req.Method, req.URL.String(), resp.StatusCode)

@@ -6,8 +6,12 @@ import type { ReactNode } from "react";
 import { activityHeatmapClass, activityHeatmapTitle } from "@/lib/activity-heatmap";
 import type { DailyStat, PublicProfilePermissions, PublicUser, SliceTotal, Stats, StatsRange } from "@/lib/api";
 
-const AIPanel = dynamic(() => import("@/components/ai-panel").then((module) => module.AIPanel), { ssr: false });
-const SliceDonut = dynamic(() => import("@/components/dashboard-charts").then((module) => module.SliceDonut), { ssr: false });
+const AIPanel = dynamic(() => import("@/components/ai-panel").then((module) => module.AIPanel), { ssr: false, loading: ChartSkeleton });
+const SliceDonut = dynamic(() => import("@/components/dashboard-charts").then((module) => module.SliceDonut), { ssr: false, loading: ChartSkeleton });
+
+function ChartSkeleton() {
+  return <div className="min-h-52 rounded border border-line bg-panel/95" aria-hidden="true" />;
+}
 
 export type RangeOption = { value: StatsRange; label: string };
 

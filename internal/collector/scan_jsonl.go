@@ -2,9 +2,12 @@ package collector
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"os"
 )
+
+const maxJSONLLineBytes = 4 * 1024 * 1024
 
 // scanJSONLIncremental reads the unconsumed tail of a newline-delimited file and
 // invokes perLine for each complete (newline-terminated) line. It owns the
@@ -44,18 +47,41 @@ func scanJSONLIncremental(path string, state *State, report *ScanReport, perLine
 		}
 	}
 
-	reader := bufio.NewReader(f)
+	reader := bufio.NewReaderSize(f, 64*1024)
 	consumed := offset
+	pendingBytes := int64(0)
+	lineTooLong := false
+	line := make([]byte, 0, 16*1024)
 
 	for {
-		line, err := reader.ReadBytes('\n')
+		fragment, err := reader.ReadSlice('\n')
 		// Only treat a line as complete when terminated by '\n'; a trailing
 		// partial line (no newline, file still being written) is left for the
 		// next scan and not committed to the offset.
-		if len(line) > 0 && err == nil {
-			consumed += int64(len(line))
+		if len(fragment) > 0 {
+			pendingBytes += int64(len(fragment))
+			if pendingBytes > maxJSONLLineBytes {
+				if !lineTooLong {
+					report.Errors++
+				}
+				lineTooLong = true
+			}
+			if !lineTooLong {
+				line = append(line, fragment...)
+			}
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		if len(fragment) > 0 && err == nil {
+			consumed += pendingBytes
 			lineNo++
-			perLine(line, lineNo)
+			if !lineTooLong {
+				perLine(line, lineNo)
+			}
+			pendingBytes = 0
+			lineTooLong = false
+			line = line[:0]
 		}
 		if err != nil {
 			break

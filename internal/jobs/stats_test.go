@@ -30,6 +30,28 @@ func TestStatsRecomputeTaskRoundTripsPayload(t *testing.T) {
 	}
 }
 
+func TestProjectStatsRecomputeTaskRoundTripsPayload(t *testing.T) {
+	userID := uuid.New()
+	task, err := NewProjectStatsRecomputeTask(userID, "stint", "last_30_days")
+	if err != nil {
+		t.Fatalf("NewProjectStatsRecomputeTask returned error: %v", err)
+	}
+	if task.Type() != TypeProjectStatsRecompute {
+		t.Fatalf("expected task type %q, got %q", TypeProjectStatsRecompute, task.Type())
+	}
+
+	payload, err := ParseProjectStatsRecomputeTask(task)
+	if err != nil {
+		t.Fatalf("ParseProjectStatsRecomputeTask returned error: %v", err)
+	}
+	if payload.UserID != userID {
+		t.Fatalf("expected user id %s, got %s", userID, payload.UserID)
+	}
+	if payload.Project != "stint" || payload.Range != "last_30_days" {
+		t.Fatalf("unexpected project stats payload: %#v", payload)
+	}
+}
+
 func TestDefaultStatsRangesIncludesSupportedDashboardRanges(t *testing.T) {
 	got := DefaultStatsRanges()
 	want := []string{"last_7_days", "last_30_days", "last_6_months", "last_year", "all_time"}
@@ -130,9 +152,8 @@ func TestCustomRulesApplyTaskRoundTripsPayload(t *testing.T) {
 
 func TestWakaTimeImportTaskRoundTripsPayload(t *testing.T) {
 	userID := uuid.New()
-	task, err := NewWakaTimeImportTask(userID, []HeartbeatImportPayload{
-		{Entity: "/tmp/main.go", Type: "file", Time: 123, Project: "stint"},
-	}, services.HeartbeatDefaults{
+	importID := uuid.New()
+	task, err := NewWakaTimeImportTask(userID, importID, services.HeartbeatDefaults{
 		Plugin:          "wakatime",
 		PluginVersion:   "v1.102.1",
 		Editor:          "vscode",
@@ -154,8 +175,8 @@ func TestWakaTimeImportTaskRoundTripsPayload(t *testing.T) {
 	if payload.UserID != userID {
 		t.Fatalf("expected user id %s, got %s", userID, payload.UserID)
 	}
-	if len(payload.Heartbeats) != 1 || payload.Heartbeats[0].Project != "stint" {
-		t.Fatalf("unexpected heartbeats: %#v", payload.Heartbeats)
+	if payload.ImportID != importID {
+		t.Fatalf("expected import id %s, got %s", importID, payload.ImportID)
 	}
 	if payload.DefaultEditor != "vscode" || payload.DefaultOperatingSystem != "linux" {
 		t.Fatalf("unexpected defaults: %#v", payload)

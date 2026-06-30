@@ -76,8 +76,7 @@ const navItems = [
   { href: "/ai-costs", label: "AI Costs", icon: Coins },
   { href: "/goals", label: "Goals", icon: Goal },
   { href: "/leaderboards", label: "Leaderboards", icon: Trophy },
-  { href: "/reports", label: "Reports", icon: FileDown },
-  { href: "/settings", label: "Settings", icon: KeyRound }
+  { href: "/reports", label: "Reports", icon: FileDown }
 ] as const;
 
 function isActive(pathname: string, href: string) {

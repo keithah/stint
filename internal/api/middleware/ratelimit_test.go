@@ -78,3 +78,21 @@ func TestMemoryRateLimiterDoesNotSweepAllKeysOnEveryAllow(t *testing.T) {
 		t.Fatal("expired unrelated key should not be swept on every request")
 	}
 }
+
+func TestMemoryRateLimiterCapsDistinctKeys(t *testing.T) {
+	limiter := NewMemoryRateLimiter()
+	ctx := context.Background()
+
+	for i := 0; i < maxMemoryRateLimiterKeys+100; i++ {
+		allowed, _, err := limiter.Allow(ctx, "ip:"+time.Unix(int64(i), 0).String(), 1, time.Hour)
+		if err != nil {
+			t.Fatalf("Allow returned error: %v", err)
+		}
+		if !allowed {
+			t.Fatalf("new key %d should be allowed", i)
+		}
+	}
+	if got := len(limiter.entries); got > maxMemoryRateLimiterKeys {
+		t.Fatalf("entries = %d, want at most %d", got, maxMemoryRateLimiterKeys)
+	}
+}

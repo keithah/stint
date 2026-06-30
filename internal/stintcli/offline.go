@@ -242,21 +242,21 @@ func DeleteQueueDuplicates(path string) (int, error) {
 		if err != nil {
 			return err
 		}
-		kept := map[string][]float64{}
+		kept := newQueueDeduper(offlineDedupeWindowSeconds)
 		c := b.Cursor()
 		for key, value := c.First(); key != nil; key, value = c.Next() {
 			var hb Heartbeat
 			if err := json.Unmarshal(value, &hb); err != nil {
 				return err
 			}
-			if duplicateQueuedHeartbeat(kept, hb) {
+			if kept.Duplicate(hb) {
 				if err := c.Delete(); err != nil {
 					return err
 				}
 				deleted++
 				continue
 			}
-			kept[hb.Entity] = append(kept[hb.Entity], hb.Time)
+			kept.Add(hb)
 		}
 		return nil
 	})
@@ -271,15 +271,15 @@ func deleteJSONLQueueDuplicates(path string) (int, error) {
 	if len(heartbeats) == 0 {
 		return 0, nil
 	}
-	keptTimes := map[string][]float64{}
+	keptTimes := newQueueDeduper(offlineDedupeWindowSeconds)
 	keptHeartbeats := make([]Heartbeat, 0, len(heartbeats))
 	deleted := 0
 	for _, hb := range heartbeats {
-		if duplicateQueuedHeartbeat(keptTimes, hb) {
+		if keptTimes.Duplicate(hb) {
 			deleted++
 			continue
 		}
-		keptTimes[hb.Entity] = append(keptTimes[hb.Entity], hb.Time)
+		keptTimes.Add(hb)
 		keptHeartbeats = append(keptHeartbeats, hb)
 	}
 	if deleted == 0 {
@@ -291,13 +291,51 @@ func deleteJSONLQueueDuplicates(path string) (int, error) {
 	return deleted, nil
 }
 
-func duplicateQueuedHeartbeat(kept map[string][]float64, hb Heartbeat) bool {
-	for _, keptTime := range kept[hb.Entity] {
-		if math.Abs(hb.Time-keptTime) <= offlineDedupeWindowSeconds {
-			return true
+type queueDeduper struct {
+	window  float64
+	buckets map[string]map[int64][]float64
+}
+
+func newQueueDeduper(window float64) *queueDeduper {
+	if window <= 0 {
+		window = 1
+	}
+	return &queueDeduper{window: window, buckets: map[string]map[int64][]float64{}}
+}
+
+func (d *queueDeduper) Add(hb Heartbeat) {
+	entityBuckets := d.entityBuckets(hb.Entity)
+	bucket := d.bucket(hb.Time)
+	entityBuckets[bucket] = append(entityBuckets[bucket], hb.Time)
+}
+
+func (d *queueDeduper) Duplicate(hb Heartbeat) bool {
+	entityBuckets := d.buckets[hb.Entity]
+	if len(entityBuckets) == 0 {
+		return false
+	}
+	bucket := d.bucket(hb.Time)
+	for _, neighbor := range []int64{bucket - 1, bucket, bucket + 1} {
+		for _, keptTime := range entityBuckets[neighbor] {
+			if math.Abs(hb.Time-keptTime) <= d.window {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+func (d *queueDeduper) entityBuckets(entity string) map[int64][]float64 {
+	entityBuckets := d.buckets[entity]
+	if entityBuckets == nil {
+		entityBuckets = map[int64][]float64{}
+		d.buckets[entity] = entityBuckets
+	}
+	return entityBuckets
+}
+
+func (d *queueDeduper) bucket(t float64) int64 {
+	return int64(math.Floor(t / d.window))
 }
 
 func removeJSONLQueuePrefix(path string, n int) error {

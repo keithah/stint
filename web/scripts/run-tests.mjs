@@ -11,18 +11,20 @@ const matchFilters = parseMatchFilters(process.argv.slice(2));
 async function collectTests(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
   const files = [];
+  const directories = [];
   for (const entry of entries) {
     if (entry.name === "node_modules" || entry.name === ".next") continue;
     const path = resolve(dir, entry.name);
     if (entry.isDirectory()) {
-      files.push(...await collectTests(path));
+      directories.push(path);
       continue;
     }
     if (/\.test\.tsx?$/.test(entry.name)) {
       files.push(path);
     }
   }
-  return files;
+  const nested = await Promise.all(directories.map(collectTests));
+  return files.concat(...nested);
 }
 
 function runTest(file) {

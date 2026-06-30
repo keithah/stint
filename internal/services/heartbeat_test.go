@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -158,6 +159,16 @@ func TestPrepareHeartbeatDetectsWakaTimeSpecialLanguages(t *testing.T) {
 		if heartbeat.Language != test.want {
 			t.Fatalf("expected %s language for %s, got %q", test.want, test.entity, heartbeat.Language)
 		}
+	}
+}
+
+func TestServerHeartbeatLanguageInferenceAvoidsChromaRegistry(t *testing.T) {
+	source, err := os.ReadFile("heartbeat.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(source), "alecthomas/chroma") || strings.Contains(string(source), "lexers.") {
+		t.Fatal("server-side heartbeat normalization should not import the full Chroma lexer registry")
 	}
 }
 

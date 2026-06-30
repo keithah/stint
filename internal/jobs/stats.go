@@ -7,11 +7,20 @@ import (
 	"github.com/hibiken/asynq"
 )
 
-const TypeStatsRecompute = "stats:recompute"
+const (
+	TypeStatsRecompute        = "stats:recompute"
+	TypeProjectStatsRecompute = "project_stats:recompute"
+)
 
 type StatsRecomputePayload struct {
 	UserID uuid.UUID `json:"user_id"`
 	Ranges []string  `json:"ranges"`
+}
+
+type ProjectStatsRecomputePayload struct {
+	UserID  uuid.UUID `json:"user_id"`
+	Project string    `json:"project"`
+	Range   string    `json:"range"`
 }
 
 func DefaultStatsRanges() []string {
@@ -31,6 +40,20 @@ func NewStatsRecomputeTask(userID uuid.UUID, ranges []string) (*asynq.Task, erro
 
 func ParseStatsRecomputeTask(task *asynq.Task) (StatsRecomputePayload, error) {
 	var payload StatsRecomputePayload
+	err := json.Unmarshal(task.Payload(), &payload)
+	return payload, err
+}
+
+func NewProjectStatsRecomputeTask(userID uuid.UUID, project, rangeName string) (*asynq.Task, error) {
+	payload, err := json.Marshal(ProjectStatsRecomputePayload{UserID: userID, Project: project, Range: rangeName})
+	if err != nil {
+		return nil, err
+	}
+	return asynq.NewTask(TypeProjectStatsRecompute, payload), nil
+}
+
+func ParseProjectStatsRecomputeTask(task *asynq.Task) (ProjectStatsRecomputePayload, error) {
+	var payload ProjectStatsRecomputePayload
 	err := json.Unmarshal(task.Payload(), &payload)
 	return payload, err
 }

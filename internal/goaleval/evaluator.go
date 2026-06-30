@@ -2,18 +2,22 @@ package goaleval
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/keithah/stint/internal/db"
 	"github.com/keithah/stint/internal/jobs"
 	"github.com/keithah/stint/internal/services"
+	"github.com/keithah/stint/internal/tzcache"
+	"golang.org/x/sync/errgroup"
 )
+
+const userEvaluationConcurrency = 4
 
 type Store interface {
 	ListUsers(context.Context) ([]db.User, error)
 	ListGoals(context.Context, uuid.UUID) ([]db.Goal, error)
-	AllHeartbeats(context.Context, uuid.UUID) ([]services.Heartbeat, error)
 	HeartbeatsBetween(context.Context, uuid.UUID, float64, float64) ([]services.Heartbeat, error)
 	ListExternalDurations(context.Context, uuid.UUID) ([]db.ExternalDuration, error)
 	ExternalDurationsBetween(context.Context, uuid.UUID, time.Time, time.Time) ([]db.ExternalDuration, error)
@@ -40,45 +44,64 @@ func (e Evaluator) evaluate(ctx context.Context, now time.Time, shouldEvaluateUs
 	if err != nil {
 		return 0, err
 	}
-	evaluated := 0
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(userEvaluationConcurrency)
+	var evaluated atomic.Int64
 	for _, user := range users {
 		if !shouldEvaluateUser(user, now) {
 			continue
 		}
-		userNow := now
-		if location, err := time.LoadLocation(user.Timezone); err == nil {
-			userNow = now.In(location)
-		}
-		goals, err := e.Store.ListGoals(ctx, user.ID)
+		user := user
+		group.Go(func() error {
+			count, err := e.evaluateUser(groupCtx, user, now)
+			if err != nil {
+				return err
+			}
+			evaluated.Add(int64(count))
+			return nil
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return int(evaluated.Load()), err
+	}
+	return int(evaluated.Load()), nil
+}
+
+func (e Evaluator) evaluateUser(ctx context.Context, user db.User, now time.Time) (int, error) {
+	evaluated := 0
+	userNow := now
+	if user.Timezone != "" {
+		userNow = now.In(tzcache.Location(user.Timezone))
+	}
+	goals, err := e.Store.ListGoals(ctx, user.ID)
+	if err != nil {
+		return evaluated, err
+	}
+	dataStart, dataEnd, hasEnabled := EvaluationDataWindow(goals, userNow)
+	var heartbeats []services.Heartbeat
+	var external []services.ExternalDuration
+	if hasEnabled {
+		heartbeats, err = e.Store.HeartbeatsBetween(ctx, user.ID, float64(dataStart.Unix()), float64(dataEnd.Unix()))
 		if err != nil {
 			return evaluated, err
 		}
-		dataStart, dataEnd, hasEnabled := EvaluationDataWindow(goals, userNow)
-		var heartbeats []services.Heartbeat
-		var external []services.ExternalDuration
-		if hasEnabled {
-			heartbeats, err = e.Store.HeartbeatsBetween(ctx, user.ID, float64(dataStart.Unix()), float64(dataEnd.Unix()))
-			if err != nil {
-				return evaluated, err
-			}
-			heartbeats = services.FilterWritesOnly(heartbeats, user.WritesOnly)
-			externalRows, err := e.Store.ExternalDurationsBetween(ctx, user.ID, dataStart, dataEnd)
-			if err != nil {
-				return evaluated, err
-			}
-			external = ExternalDurations(externalRows)
+		heartbeats = services.FilterWritesOnly(heartbeats, user.WritesOnly)
+		externalRows, err := e.Store.ExternalDurationsBetween(ctx, user.ID, dataStart, dataEnd)
+		if err != nil {
+			return evaluated, err
 		}
-		for _, goal := range goals {
-			if !goal.IsEnabled {
-				continue
-			}
-			start, end := services.GoalEvaluationWindow(goal.Delta, userNow)
-			progress := ComputeProgress(ServiceGoal(goal), heartbeats, external, start, end, time.Duration(user.TimeoutMinutes)*time.Minute)
-			if _, err := e.Store.UpsertGoalEvaluation(ctx, user.ID, goal, progress, start, end); err != nil {
-				return evaluated, err
-			}
-			evaluated++
+		external = ExternalDurations(externalRows)
+	}
+	for _, goal := range goals {
+		if !goal.IsEnabled {
+			continue
 		}
+		start, end := services.GoalEvaluationWindow(goal.Delta, userNow)
+		progress := ComputeProgress(ServiceGoal(goal), heartbeats, external, start, end, time.Duration(user.TimeoutMinutes)*time.Minute)
+		if _, err := e.Store.UpsertGoalEvaluation(ctx, user.ID, goal, progress, start, end); err != nil {
+			return evaluated, err
+		}
+		evaluated++
 	}
 	return evaluated, nil
 }
@@ -113,9 +136,7 @@ func ShouldEvaluateUserForTask(payload jobs.GoalsEvaluatePayload, user db.User, 
 	}
 	location := time.UTC
 	if user.Timezone != "" {
-		if loaded, err := time.LoadLocation(user.Timezone); err == nil {
-			location = loaded
-		}
+		location = tzcache.Location(user.Timezone)
 	}
 	return now.In(location).Hour() == 0
 }

@@ -11,9 +11,17 @@ import { languageColorMap } from "@/lib/language-colors";
 import { rangeOptions } from "@/lib/ranges";
 import { PageHeader, SecondaryButton, SegmentedToggle, pillWrapperClass } from "@/components/ui";
 
-const AIPanel = dynamic(() => import("@/components/ai-panel").then((module) => module.AIPanel), { ssr: false });
-const ActivityBars = dynamic(() => import("@/components/dashboard-charts").then((module) => module.ActivityBars), { ssr: false });
-const SliceDonut = dynamic(() => import("@/components/dashboard-charts").then((module) => module.SliceDonut), { ssr: false });
+const AIPanel = dynamic(() => import("@/components/ai-panel").then((module) => module.AIPanel), { ssr: false, loading: ChartSkeleton });
+const ActivityBars = dynamic(() => import("@/components/dashboard-charts").then((module) => module.ActivityBars), { ssr: false, loading: TallChartSkeleton });
+const SliceDonut = dynamic(() => import("@/components/dashboard-charts").then((module) => module.SliceDonut), { ssr: false, loading: ChartSkeleton });
+
+function ChartSkeleton() {
+  return <div className="min-h-52 rounded border border-line bg-panel/95" aria-hidden="true" />;
+}
+
+function TallChartSkeleton() {
+  return <div className="h-72 rounded border border-line bg-panel/95" aria-hidden="true" />;
+}
 
 export default function ProjectDetailPage() {
   return <ProjectDetailContent />;

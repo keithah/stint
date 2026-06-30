@@ -30,8 +30,17 @@ func (s *fakeStore) GetDataDump(context.Context, uuid.UUID, uuid.UUID) (db.DataD
 	return s.dump, nil
 }
 
-func (s *fakeStore) AllHeartbeats(context.Context, uuid.UUID) ([]services.Heartbeat, error) {
+func (s *fakeStore) HeartbeatsForExport(context.Context, uuid.UUID) ([]services.Heartbeat, error) {
 	return s.heartbeats, nil
+}
+
+func (s *fakeStore) ForEachHeartbeatForExport(_ context.Context, _ uuid.UUID, fn func(services.Heartbeat) error) error {
+	for _, heartbeat := range s.heartbeats {
+		if err := fn(heartbeat); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *fakeStore) ListExternalDurations(context.Context, uuid.UUID) ([]db.ExternalDuration, error) {
@@ -166,4 +175,36 @@ func TestWriteLocalPayloadUsesCompactJSON(t *testing.T) {
 	if !strings.Contains(string(raw), `"date":"2026-05-21"`) {
 		t.Fatalf("expected compact JSON date fragment, got %s", raw)
 	}
+}
+
+func TestGenerateLocalHeartbeatsDumpStreamsRows(t *testing.T) {
+	sourceBytes, err := os.ReadFile("dumps.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(sourceBytes)
+	body := functionSource(source, "GenerateLocal")
+	if !strings.Contains(body, "WriteLocalHeartbeats") {
+		t.Fatal("heartbeat dump generation should stream heartbeats directly to the file")
+	}
+}
+
+func functionSource(source, name string) string {
+	start := strings.Index(source, "func "+name)
+	if start < 0 {
+		return ""
+	}
+	depth := 0
+	for i := start; i < len(source); i++ {
+		switch source[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return source[start : i+1]
+			}
+		}
+	}
+	return source[start:]
 }

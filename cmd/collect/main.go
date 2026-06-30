@@ -184,10 +184,10 @@ func scanOnce(reg collector.Registry, ids []string, agentPaths map[string][]stri
 	var wg sync.WaitGroup
 	for i, id := range ids {
 		i, id := i, id
+		sem <- struct{}{}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			sem <- struct{}{}
 			defer func() { <-sem }()
 			entry := reg[id]
 			baseDirs := entry.BaseDirs()

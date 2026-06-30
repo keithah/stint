@@ -34,6 +34,7 @@ func Run(ctx context.Context, cfg config.Config, store *db.Store) error {
 	mux := asynq.NewServeMux()
 	stats := NewStatsWorker(store, nil)
 	mux.HandleFunc(jobs.TypeStatsRecompute, stats.HandleStatsRecomputeTask)
+	mux.HandleFunc(jobs.TypeProjectStatsRecompute, stats.HandleProjectStatsRecomputeTask)
 	// Keep the worker's shared pricing engine in sync with the weekly refresh so
 	// cost baked into the stats cache uses up-to-date prices.
 	if eng := stats.pricingEngine(); eng != nil {

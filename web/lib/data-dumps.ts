@@ -4,7 +4,7 @@ export function dataDumpIsDownloadable(dump: DataDump, now = new Date()) {
   return isCompletedDump(dump.status) && Boolean(dump.download_url) && !dataDumpIsExpired(dump, now);
 }
 
-export function dataDumpIsExpired(dump: DataDump, now = new Date()) {
+function dataDumpIsExpired(dump: DataDump, now = new Date()) {
   if (!dump.expires_at) {
     return false;
   }

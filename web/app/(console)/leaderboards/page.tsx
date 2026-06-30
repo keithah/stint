@@ -299,7 +299,16 @@ function RankingRows({ rows, currentUsername }: { rows: LeaderboardEntry[]; curr
 
 function Avatar({ row }: { row: LeaderboardEntry }) {
   if (row.avatar_url) {
-    return <span className="h-9 w-9 rounded-md border border-line bg-cover bg-center" style={{ backgroundImage: `url(${row.avatar_url})` }} />;
+    return (
+      <img
+        src={row.avatar_url}
+        alt=""
+        className="h-9 w-9 rounded-md border border-line object-cover"
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+      />
+    );
   }
   return (
     <span className="grid h-9 w-9 place-items-center rounded-md border border-line bg-white/5 text-xs font-medium text-zinc-400">

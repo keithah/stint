@@ -8,11 +8,19 @@ import { StatCard } from "@/components/stat-card";
 import { listProgramLanguages, type Stats } from "@/lib/api";
 import { languageColorMap } from "@/lib/language-colors";
 
-const AIPanel = dynamic(() => import("@/components/ai-panel").then((module) => module.AIPanel), { ssr: false });
-const ActivityBars = dynamic(() => import("@/components/dashboard-charts").then((module) => module.ActivityBars), { ssr: false });
-const SliceDonut = dynamic(() => import("@/components/dashboard-charts").then((module) => module.SliceDonut), { ssr: false });
+const AIPanel = dynamic(() => import("@/components/ai-panel").then((module) => module.AIPanel), { ssr: false, loading: ChartSkeleton });
+const ActivityBars = dynamic(() => import("@/components/dashboard-charts").then((module) => module.ActivityBars), { ssr: false, loading: TallChartSkeleton });
+const SliceDonut = dynamic(() => import("@/components/dashboard-charts").then((module) => module.SliceDonut), { ssr: false, loading: ChartSkeleton });
 
 type ShareStatsResponse = { data: Stats; user: { id: string; username: string; name?: string } };
+
+function ChartSkeleton() {
+  return <div className="min-h-52 rounded border border-line bg-panel/95" aria-hidden="true" />;
+}
+
+function TallChartSkeleton() {
+  return <div className="h-72 rounded border border-line bg-panel/95" aria-hidden="true" />;
+}
 
 export function PublicSharePage({
   queryKey,

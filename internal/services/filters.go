@@ -12,3 +12,7 @@ func FilterWritesOnly(heartbeats []Heartbeat, writesOnly bool) []Heartbeat {
 	}
 	return filtered
 }
+
+func IsWriteHeartbeat(heartbeat Heartbeat) bool {
+	return heartbeat.IsWrite
+}

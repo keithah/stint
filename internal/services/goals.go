@@ -39,15 +39,16 @@ func ComputeGoalProgressForWindowWithExternalDurations(goal Goal, heartbeats []H
 		}
 	}
 
-	filtered := goalHeartbeatsInWindow(goal, heartbeats, windowStart, windowEnd)
-	filteredExternal := goalExternalDurationsInWindow(goal, external, windowStart, windowEnd)
+	matcher := newGoalMatcher(goal)
+	filtered := goalHeartbeatsInWindow(matcher, heartbeats, windowStart, windowEnd)
+	filteredExternal := goalExternalDurationsInWindow(matcher, external, windowStart, windowEnd)
 	actual := sumDurations(ComputeDurations(filtered, timeout, "project")) + sumDurations(ExternalDurationsInWindow(filteredExternal, "project", windowStart, windowEnd))
 	if goal.ImproveByPercent != nil {
 		windowDuration := windowEnd.Sub(windowStart)
 		previousStart := windowStart.Add(-windowDuration)
 		previousEnd := windowStart
-		previousActual := sumDurations(ComputeDurations(goalHeartbeatsInWindow(goal, heartbeats, previousStart, previousEnd), timeout, "project")) +
-			sumDurations(ExternalDurationsInWindow(goalExternalDurationsInWindow(goal, external, previousStart, previousEnd), "project", previousStart, previousEnd))
+		previousActual := sumDurations(ComputeDurations(goalHeartbeatsInWindow(matcher, heartbeats, previousStart, previousEnd), timeout, "project")) +
+			sumDurations(ExternalDurationsInWindow(goalExternalDurationsInWindow(matcher, external, previousStart, previousEnd), "project", previousStart, previousEnd))
 		if previousActual > 0 {
 			target = previousActual + int(math.Ceil(float64(previousActual)*(*goal.ImproveByPercent)/100))
 			if target < 0 {
@@ -250,23 +251,23 @@ func GoalProgressDataWindowForGoals(goals []Goal, now time.Time) (time.Time, tim
 	return start, end, hasWindow
 }
 
-func goalHeartbeatsInWindow(goal Goal, heartbeats []Heartbeat, windowStart, windowEnd time.Time) []Heartbeat {
+func goalHeartbeatsInWindow(matcher goalMatcher, heartbeats []Heartbeat, windowStart, windowEnd time.Time) []Heartbeat {
 	filtered := make([]Heartbeat, 0, len(heartbeats))
 	for _, heartbeat := range heartbeats {
 		timestamp := time.Unix(int64(heartbeat.Time), 0).UTC()
 		if timestamp.Before(windowStart) || !timestamp.Before(windowEnd) {
 			continue
 		}
-		if ignoreGoalDay(goal.IgnoreDays, timestamp) {
+		if matcher.ignoreDay(timestamp) {
 			continue
 		}
-		if !matchesAny(goal.Projects, heartbeat.Project) {
+		if !matcher.matchesProject(heartbeat.Project) {
 			continue
 		}
-		if !matchesAny(goal.Languages, heartbeat.Language) {
+		if !matcher.matchesLanguage(heartbeat.Language) {
 			continue
 		}
-		if !matchesAny(goal.Editors, heartbeat.Editor) {
+		if !matcher.matchesEditor(heartbeat.Editor) {
 			continue
 		}
 		filtered = append(filtered, heartbeat)
@@ -274,8 +275,8 @@ func goalHeartbeatsInWindow(goal Goal, heartbeats []Heartbeat, windowStart, wind
 	return filtered
 }
 
-func goalExternalDurationsInWindow(goal Goal, external []ExternalDuration, windowStart, windowEnd time.Time) []ExternalDuration {
-	if len(goal.Editors) > 0 {
+func goalExternalDurationsInWindow(matcher goalMatcher, external []ExternalDuration, windowStart, windowEnd time.Time) []ExternalDuration {
+	if matcher.hasEditorFilter() {
 		return nil
 	}
 	filtered := make([]ExternalDuration, 0, len(external))
@@ -289,28 +290,18 @@ func goalExternalDurationsInWindow(goal Goal, external []ExternalDuration, windo
 		if effectiveStart.Before(windowStart) {
 			effectiveStart = windowStart
 		}
-		if ignoreGoalDay(goal.IgnoreDays, effectiveStart) {
+		if matcher.ignoreDay(effectiveStart) {
 			continue
 		}
-		if !matchesAny(goal.Projects, duration.Project) {
+		if !matcher.matchesProject(duration.Project) {
 			continue
 		}
-		if !matchesAny(goal.Languages, duration.Language) {
+		if !matcher.matchesLanguage(duration.Language) {
 			continue
 		}
 		filtered = append(filtered, duration)
 	}
 	return filtered
-}
-
-func ignoreGoalDay(ignoreDays []string, timestamp time.Time) bool {
-	weekday := strings.ToLower(timestamp.UTC().Weekday().String())
-	for _, day := range ignoreDays {
-		if strings.ToLower(day) == weekday {
-			return true
-		}
-	}
-	return false
 }
 
 func goalSnoozed(goal Goal, now time.Time) bool {
@@ -324,14 +315,61 @@ func goalSnoozed(goal Goal, now time.Time) bool {
 	return err != nil || now.Before(until)
 }
 
-func matchesAny(allowed []string, value string) bool {
+type goalMatcher struct {
+	projects   map[string]struct{}
+	languages  map[string]struct{}
+	editors    map[string]struct{}
+	ignoreDays map[string]struct{}
+}
+
+func newGoalMatcher(goal Goal) goalMatcher {
+	return goalMatcher{
+		projects:   stringSet(goal.Projects),
+		languages:  stringSet(goal.Languages),
+		editors:    stringSet(goal.Editors),
+		ignoreDays: stringSet(goal.IgnoreDays),
+	}
+}
+
+func (m goalMatcher) matchesProject(value string) bool {
+	return matchesSet(m.projects, value)
+}
+
+func (m goalMatcher) matchesLanguage(value string) bool {
+	return matchesSet(m.languages, value)
+}
+
+func (m goalMatcher) matchesEditor(value string) bool {
+	return matchesSet(m.editors, value)
+}
+
+func (m goalMatcher) hasEditorFilter() bool {
+	return len(m.editors) > 0
+}
+
+func (m goalMatcher) ignoreDay(timestamp time.Time) bool {
+	if len(m.ignoreDays) == 0 {
+		return false
+	}
+	_, ok := m.ignoreDays[strings.ToLower(timestamp.UTC().Weekday().String())]
+	return ok
+}
+
+func matchesSet(allowed map[string]struct{}, value string) bool {
 	if len(allowed) == 0 {
 		return true
 	}
-	for _, item := range allowed {
-		if item == value {
-			return true
-		}
+	_, ok := allowed[strings.ToLower(strings.TrimSpace(value))]
+	return ok
+}
+
+func stringSet(values []string) map[string]struct{} {
+	if len(values) == 0 {
+		return nil
 	}
-	return false
+	out := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		out[strings.ToLower(strings.TrimSpace(value))] = struct{}{}
+	}
+	return out
 }

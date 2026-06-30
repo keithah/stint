@@ -12,22 +12,30 @@ import (
 type projectStatsStore interface {
 	ProjectStatsCache(context.Context, uuid.UUID, string, string) (services.Stats, bool, error)
 	UpsertProjectStatsCache(context.Context, uuid.UUID, string, string, services.Stats) error
-	AllHeartbeats(context.Context, uuid.UUID) ([]services.Heartbeat, error)
+	HeartbeatsForAllTimeStats(context.Context, uuid.UUID) ([]services.Heartbeat, error)
+	HeartbeatsForProject(context.Context, uuid.UUID, string) ([]services.Heartbeat, error)
 	HeartbeatsForStatsRange(context.Context, uuid.UUID, time.Time, string) ([]services.Heartbeat, error)
+	HeartbeatsForProjectStatsRange(context.Context, uuid.UUID, string, time.Time, string) ([]services.Heartbeat, error)
 	ListExternalDurations(context.Context, uuid.UUID) ([]db.ExternalDuration, error)
+	ListExternalDurationsForProject(context.Context, uuid.UUID, string) ([]db.ExternalDuration, error)
 	ExternalDurationsBetween(context.Context, uuid.UUID, time.Time, time.Time) ([]db.ExternalDuration, error)
+	ExternalDurationsForProjectBetween(context.Context, uuid.UUID, string, time.Time, time.Time) ([]db.ExternalDuration, error)
 	AICostRates(context.Context, uuid.UUID) (map[string]services.AICostRate, error)
 }
 
 type projectStatsResolver struct {
-	Store       projectStatsStore
-	BakeProject func(context.Context, uuid.UUID, *time.Location, string, string, *services.Stats)
+	Store            projectStatsStore
+	BakeProject      func(context.Context, uuid.UUID, *time.Location, string, string, *services.Stats)
+	EnqueueRecompute func(context.Context, db.User, db.Project, string)
 }
 
 func (r projectStatsResolver) ProjectStats(ctx context.Context, user db.User, project db.Project, rangeName string) (services.Stats, error) {
 	if cached, found, err := r.Store.ProjectStatsCache(ctx, user.ID, project.Name, rangeName); err != nil {
 		return services.Stats{}, err
 	} else if found && cached.IsUpToDate {
+		return cached, nil
+	} else if found && r.EnqueueRecompute != nil {
+		r.EnqueueRecompute(ctx, user, project, rangeName)
 		return cached, nil
 	}
 
@@ -37,16 +45,16 @@ func (r projectStatsResolver) ProjectStats(ctx context.Context, user db.User, pr
 	var externalRows []db.ExternalDuration
 	var err error
 	if rangeName == "all_time" {
-		heartbeats, err = r.Store.AllHeartbeats(ctx, user.ID)
+		heartbeats, err = r.Store.HeartbeatsForProject(ctx, user.ID, project.Name)
 		if err != nil {
 			return services.Stats{}, err
 		}
-		externalRows, err = r.Store.ListExternalDurations(ctx, user.ID)
+		externalRows, err = r.Store.ListExternalDurationsForProject(ctx, user.ID, project.Name)
 		if err != nil {
 			return services.Stats{}, err
 		}
 	} else {
-		heartbeats, err = r.Store.HeartbeatsForStatsRange(ctx, user.ID, now, rangeName)
+		heartbeats, err = r.Store.HeartbeatsForProjectStatsRange(ctx, user.ID, project.Name, now, rangeName)
 		if err != nil {
 			return services.Stats{}, err
 		}
@@ -54,34 +62,23 @@ func (r projectStatsResolver) ProjectStats(ctx context.Context, user db.User, pr
 		if err != nil {
 			return services.Stats{}, err
 		}
-		externalRows, err = r.Store.ExternalDurationsBetween(ctx, user.ID, window.Start, window.End)
+		externalRows, err = r.Store.ExternalDurationsForProjectBetween(ctx, user.ID, project.Name, window.Start, window.End)
 		if err != nil {
 			return services.Stats{}, err
 		}
 	}
 
 	heartbeats = services.FilterWritesOnly(heartbeats, user.WritesOnly)
-	filtered := make([]services.Heartbeat, 0, len(heartbeats))
-	for _, heartbeat := range heartbeats {
-		if heartbeat.Project == project.Name {
-			filtered = append(filtered, heartbeat)
-		}
-	}
-	projectExternal := []services.ExternalDuration{}
-	for _, duration := range toServiceExternalDurations(externalRows) {
-		if duration.Project == project.Name {
-			projectExternal = append(projectExternal, duration)
-		}
-	}
+	projectExternal := toServiceExternalDurations(externalRows)
 	costs, err := r.Store.AICostRates(ctx, user.ID)
 	if err != nil {
 		return services.Stats{}, err
 	}
 	var stats services.Stats
 	if rangeName == "all_time" {
-		stats = services.ComputeAllTimeStatsWithExternalDurationsAndAICosts(filtered, projectExternal, time.Duration(user.TimeoutMinutes)*time.Minute, costs)
+		stats = services.ComputeAllTimeStatsWithExternalDurationsAndAICosts(heartbeats, projectExternal, time.Duration(user.TimeoutMinutes)*time.Minute, costs)
 	} else {
-		stats, _, err = services.ComputeStatsForRangeWithExternalDurationsAndAICosts(filtered, projectExternal, now, time.Duration(user.TimeoutMinutes)*time.Minute, rangeName, costs)
+		stats, _, err = services.ComputeStatsForRangeWithExternalDurationsAndAICosts(heartbeats, projectExternal, now, time.Duration(user.TimeoutMinutes)*time.Minute, rangeName, costs)
 		if err != nil {
 			return services.Stats{}, err
 		}

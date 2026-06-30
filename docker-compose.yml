@@ -3,6 +3,7 @@ name: stint
 services:
   postgres:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: stint
       POSTGRES_USER: stint
@@ -19,16 +20,24 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
       - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   api:
     image: stint-api
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile
+      target: api
     environment:
       PORT: ${PORT:-8080}
       BASE_URL: ${BASE_URL:-http://localhost:8080}
@@ -68,13 +77,15 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
 
   worker:
     image: stint-worker
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile
+      target: api
     command: ["worker"]
     environment:
       PORT: ${PORT:-8080}
@@ -103,14 +114,21 @@ services:
       HEARTBEAT_RETENTION_DAYS: ${HEARTBEAT_RETENTION_DAYS:-365}
     volumes:
       - dumpdata:/data/dumps
+    healthcheck:
+      test: ["CMD-SHELL", "test -r /proc/1/stat"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
 
   web:
     image: stint-web
+    restart: unless-stopped
     build:
       context: ./web
       dockerfile: Dockerfile
@@ -143,13 +161,14 @@ services:
   # as its adapter lands (and the dir exists — a missing bind source breaks `up`).
   # See cmd/collect/README.md and AI_COST.md for the per-agent path table.
   collector:
-    image: stint-api
+    image: stint-collector
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile
+      target: collector
     profiles:
       - collector
-    entrypoint: ["/stint-collect"]
     command: ["--watch", "--interval", "${STINT_COLLECT_INTERVAL:-5m}"]
     user: "${STINT_COLLECT_UID:-1000}:${STINT_COLLECT_GID:-1000}"
     environment:
@@ -187,6 +206,7 @@ services:
 
   caddy:
     image: caddy:2-alpine
+    restart: unless-stopped
     profiles:
       - proxy
     environment:

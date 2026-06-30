@@ -16,7 +16,10 @@ type MemoryRateLimiter struct {
 	lastSweep time.Time
 }
 
-const memoryRateLimitSweepInterval = time.Minute
+const (
+	memoryRateLimitSweepInterval = time.Minute
+	maxMemoryRateLimiterKeys     = 8192
+)
 
 func NewMemoryRateLimiter() *MemoryRateLimiter {
 	return &MemoryRateLimiter{entries: map[string][]time.Time{}}
@@ -36,7 +39,10 @@ func (l *MemoryRateLimiter) Allow(_ context.Context, key string, limit int, wind
 		l.sweepExpired(cutoff, now)
 	}
 
-	values := l.entries[key]
+	values, exists := l.entries[key]
+	if !exists && len(l.entries) >= maxMemoryRateLimiterKeys {
+		l.evictOldestEntry()
+	}
 	active := values[:0]
 	for _, value := range values {
 		if value.After(cutoff) {
@@ -71,4 +77,23 @@ func (l *MemoryRateLimiter) sweepExpired(cutoff, now time.Time) {
 		l.entries[entryKey] = active
 	}
 	l.lastSweep = now
+}
+
+func (l *MemoryRateLimiter) evictOldestEntry() {
+	var oldestKey string
+	var oldestSeen time.Time
+	for entryKey, values := range l.entries {
+		if len(values) == 0 {
+			delete(l.entries, entryKey)
+			return
+		}
+		seen := values[len(values)-1]
+		if oldestKey == "" || seen.Before(oldestSeen) {
+			oldestKey = entryKey
+			oldestSeen = seen
+		}
+	}
+	if oldestKey != "" {
+		delete(l.entries, oldestKey)
+	}
 }

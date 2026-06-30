@@ -2,6 +2,8 @@ package workers
 
 import (
 	"context"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -96,6 +98,17 @@ func TestGoalsWorkerLoadsHistoryOncePerUser(t *testing.T) {
 	}
 }
 
+func TestGoalsEvaluatorUsesBoundedUserConcurrency(t *testing.T) {
+	sourceBytes, err := os.ReadFile("../goaleval/evaluator.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(sourceBytes)
+	if !strings.Contains(source, "SetLimit(") || !strings.Contains(source, "evaluateUser(") {
+		t.Fatal("goal evaluator should process independent users with bounded concurrency")
+	}
+}
+
 type countingGoalsStore struct {
 	users                         []db.User
 	goals                         []db.Goal
@@ -109,10 +122,6 @@ func (s *countingGoalsStore) ListUsers(context.Context) ([]db.User, error) {
 
 func (s *countingGoalsStore) ListGoals(context.Context, uuid.UUID) ([]db.Goal, error) {
 	return s.goals, nil
-}
-
-func (s *countingGoalsStore) AllHeartbeats(context.Context, uuid.UUID) ([]services.Heartbeat, error) {
-	return nil, nil
 }
 
 func (s *countingGoalsStore) HeartbeatsBetween(context.Context, uuid.UUID, float64, float64) ([]services.Heartbeat, error) {

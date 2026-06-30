@@ -21,9 +21,10 @@ const (
 
 type Client interface {
 	EnqueueStatsRecompute(ctx context.Context, userID uuid.UUID, ranges []string) error
+	EnqueueProjectStatsRecompute(ctx context.Context, userID uuid.UUID, project, rangeName string) error
 	EnqueueDataDumpProcess(ctx context.Context, userID, dumpID uuid.UUID) error
 	EnqueueCustomRulesApply(ctx context.Context, userID uuid.UUID) error
-	EnqueueWakaTimeImport(ctx context.Context, userID uuid.UUID, heartbeats []HeartbeatImportPayload, defaults services.HeartbeatDefaults) error
+	EnqueueWakaTimeImport(ctx context.Context, userID, importID uuid.UUID, defaults services.HeartbeatDefaults) error
 	EnqueueHeartbeatsPurge(ctx context.Context, retentionDays int) error
 	EnqueueLeaderboardUpdate(ctx context.Context, rangeName string) error
 	EnqueueGoalsEvaluate(ctx context.Context, now time.Time) error
@@ -36,6 +37,10 @@ func (NoopClient) EnqueueStatsRecompute(context.Context, uuid.UUID, []string) er
 	return ErrQueueUnavailable
 }
 
+func (NoopClient) EnqueueProjectStatsRecompute(context.Context, uuid.UUID, string, string) error {
+	return ErrQueueUnavailable
+}
+
 func (NoopClient) EnqueueDataDumpProcess(context.Context, uuid.UUID, uuid.UUID) error {
 	return ErrQueueUnavailable
 }
@@ -44,7 +49,7 @@ func (NoopClient) EnqueueCustomRulesApply(context.Context, uuid.UUID) error {
 	return ErrQueueUnavailable
 }
 
-func (NoopClient) EnqueueWakaTimeImport(context.Context, uuid.UUID, []HeartbeatImportPayload, services.HeartbeatDefaults) error {
+func (NoopClient) EnqueueWakaTimeImport(context.Context, uuid.UUID, uuid.UUID, services.HeartbeatDefaults) error {
 	return ErrQueueUnavailable
 }
 
@@ -85,6 +90,15 @@ func (c *AsynqClient) EnqueueStatsRecompute(ctx context.Context, userID uuid.UUI
 	return err
 }
 
+func (c *AsynqClient) EnqueueProjectStatsRecompute(ctx context.Context, userID uuid.UUID, project, rangeName string) error {
+	task, err := NewProjectStatsRecomputeTask(userID, project, rangeName)
+	if err != nil {
+		return err
+	}
+	_, err = c.client.EnqueueContext(ctx, task, asynq.Queue(QueueDefault), asynq.MaxRetry(3), asynq.Unique(10*time.Minute))
+	return err
+}
+
 func (c *AsynqClient) EnqueueDataDumpProcess(ctx context.Context, userID, dumpID uuid.UUID) error {
 	task, err := NewDataDumpProcessTask(userID, dumpID)
 	if err != nil {
@@ -103,8 +117,8 @@ func (c *AsynqClient) EnqueueCustomRulesApply(ctx context.Context, userID uuid.U
 	return err
 }
 
-func (c *AsynqClient) EnqueueWakaTimeImport(ctx context.Context, userID uuid.UUID, heartbeats []HeartbeatImportPayload, defaults services.HeartbeatDefaults) error {
-	task, err := NewWakaTimeImportTask(userID, heartbeats, defaults)
+func (c *AsynqClient) EnqueueWakaTimeImport(ctx context.Context, userID, importID uuid.UUID, defaults services.HeartbeatDefaults) error {
+	task, err := NewWakaTimeImportTask(userID, importID, defaults)
 	if err != nil {
 		return err
 	}

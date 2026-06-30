@@ -39,6 +39,7 @@ import (
 	"github.com/keithah/stint/internal/pricingrefresh"
 	"github.com/keithah/stint/internal/services"
 	"github.com/keithah/stint/internal/summaryrows"
+	"github.com/keithah/stint/internal/tzcache"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/oauth2"
@@ -115,24 +116,32 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 	if cfg.RedisURL != "" {
 		if redisLimiter, err := apimw.NewRedisRateLimiter(cfg.RedisURL); err == nil {
 			limiter = redisLimiter
+		} else {
+			e.Logger.Errorf("Redis rate limiter unavailable; using in-memory fallback: %v", err)
 		}
 	}
 	statusCache := cache.StatusCache(cache.NewMemoryStatusCache())
 	if cfg.RedisURL != "" {
 		if redisStatusCache, err := cache.NewRedisStatusCache(cfg.RedisURL); err == nil {
 			statusCache = redisStatusCache
+		} else {
+			e.Logger.Errorf("Redis status cache unavailable; using in-memory fallback: %v", err)
 		}
 	}
 	leaderboardCache := cache.LeaderboardCache(cache.NewMemoryLeaderboardCache())
 	if cfg.RedisURL != "" {
 		if redisLeaderboardCache, err := cache.NewRedisLeaderboardCache(cfg.RedisURL); err == nil {
 			leaderboardCache = redisLeaderboardCache
+		} else {
+			e.Logger.Errorf("Redis leaderboard cache unavailable; using in-memory fallback: %v", err)
 		}
 	}
 	jobClient := jobs.Client(jobs.NoopClient{})
 	if cfg.RedisURL != "" {
 		if asynqClient, err := jobs.NewAsynqClient(cfg.RedisURL); err == nil {
 			jobClient = asynqClient
+		} else {
+			e.Logger.Errorf("Redis job client unavailable; using noop job client: %v", err)
 		}
 	}
 	pricingEngine, err := pricing.NewFromBundled()
@@ -206,7 +215,7 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 	current := api.Group("/users/current", server.requireUser)
 	current.GET("", server.currentUser, readLimit)
 	current.PUT("", server.updateCurrentUser, requireLocalAccountAccess, writeLimit("user-settings"))
-	current.DELETE("", server.deleteCurrentUser, requireLocalAccountAccess)
+	current.DELETE("", server.deleteCurrentUser, requireLocalAccountAccess, writeLimit("user-account"))
 	current.GET("/heartbeats", server.listHeartbeats, requireScope(scopeReadHeartbeats), readLimit)
 	current.POST("/heartbeats", server.createHeartbeat, requireScope(scopeWriteHeartbeats), ingestionLimit("heartbeats"))
 	current.POST("/heartbeats.bulk", server.createHeartbeatsBulk, requireScope(scopeWriteHeartbeats), middleware.BodyLimit(heartbeatBulkJSONBodyLimit), ingestionLimit("heartbeats"))
@@ -263,7 +272,7 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 	current.PUT("/custom_rules", server.replaceCustomRules, requireLocalAccountAccess, jobLimit("custom-rules"))
 	current.DELETE("/custom_rules/:rule_id", server.deleteCustomRule, requireLocalAccountAccess, writeLimit("custom-rules"))
 	current.GET("/custom_rules_progress", server.customRulesProgress, requireScope(scopeReadStats), readLimit)
-	current.DELETE("/custom_rules_progress", server.abortCustomRulesProgress, requireLocalAccountAccess)
+	current.DELETE("/custom_rules_progress", server.abortCustomRulesProgress, requireLocalAccountAccess, writeLimit("custom-rules-progress"))
 	current.GET("/share_tokens", server.listShareTokens, requireLocalAccountAccess, readLimit)
 	current.POST("/share_tokens", server.createShareToken, requireLocalAccountAccess, writeLimit("share-tokens"))
 	current.DELETE("/share_tokens/:id", server.deleteShareToken, requireLocalAccountAccess, writeLimit("share-tokens"))
@@ -2341,13 +2350,15 @@ func (s *Server) githubCallback(c echo.Context) error {
 		return c.JSON(http.StatusBadGateway, errorBody("could not decode GitHub user"))
 	}
 	emails := []githubEmail{}
-	emailReq, err := http.NewRequestWithContext(oauthCtx, http.MethodGet, "https://api.github.com/user/emails", nil)
-	if err == nil {
-		emailResp, err := client.Do(emailReq)
+	if strings.TrimSpace(gh.Email) == "" {
+		emailReq, err := http.NewRequestWithContext(oauthCtx, http.MethodGet, "https://api.github.com/user/emails", nil)
 		if err == nil {
-			defer emailResp.Body.Close()
-			if emailResp.StatusCode < 300 {
-				_ = json.NewDecoder(emailResp.Body).Decode(&emails)
+			emailResp, err := client.Do(emailReq)
+			if err == nil {
+				defer emailResp.Body.Close()
+				if emailResp.StatusCode < 300 {
+					_ = json.NewDecoder(emailResp.Body).Decode(&emails)
+				}
 			}
 		}
 	}
@@ -2904,7 +2915,11 @@ func (s *Server) fileExperts(c echo.Context) error {
 	if entity == "" {
 		return c.JSON(http.StatusBadRequest, wakaError("entity is required"))
 	}
-	heartbeats, err := s.Store.AllHeartbeats(c.Request().Context(), user.ID)
+	projectName := ""
+	if payload.Project != nil {
+		projectName = strings.TrimSpace(*payload.Project)
+	}
+	heartbeats, err := s.Store.HeartbeatsForEntity(c.Request().Context(), user.ID, entity, projectName)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
@@ -3059,7 +3074,7 @@ func (s *Server) computeStatsForRange(ctx context.Context, user db.User, rangeNa
 
 func (s *Server) computeFreshStatsForRange(ctx context.Context, user db.User, rangeName string) (services.Stats, error) {
 	if rangeName == "all_time" {
-		heartbeats, err := s.Store.AllHeartbeats(ctx, user.ID)
+		heartbeats, err := s.Store.HeartbeatsForAllTimeStats(ctx, user.ID)
 		if err != nil {
 			return services.Stats{}, err
 		}
@@ -3435,12 +3450,22 @@ func (s *Server) projectDetail(c echo.Context) error {
 		BakeProject: func(ctx context.Context, userID uuid.UUID, location *time.Location, rangeName, projectName string, stats *services.Stats) {
 			aicostbake.BakeProject(ctx, s.Store, s.Pricing, userID, location, rangeName, projectName, stats)
 		},
+		EnqueueRecompute: s.enqueueProjectStatsRecompute,
 	}
 	stats, err := resolver.ProjectStats(c.Request().Context(), user, project, rangeName)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
 	return c.JSON(http.StatusOK, map[string]any{"data": map[string]any{"project": project, "stats": stats}})
+}
+
+func (s *Server) enqueueProjectStatsRecompute(_ context.Context, user db.User, project db.Project, rangeName string) {
+	if s.Jobs == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = s.Jobs.EnqueueProjectStatsRecompute(ctx, user.ID, project.Name, rangeName)
 }
 
 func projectDetailRange(input string) (string, error) {
@@ -3553,7 +3578,7 @@ func (s *Server) projectCommitRows(c echo.Context, user db.User) (db.Project, []
 	if err != nil {
 		return db.Project{}, nil, c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
-	heartbeats, err := s.Store.AllHeartbeats(c.Request().Context(), user.ID)
+	heartbeats, err := s.Store.HeartbeatsForProject(c.Request().Context(), user.ID, project.Name)
 	if err != nil {
 		return db.Project{}, nil, c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
@@ -4015,19 +4040,12 @@ func (s *Server) downloadDataDump(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, errorBody("invalid dump id"))
 	}
-	dumps, err := s.Store.ListDataDumps(c.Request().Context(), user.ID)
+	selected, err := s.Store.GetDataDump(c.Request().Context(), user.ID, dumpID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return c.JSON(http.StatusNotFound, errorBody("data dump not found"))
+	}
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
-	}
-	var selected db.DataDump
-	for _, dump := range dumps {
-		if dump.ID == dumpID {
-			selected = dump
-			break
-		}
-	}
-	if selected.ID == uuid.Nil {
-		return c.JSON(http.StatusNotFound, errorBody("data dump not found"))
 	}
 	if status, message, blocked := dataDumpDownloadError(selected, time.Now().UTC()); blocked {
 		return c.JSON(status, errorBody(message))
@@ -4035,12 +4053,13 @@ func (s *Server) downloadDataDump(c echo.Context) error {
 	path := dumpfiles.LocalPath(s.Config, user.ID, selected.ID)
 	if _, err := os.Stat(path); err == nil {
 		c.Response().Header().Set(echo.HeaderContentType, "application/json")
+		c.Response().Header().Set("Cache-Control", "private, max-age=86400, immutable")
 		return c.File(path)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
 	if selected.Type == "daily" {
-		heartbeats, err := s.Store.AllHeartbeats(c.Request().Context(), user.ID)
+		heartbeats, err := s.Store.HeartbeatsForExport(c.Request().Context(), user.ID)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 		}
@@ -4053,11 +4072,13 @@ func (s *Server) downloadDataDump(c echo.Context) error {
 		startDate, endDate := dailyDumpDateRange(heartbeats, external, time.Now().UTC())
 		return c.JSON(http.StatusOK, summaryRowsForRange(heartbeats, external, startDate, endDate, time.Duration(user.TimeoutMinutes)*time.Minute, allSummaryFields()))
 	}
-	heartbeats, err := s.Store.AllHeartbeats(c.Request().Context(), user.ID)
+	path, err = dumpfiles.WriteLocalHeartbeats(c.Request().Context(), s.Store, s.Config, user, selected.ID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
-	return c.JSON(http.StatusOK, heartbeats)
+	c.Response().Header().Set(echo.HeaderContentType, "application/json")
+	c.Response().Header().Set("Cache-Control", "private, max-age=86400, immutable")
+	return c.File(path)
 }
 
 func dataDumpDownloadError(dump db.DataDump, now time.Time) (int, string, bool) {
@@ -4516,10 +4537,17 @@ func (s *Server) importWakaTimeDump(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorBody(fmt.Sprintf("import limit is %d heartbeats per request", maxImportHeartbeats)))
 	}
 	defaults := heartbeatDefaults(c.Request().UserAgent())
-	if err := s.enqueueWakaTimeImport(c.Request().Context(), user.ID, heartbeats, defaults); err != nil {
+	importRow, err := s.Store.CreateWakaTimeImport(c.Request().Context(), user.ID, heartbeats)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
+	}
+	if err := s.enqueueWakaTimeImport(c.Request().Context(), user.ID, importRow.ID, defaults); err != nil {
 		if errors.Is(err, jobs.ErrQueueUnavailable) {
-			result, err := importer.ProcessHeartbeats(c.Request().Context(), s.Store, user.ID, heartbeats, defaults, time.Now())
+			result, err := importer.ProcessHeartbeats(c.Request().Context(), s.Store, user.ID, importRow.Heartbeats, defaults, time.Now())
 			if err != nil {
+				return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
+			}
+			if err := s.Store.MarkWakaTimeImportProcessed(c.Request().Context(), user.ID, importRow.ID); err != nil {
 				return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 			}
 			if result.Inserted > 0 {
@@ -4529,7 +4557,7 @@ func (s *Server) importWakaTimeDump(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, errorBody(err.Error()))
 	}
-	return c.JSON(http.StatusAccepted, map[string]any{"data": importer.QueuedResult(len(heartbeats))})
+	return c.JSON(http.StatusAccepted, map[string]any{"data": importer.QueuedResult(importRow.TotalCount)})
 }
 
 func readImportHeartbeats(c echo.Context) ([]services.Heartbeat, error) {
@@ -5088,11 +5116,11 @@ func (s *Server) enqueueCustomRulesApply(ctx context.Context, userID uuid.UUID) 
 	return s.Jobs.EnqueueCustomRulesApply(ctx, userID)
 }
 
-func (s *Server) enqueueWakaTimeImport(ctx context.Context, userID uuid.UUID, heartbeats []services.Heartbeat, defaults services.HeartbeatDefaults) error {
+func (s *Server) enqueueWakaTimeImport(ctx context.Context, userID, importID uuid.UUID, defaults services.HeartbeatDefaults) error {
 	if s.Jobs == nil {
 		return jobs.ErrQueueUnavailable
 	}
-	return s.Jobs.EnqueueWakaTimeImport(ctx, userID, heartbeats, defaults)
+	return s.Jobs.EnqueueWakaTimeImport(ctx, userID, importID, defaults)
 }
 
 func (s *Server) enqueueHeartbeatsPurge(ctx context.Context, retentionDays int) error {
@@ -5699,6 +5727,7 @@ func containsString(values []string, needle string) bool {
 }
 
 func writePublicPayload(c echo.Context, payload any) error {
+	c.Response().Header().Set("Cache-Control", "public, max-age=30, stale-while-revalidate=300")
 	callback := strings.TrimSpace(c.QueryParam("callback"))
 	if callback == "" {
 		return c.JSON(http.StatusOK, payload)
@@ -5845,12 +5874,7 @@ func dayRange(date string) (float64, float64, error) {
 }
 
 func userLocation(user db.User) *time.Location {
-	if user.Timezone != "" {
-		if location, err := time.LoadLocation(user.Timezone); err == nil {
-			return location
-		}
-	}
-	return time.UTC
+	return tzcache.Location(user.Timezone)
 }
 
 func dayRangeInLocation(date string, location *time.Location, now time.Time) (time.Time, time.Time, error) {

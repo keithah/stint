@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/alecthomas/chroma/v2/lexers"
 )
 
 type HeartbeatDefaults struct {
@@ -127,9 +125,6 @@ func inferLanguageFromEntity(entity string) string {
 	if strings.HasSuffix(lowerEntity, ".pbxproj") {
 		return "Xcode Project"
 	}
-	if lexer := lexers.Match(filename); lexer != nil {
-		return normalizeChromaLanguage(lexer.Config().Name)
-	}
 	extensions := map[string]string{
 		".bash":  "Bash",
 		".c":     "C",
@@ -160,6 +155,7 @@ func inferLanguageFromEntity(entity string) string {
 		".toml":  "TOML",
 		".ts":    "TypeScript",
 		".tsx":   "TypeScript",
+		".vue":   "Vue",
 		".yaml":  "YAML",
 		".yml":   "YAML",
 		".zsh":   "Zsh",
@@ -170,25 +166,6 @@ func inferLanguageFromEntity(entity string) string {
 		}
 	}
 	return ""
-}
-
-func normalizeChromaLanguage(language string) string {
-	switch language {
-	case "Go":
-		return "Go"
-	case "GAS":
-		return "Assembly"
-	case "HTML":
-		return "HTML"
-	case "JSON":
-		return "JSON"
-	case "TypeScript":
-		return "TypeScript"
-	case "vue":
-		return "Vue"
-	default:
-		return language
-	}
 }
 
 func applyProjectDetection(heartbeat *Heartbeat) {

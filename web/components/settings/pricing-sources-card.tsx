@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { listPricingModels, listPricingSources, type PricingModel } from "@/lib/usage-api";
 
 const MAX_ROWS = 60;
+const PRICING_METADATA_STALE_MS = 60 * 60 * 1000;
 
 function freshness(source: { status: string; fetched_at?: string }): string {
   if (source.status === "bundled" || !source.fetched_at) return "Using bundled snapshot — not yet refreshed";
@@ -23,15 +24,14 @@ function fmtRate(perMillion: number): string {
 }
 
 export function PricingSourcesCard() {
-  const sources = useQuery({ queryKey: ["pricing-sources"], queryFn: listPricingSources, });
-  const models = useQuery({ queryKey: ["pricing-models"], queryFn: listPricingModels, });
+  const sources = useQuery({ queryKey: ["pricing-sources"], queryFn: listPricingSources, staleTime: PRICING_METADATA_STALE_MS });
+  const models = useQuery({ queryKey: ["pricing-models"], queryFn: listPricingModels, staleTime: PRICING_METADATA_STALE_MS });
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(() => {
     const all = models.data?.data ?? [];
     const q = search.trim().toLowerCase();
-    const matched = q ? all.filter((m: PricingModel) => m.model.toLowerCase().includes(q)) : all;
-    return { rows: matched.slice(0, MAX_ROWS), total: matched.length };
+    return collectPricingRows(all, q);
   }, [models.data, search]);
 
   return (
@@ -116,4 +116,19 @@ export function PricingSourcesCard() {
       </div>
     </section>
   );
+}
+
+function collectPricingRows(all: PricingModel[], query: string) {
+  const rows: PricingModel[] = [];
+  let total = 0;
+  for (const model of all) {
+    if (query && !model.model.toLowerCase().includes(query)) {
+      continue;
+    }
+    total++;
+    if (rows.length < MAX_ROWS) {
+      rows.push(model);
+    }
+  }
+  return { rows, total };
 }

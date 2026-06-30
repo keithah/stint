@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import {
   cacheEfficiency,
   cachingDollarSavings,
@@ -57,6 +58,9 @@ assertEqual("cheapest priced model", extremes.cheapest?.name, "free");
 const emptyExtremes = modelCostExtremes([]);
 assertEqual("empty byModel yields null most expensive", emptyExtremes.mostExpensive, null);
 assertEqual("empty byModel yields null cheapest", emptyExtremes.cheapest, null);
+if (readFileSync("lib/usage-insights.ts", "utf8").includes("byModel.filter")) {
+  throw new Error("modelCostExtremes should scan once without allocating a filtered copy");
+}
 
 // A $0-but-priced model (e.g. OpenRouter free tier) is the legitimate cheapest,
 // not "absent" — an all-$0 set still returns extremes.

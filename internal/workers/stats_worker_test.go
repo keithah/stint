@@ -68,7 +68,7 @@ func TestShouldSkipCustomRulesApplyForAbortedProgress(t *testing.T) {
 	}
 }
 
-func TestStatsWorkerRecomputeRangesLoadsRawRowsOnce(t *testing.T) {
+func TestStatsWorkerRecomputeRangesUsesScopedRangeLoads(t *testing.T) {
 	userID := uuid.New()
 	store := &countingStatsStore{
 		user: db.User{ID: userID, Timezone: "UTC", TimeoutMinutes: 15},
@@ -78,14 +78,17 @@ func TestStatsWorkerRecomputeRangesLoadsRawRowsOnce(t *testing.T) {
 	if err := worker.RecomputeRanges(context.Background(), userID, []string{"last_7_days", "last_30_days"}, 15, false); err != nil {
 		t.Fatalf("RecomputeRanges returned error: %v", err)
 	}
-	if store.allHeartbeatsCalls != 1 {
-		t.Fatalf("expected one all-heartbeats load, got %d", store.allHeartbeatsCalls)
+	if store.allHeartbeatsCalls != 0 {
+		t.Fatalf("expected no all-heartbeats load for bounded ranges, got %d", store.allHeartbeatsCalls)
 	}
-	if store.externalCalls != 1 {
-		t.Fatalf("expected one external-duration load, got %d", store.externalCalls)
+	if store.rangeHeartbeatsCalls != 2 {
+		t.Fatalf("expected one scoped heartbeat load per range, got %d", store.rangeHeartbeatsCalls)
 	}
-	if store.costCalls != 1 {
-		t.Fatalf("expected one AI cost load, got %d", store.costCalls)
+	if store.externalBetweenCalls != 2 {
+		t.Fatalf("expected one scoped external-duration load per range, got %d", store.externalBetweenCalls)
+	}
+	if store.costCalls != 2 {
+		t.Fatalf("expected one AI cost load per range, got %d", store.costCalls)
 	}
 	if store.upsertCalls != 2 {
 		t.Fatalf("expected one upsert per range, got %d", store.upsertCalls)
@@ -103,24 +106,34 @@ func TestStatsWorkerDoesNotHideConcreteStoreRequirement(t *testing.T) {
 }
 
 type countingStatsStore struct {
-	user               db.User
-	allHeartbeatsCalls int
-	externalCalls      int
-	costCalls          int
-	upsertCalls        int
+	user                 db.User
+	allHeartbeatsCalls   int
+	externalCalls        int
+	rangeHeartbeatsCalls int
+	externalBetweenCalls int
+	costCalls            int
+	upsertCalls          int
 }
 
 func (s *countingStatsStore) UserByID(context.Context, uuid.UUID) (db.User, error) {
 	return s.user, nil
 }
 
-func (s *countingStatsStore) AllHeartbeats(context.Context, uuid.UUID) ([]services.Heartbeat, error) {
+func (s *countingStatsStore) HeartbeatsForAllTimeStats(context.Context, uuid.UUID) ([]services.Heartbeat, error) {
 	s.allHeartbeatsCalls++
+	return nil, nil
+}
+
+func (s *countingStatsStore) HeartbeatsForProject(context.Context, uuid.UUID, string) ([]services.Heartbeat, error) {
 	return nil, nil
 }
 
 func (s *countingStatsStore) ListExternalDurations(context.Context, uuid.UUID) ([]db.ExternalDuration, error) {
 	s.externalCalls++
+	return nil, nil
+}
+
+func (s *countingStatsStore) ListExternalDurationsForProject(context.Context, uuid.UUID, string) ([]db.ExternalDuration, error) {
 	return nil, nil
 }
 
@@ -134,10 +147,24 @@ func (s *countingStatsStore) UpsertStatsCache(context.Context, uuid.UUID, string
 	return nil
 }
 
+func (s *countingStatsStore) UpsertProjectStatsCache(context.Context, uuid.UUID, string, string, services.Stats) error {
+	return nil
+}
+
 func (s *countingStatsStore) HeartbeatsForStatsRange(context.Context, uuid.UUID, time.Time, string) ([]services.Heartbeat, error) {
+	s.rangeHeartbeatsCalls++
+	return nil, nil
+}
+
+func (s *countingStatsStore) HeartbeatsForProjectStatsRange(context.Context, uuid.UUID, string, time.Time, string) ([]services.Heartbeat, error) {
 	return nil, nil
 }
 
 func (s *countingStatsStore) ExternalDurationsBetween(context.Context, uuid.UUID, time.Time, time.Time) ([]db.ExternalDuration, error) {
+	s.externalBetweenCalls++
+	return nil, nil
+}
+
+func (s *countingStatsStore) ExternalDurationsForProjectBetween(context.Context, uuid.UUID, string, time.Time, time.Time) ([]db.ExternalDuration, error) {
 	return nil, nil
 }

@@ -20,7 +20,11 @@ func (w ImportWorker) HandleWakaTimeImportTask(ctx context.Context, task *asynq.
 	if err != nil {
 		return err
 	}
-	result, err := importer.ProcessHeartbeats(ctx, w.Store, payload.UserID, payload.Heartbeats, services.HeartbeatDefaults{
+	importRow, err := w.Store.GetWakaTimeImport(ctx, payload.UserID, payload.ImportID)
+	if err != nil {
+		return err
+	}
+	result, err := importer.ProcessHeartbeats(ctx, w.Store, payload.UserID, importRow.Heartbeats, services.HeartbeatDefaults{
 		Plugin:          payload.DefaultPlugin,
 		PluginVersion:   payload.DefaultPluginVersion,
 		Editor:          payload.DefaultEditor,
@@ -29,6 +33,9 @@ func (w ImportWorker) HandleWakaTimeImportTask(ctx context.Context, task *asynq.
 		Architecture:    payload.DefaultArchitecture,
 	}, time.Now())
 	if err != nil {
+		return err
+	}
+	if err := w.Store.MarkWakaTimeImportProcessed(ctx, payload.UserID, payload.ImportID); err != nil {
 		return err
 	}
 	if result.Inserted == 0 {

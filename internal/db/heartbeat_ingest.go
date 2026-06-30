@@ -60,24 +60,12 @@ func (s *Store) insertHeartbeatsWithCopyStaging(ctx context.Context, userID uuid
 		return nil, err
 	}
 
-	copyRows := make([][]any, 0, len(heartbeats))
 	for i, heartbeat := range heartbeats {
 		if heartbeat.Type == "" {
 			heartbeat.Type = "file"
 		}
 		results[i].Heartbeat = heartbeat
-		copyRows = append(copyRows, []any{
-			i, heartbeat.Entity, heartbeat.Type, nullEmpty(heartbeat.Category), heartbeat.Time,
-			nullEmpty(heartbeat.Project), nullEmpty(heartbeat.Branch), nullEmpty(heartbeat.Language), nullEmpty(heartbeat.MachineName),
-			nullEmpty(heartbeat.Plugin), nullEmpty(heartbeat.PluginVersion), nullEmpty(heartbeat.Editor), nullEmpty(heartbeat.EditorVersion),
-			nullEmpty(heartbeat.OperatingSystem), nullEmpty(heartbeat.Architecture), nullEmpty(heartbeat.Dependencies),
-			nullableInt(heartbeat.Lines), nullableInt(heartbeat.LineNumber), nullableInt(heartbeat.CursorPosition), heartbeat.IsWrite,
-			nullableInt(heartbeat.AILineChanges), nullableInt(heartbeat.HumanLineChanges), nullEmpty(heartbeat.AISession),
-			nullableInt(heartbeat.AIInputTokens), nullableInt(heartbeat.AIOutputTokens), nullableInt(heartbeat.AIPromptLength),
-			nullEmpty(heartbeat.AISubscriptionPlan), nullEmpty(heartbeat.AIModel), nullEmpty(heartbeat.AIProvider), nullEmpty(heartbeat.AIAgent),
-			nullEmpty(heartbeat.AIAgentVersion), nullEmpty(heartbeat.AIAgentComplexity), nullEmpty(heartbeat.CommitHash),
-			jsonMapArg(heartbeat.Metadata), jsonMapArg(heartbeat.RawPayload),
-		})
+		heartbeats[i] = heartbeat
 	}
 
 	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"tmp_heartbeat_ingest"}, []string{
@@ -86,7 +74,7 @@ func (s *Store) insertHeartbeatsWithCopyStaging(ctx context.Context, userID uuid
 		"lines", "line_number", "cursor_pos", "is_write", "ai_line_changes", "human_line_changes", "ai_session",
 		"ai_input_tokens", "ai_output_tokens", "ai_prompt_length", "ai_subscription_plan", "ai_model", "ai_provider",
 		"ai_agent", "ai_agent_version", "ai_agent_complexity", "commit_hash", "metadata", "raw_payload",
-	}, pgx.CopyFromRows(copyRows)); err != nil {
+	}, &heartbeatCopySource{heartbeats: heartbeats}); err != nil {
 		return nil, err
 	}
 
@@ -178,4 +166,35 @@ func (s *Store) insertHeartbeatsWithCopyStaging(ctx context.Context, userID uuid
 		}
 	}
 	return results, nil
+}
+
+type heartbeatCopySource struct {
+	heartbeats []services.Heartbeat
+	index      int
+}
+
+func (s heartbeatCopySource) Err() error {
+	return nil
+}
+
+func (s *heartbeatCopySource) Next() bool {
+	return s.index < len(s.heartbeats)
+}
+
+func (s *heartbeatCopySource) Values() ([]any, error) {
+	rowIndex := s.index
+	heartbeat := s.heartbeats[rowIndex]
+	s.index++
+	return []any{
+		rowIndex, heartbeat.Entity, heartbeat.Type, nullEmpty(heartbeat.Category), heartbeat.Time,
+		nullEmpty(heartbeat.Project), nullEmpty(heartbeat.Branch), nullEmpty(heartbeat.Language), nullEmpty(heartbeat.MachineName),
+		nullEmpty(heartbeat.Plugin), nullEmpty(heartbeat.PluginVersion), nullEmpty(heartbeat.Editor), nullEmpty(heartbeat.EditorVersion),
+		nullEmpty(heartbeat.OperatingSystem), nullEmpty(heartbeat.Architecture), nullEmpty(heartbeat.Dependencies),
+		nullableInt(heartbeat.Lines), nullableInt(heartbeat.LineNumber), nullableInt(heartbeat.CursorPosition), heartbeat.IsWrite,
+		nullableInt(heartbeat.AILineChanges), nullableInt(heartbeat.HumanLineChanges), nullEmpty(heartbeat.AISession),
+		nullableInt(heartbeat.AIInputTokens), nullableInt(heartbeat.AIOutputTokens), nullableInt(heartbeat.AIPromptLength),
+		nullEmpty(heartbeat.AISubscriptionPlan), nullEmpty(heartbeat.AIModel), nullEmpty(heartbeat.AIProvider), nullEmpty(heartbeat.AIAgent),
+		nullEmpty(heartbeat.AIAgentVersion), nullEmpty(heartbeat.AIAgentComplexity), nullEmpty(heartbeat.CommitHash),
+		jsonMapArg(heartbeat.Metadata), jsonMapArg(heartbeat.RawPayload),
+	}, nil
 }

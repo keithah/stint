@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -88,6 +89,9 @@ func mergeHumanHeartbeatsWithAI(human, ai []Heartbeat) []Heartbeat {
 	for _, hb := range ai {
 		aiEntityTimes[hb.Entity] = append(aiEntityTimes[hb.Entity], hb.Time)
 	}
+	for entity := range aiEntityTimes {
+		sort.Float64s(aiEntityTimes[entity])
+	}
 	for _, hb := range ai[1:] {
 		if hb.Time < minTime {
 			minTime = hb.Time
@@ -123,12 +127,14 @@ func mergeHumanHeartbeatsWithAI(human, ai []Heartbeat) []Heartbeat {
 }
 
 func sameEntityHeartbeatWithinWindow(hb Heartbeat, entityTimes map[string][]float64, windowSeconds float64) bool {
-	for _, t := range entityTimes[hb.Entity] {
-		if t >= hb.Time-windowSeconds && t <= hb.Time+windowSeconds {
-			return true
-		}
+	times := entityTimes[hb.Entity]
+	if len(times) == 0 {
+		return false
 	}
-	return false
+	lower := hb.Time - windowSeconds
+	upper := hb.Time + windowSeconds
+	index := sort.SearchFloat64s(times, lower)
+	return index < len(times) && times[index] <= upper
 }
 
 func sendHeartbeats(stdout io.Writer, opts Options, heartbeats []Heartbeat, _ string, syncQueued, writeResponse bool) error {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -354,6 +355,35 @@ func TestOpenAPIDocsExposeRouteMethodsAndSecurity(t *testing.T) {
 	assertObjectNumericExclusiveMinimum(t, doc.Components.Schemas["ExternalDuration"], "end_time", float64(0))
 }
 
+func TestDownloadDataDumpUsesPointLookupAndCacheHeaders(t *testing.T) {
+	sourceBytes, err := os.ReadFile("router.go")
+	if err != nil {
+		t.Fatalf("read router.go: %v", err)
+	}
+	body := serverFunctionSource(string(sourceBytes), "downloadDataDump")
+	if !strings.Contains(body, "s.Store.GetDataDump") {
+		t.Fatal("downloadDataDump should use GetDataDump instead of listing all dumps")
+	}
+	if strings.Contains(body, "s.Store.ListDataDumps") {
+		t.Fatal("downloadDataDump must not list and scan every dump")
+	}
+	if !strings.Contains(body, "Cache-Control") || !strings.Contains(body, "private, max-age=86400, immutable") {
+		t.Fatal("downloadDataDump should set immutable private cache headers for completed local dump files")
+	}
+}
+
+func serverFunctionSource(source, name string) string {
+	start := strings.Index(source, "func (s *Server) "+name)
+	if start < 0 {
+		return ""
+	}
+	next := strings.Index(source[start+1:], "\nfunc ")
+	if next < 0 {
+		return source[start:]
+	}
+	return source[start : start+1+next]
+}
+
 func assertSecurityScheme(t *testing.T, scheme map[string]any, wantType, wantScheme, wantIn, wantName string) {
 	t.Helper()
 	if got, _ := scheme["type"].(string); got != wantType {
@@ -504,17 +534,6 @@ func assertRetryAfterHeader(t *testing.T, operation map[string]any, status strin
 	}
 	if got, _ := schema["type"].(string); got != "integer" {
 		t.Fatalf("expected Retry-After schema type integer, got %q", got)
-	}
-}
-
-func assertResponseStatus(t *testing.T, operation map[string]any, status string) {
-	t.Helper()
-	responses, ok := operation["responses"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected operation to include responses")
-	}
-	if _, ok := responses[status]; !ok {
-		t.Fatalf("expected response %s to be documented", status)
 	}
 }
 

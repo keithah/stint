@@ -14,7 +14,7 @@ COPY app ./app
 COPY components ./components
 COPY lib ./lib
 COPY next-env.d.ts next.config.mjs postcss.config.js proxy.ts tailwind.config.ts tsconfig.json ./
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 FROM node:24-alpine
 WORKDIR /app
@@ -22,5 +22,5 @@ ENV NODE_ENV=production
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD wget -qO- http://127.0.0.1:3000/healthz >/dev/null || exit 1
 CMD ["node", "server.js"]

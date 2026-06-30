@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, CalendarDays, Download, FileDown, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui";
 import { createDataDump, createExternalDuration, dataDumpDownloadURL, deleteExternalDurationsBulk, deleteHeartbeats, durationsForDay, heartbeatsForDay, listDataDumps, listExternalDurations, summaries, type DurationSlice } from "@/lib/api";
 import { dataDumpExpiryText, dataDumpIsDownloadable } from "@/lib/data-dumps";
@@ -89,6 +89,8 @@ function ReportsContent() {
   const durationRows = durations.data?.data ?? [];
   const durationTotalSeconds = durationRows.reduce((sum, row) => sum + row.duration, 0);
   const externalRows = external.data?.data ?? [];
+  const selectedHeartbeatIDSet = useMemo(() => new Set(selectedHeartbeatIDs), [selectedHeartbeatIDs]);
+  const selectedExternalDurationIDSet = useMemo(() => new Set(selectedExternalDurationIDs), [selectedExternalDurationIDs]);
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-6 lg:px-8">
@@ -220,7 +222,7 @@ function ReportsContent() {
               <input
                 className="mt-1 h-4 w-4 accent-accent"
                 type="checkbox"
-                checked={selectedHeartbeatIDs.includes(heartbeat.id)}
+                checked={selectedHeartbeatIDSet.has(heartbeat.id)}
                 onChange={(event) => {
                   setSelectedHeartbeatIDs((current) =>
                     event.target.checked ? [...current, heartbeat.id] : current.filter((id) => id !== heartbeat.id)
@@ -308,7 +310,7 @@ function ReportsContent() {
                 <input
                   className="mt-1 h-4 w-4 accent-accent"
                   type="checkbox"
-                  checked={selectedExternalDurationIDs.includes(duration.id)}
+                  checked={selectedExternalDurationIDSet.has(duration.id)}
                   onChange={(event) => {
                     setSelectedExternalDurationIDs((current) =>
                       event.target.checked ? [...current, duration.id] : current.filter((id) => id !== duration.id)

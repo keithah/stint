@@ -274,6 +274,51 @@ func TestBulkHeartbeatInsertUsesCopyStaging(t *testing.T) {
 	if strings.Contains(body, "SendBatch") {
 		t.Fatal("InsertHeartbeats must not use per-row pgx batch inserts")
 	}
+	if strings.Contains(body, "pgx.CopyFromRows") || strings.Contains(body, "copyRows := make") {
+		t.Fatal("InsertHeartbeats must stream COPY rows instead of materializing [][]any")
+	}
+}
+
+func TestIngestionStatsUsesIndexedScalarQueries(t *testing.T) {
+	sourceBytes, err := os.ReadFile("store.go")
+	if err != nil {
+		t.Fatalf("could not read store.go: %v", err)
+	}
+	body := functionSource(string(sourceBytes), "IngestionStats")
+	if strings.Contains(body, "max(time)") || strings.Contains(body, "FILTER (WHERE") {
+		t.Fatal("IngestionStats must not aggregate the full heartbeats table in one query")
+	}
+	for _, want := range []string{"ORDER BY time DESC", "LIMIT 1", "time >= $1 - 3600", "time >= $1 - 86400"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("IngestionStats must use indexed scalar query shape; missing %q", want)
+		}
+	}
+}
+
+func TestScopedHeartbeatQueriesAvoidAllHistoryLoads(t *testing.T) {
+	sourceBytes, err := os.ReadFile("store.go")
+	if err != nil {
+		t.Fatalf("could not read store.go: %v", err)
+	}
+	source := string(sourceBytes)
+	if strings.Contains(source, "func (s *Store) AllHeartbeats") {
+		t.Fatal("generic AllHeartbeats helper should not hide full-history workloads")
+	}
+	for _, functionName := range []string{"HeartbeatsForEntity", "HeartbeatsForProject"} {
+		body := functionSource(source, functionName)
+		if body == "" {
+			t.Fatalf("expected %s helper", functionName)
+		}
+		if !strings.Contains(body, "FROM heartbeats") || !strings.Contains(body, "ORDER BY time ASC") {
+			t.Fatalf("%s should query ordered heartbeats directly", functionName)
+		}
+	}
+	if !strings.Contains(functionSource(source, "HeartbeatsForEntity"), "entity = $2") {
+		t.Fatal("HeartbeatsForEntity must filter by entity in SQL")
+	}
+	if !strings.Contains(functionSource(source, "HeartbeatsForProject"), "project = $2") {
+		t.Fatal("HeartbeatsForProject must filter by project in SQL")
+	}
 }
 
 func TestRevokeOAuthTokenScopesLookupToAuthenticatedClient(t *testing.T) {
@@ -502,6 +547,52 @@ func TestOptimizerIndexesIncludeLeaderboardMemberLookup(t *testing.T) {
 	if !strings.Contains(migration, "leaderboard_members_user_id_idx") ||
 		!strings.Contains(migration, "ON leaderboard_members (user_id, leaderboard_id)") {
 		t.Fatal("optimizer indexes must include leaderboard_members lookup by user_id")
+	}
+}
+
+func TestProjectExternalDurationIndexSupportsProjectStats(t *testing.T) {
+	migrationBytes, err := os.ReadFile("migrations/0033_project_external_duration_index.sql")
+	if err != nil {
+		t.Fatalf("could not read project external duration index migration: %v", err)
+	}
+	migration := string(migrationBytes)
+	if !strings.Contains(migration, "external_durations_user_project_time_idx") ||
+		!strings.Contains(migration, "ON external_durations(user_id, project, start_time, end_time)") {
+		t.Fatal("project stats should have an external_durations index by user, project, and time")
+	}
+}
+
+func TestWakaTimeImportsUseChunkStorage(t *testing.T) {
+	migrationBytes, err := os.ReadFile("migrations/0034_wakatime_import_chunks.sql")
+	if err != nil {
+		t.Fatalf("could not read WakaTime import chunks migration: %v", err)
+	}
+	migration := string(migrationBytes)
+	if !strings.Contains(migration, "CREATE TABLE IF NOT EXISTS wakatime_import_chunks") ||
+		!strings.Contains(migration, "PRIMARY KEY (import_id, chunk_index)") {
+		t.Fatal("WakaTime imports should store heartbeat payloads in ordered chunk rows")
+	}
+	sourceBytes, err := os.ReadFile("store.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := functionSource(string(sourceBytes), "CreateWakaTimeImport")
+	if strings.Contains(body, "json.Marshal(heartbeats)") {
+		t.Fatal("CreateWakaTimeImport must not marshal every heartbeat into one JSONB row")
+	}
+	if !strings.Contains(body, "wakatime_import_chunks") {
+		t.Fatal("CreateWakaTimeImport should insert heartbeat chunks")
+	}
+}
+
+func TestListUsersOrderHasMatchingIndex(t *testing.T) {
+	migrationBytes, err := os.ReadFile("migrations/0035_users_github_username_order_index.sql")
+	if err != nil {
+		t.Fatalf("could not read users username order index migration: %v", err)
+	}
+	migration := string(migrationBytes)
+	if !strings.Contains(migration, "users_github_username_idx") || !strings.Contains(migration, "ON users(github_username)") {
+		t.Fatal("ListUsers ORDER BY github_username should have a matching plain username index")
 	}
 }
 
@@ -824,5 +915,53 @@ func TestProjectStatsCacheSchemaAndInvalidationArePresent(t *testing.T) {
 	source := string(sourceBytes)
 	if !strings.Contains(source, "UPDATE project_stats_cache SET is_up_to_date = false") {
 		t.Fatal("expected MarkStatsStale to invalidate project stats cache")
+	}
+}
+
+func TestHeartbeatRetentionInvalidatesProjectStatsCache(t *testing.T) {
+	sourceBytes, err := os.ReadFile("store.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(sourceBytes)
+	for _, functionName := range []string{"PurgeHeartbeatsBefore", "PurgeHeartbeatsByUserRetention"} {
+		body := functionSource(source, functionName)
+		if !strings.Contains(body, "markStatsStaleForUsers") {
+			t.Fatalf("%s must invalidate both stats caches through the shared helper", functionName)
+		}
+		if strings.Contains(body, "UPDATE stats_cache SET") {
+			t.Fatalf("%s must not bypass project_stats_cache invalidation", functionName)
+		}
+	}
+}
+
+func TestApplyCustomRulesBatchesProjectUpserts(t *testing.T) {
+	sourceBytes, err := os.ReadFile("store.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := functionSource(string(sourceBytes), "ApplyCustomRulesToHeartbeats")
+	if strings.Contains(body, "s.upsertProject(ctx") {
+		t.Fatal("ApplyCustomRulesToHeartbeats must not upsert projects one at a time")
+	}
+	if !strings.Contains(body, "s.upsertProjects") {
+		t.Fatal("ApplyCustomRulesToHeartbeats should batch project upserts")
+	}
+	if !strings.Contains(body, "flushCustomRuleBatch") {
+		t.Fatal("ApplyCustomRulesToHeartbeats should flush heartbeat writes in bounded batches")
+	}
+}
+
+func TestApplyCustomRulesStreamsHeartbeats(t *testing.T) {
+	sourceBytes, err := os.ReadFile("store.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := functionSource(string(sourceBytes), "ApplyCustomRulesToHeartbeats")
+	if strings.Contains(body, "HeartbeatsForCustomRules") {
+		t.Fatal("ApplyCustomRulesToHeartbeats should stream heartbeats instead of materializing full history")
+	}
+	if !strings.Contains(body, "ForEachHeartbeatForCustomRules") {
+		t.Fatal("ApplyCustomRulesToHeartbeats should use the custom-rule heartbeat iterator")
 	}
 }

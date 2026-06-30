@@ -7,7 +7,6 @@ import { aiDayPercentage, aiHeatmapClass, aiHeatmapTitle } from "@/lib/ai-heatma
 import { aiRingStyle } from "@/lib/ai-ring";
 import { fallbackPalette } from "@/lib/language-colors";
 import { compactNumber, formatCents } from "@/lib/number-format";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 export function AIPanel({ metrics }: { metrics?: AIMetrics }) {
   const ai = metrics ?? {
@@ -196,17 +195,10 @@ function AgentsDonut({ agents }: { agents: AIMetrics["agents"] }) {
         </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-[140px_1fr] xl:grid-cols-1 2xl:grid-cols-[140px_1fr]">
-        <div className="h-36">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={rows} dataKey="value" nameKey="name" innerRadius={42} outerRadius={62} paddingAngle={3}>
-                {rows.map((row, index) => (
-                  <Cell key={row.name} fill={hasData ? fallbackPalette[index % fallbackPalette.length] : "#26262b"} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={{ background: "#0f1722", border: "1px solid #223040", borderRadius: 6 }} />
-            </PieChart>
-          </ResponsiveContainer>
+        <div className="grid h-36 place-items-center">
+          <div className="grid h-28 w-28 place-items-center rounded-full" style={{ background: hasData ? agentDonutGradient(rows) : "#26262b" }}>
+            <div className="h-16 w-16 rounded-full bg-ink" />
+          </div>
         </div>
         <div className="space-y-3 self-center">
           {rows.slice(0, 5).map((row, index) => (
@@ -222,6 +214,21 @@ function AgentsDonut({ agents }: { agents: AIMetrics["agents"] }) {
       </div>
     </div>
   );
+}
+
+function agentDonutGradient(rows: ReturnType<typeof aiAgentDonutRows>) {
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  if (total <= 0) {
+    return "#26262b";
+  }
+  let cursor = 0;
+  const stops = rows.map((row, index) => {
+    const start = cursor;
+    cursor += (row.value / total) * 100;
+    const color = fallbackPalette[index % fallbackPalette.length];
+    return `${color} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
+  });
+  return `conic-gradient(${stops.join(", ")})`;
 }
 
 function CostTracker({ rows }: { rows: NonNullable<AIMetrics["costs"]> }) {

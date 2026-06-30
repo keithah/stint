@@ -17,6 +17,7 @@ func TestOptimizerRouteWiring(t *testing.T) {
 	text := string(source)
 	assertContains(t, text, `e.POST("/oauth/revoke", server.oauthRevoke, server.rateLimitOAuthToken(oauthTokenCreationRateLimit, time.Hour))`)
 	assertContains(t, text, `current.PUT("", server.updateCurrentUser, requireLocalAccountAccess, writeLimit("user-settings"))`)
+	assertContains(t, text, `current.DELETE("", server.deleteCurrentUser, requireLocalAccountAccess, writeLimit("user-account"))`)
 	assertContains(t, text, `setPublicMetadataCache(c)`)
 	assertContains(t, text, `context.WithTimeout(c.Request().Context(), githubOAuthRequestTimeout)`)
 	assertContains(t, text, `e.IPExtractor = echo.ExtractIPDirect()`)
@@ -31,9 +32,43 @@ func TestOptimizerRouteWiring(t *testing.T) {
 	assertContains(t, text, `current.GET("/events", server.currentUserEvents, readLimit)`)
 	assertContains(t, text, `middleware.BodyLimit(usageEventsBulkJSONBodyLimit)`)
 	assertContains(t, text, `usageEventsBulkJSONBodyLimit       = "25M"`)
+	assertContains(t, text, `current.DELETE("/custom_rules_progress", server.abortCustomRulesProgress, requireLocalAccountAccess, writeLimit("custom-rules-progress"))`)
+	assertContains(t, functionSource(text, "writePublicPayload"), `Cache-Control", "public, max-age=30, stale-while-revalidate=300"`)
+	assertContains(t, functionSource(text, "NewRouter"), `Redis rate limiter unavailable`)
+	assertContains(t, functionSource(text, "NewRouter"), `Redis status cache unavailable`)
+	assertContains(t, functionSource(text, "NewRouter"), `Redis leaderboard cache unavailable`)
+	assertContains(t, functionSource(text, "NewRouter"), `Redis job client unavailable`)
+	if strings.Contains(functionSource(text, "fileExperts"), "AllHeartbeats") {
+		t.Fatal("fileExperts should use an entity-scoped heartbeat query")
+	}
+	if strings.Contains(functionSource(text, "projectCommitRows"), "AllHeartbeats") {
+		t.Fatal("projectCommitRows should use a project-scoped heartbeat query")
+	}
 	if strings.Contains(text, `duration, err := s.Store.UpsertExternalDuration(c.Request().Context(), user.ID, input)`) &&
-		strings.Contains(functionSource(text, "createExternalDurationsBulk"), "UpsertExternalDuration") {
+		strings.Contains(functionSource(text, "createExternalDurationsBulk"), "UpsertExternalDuration(") {
 		t.Fatal("createExternalDurationsBulk should use the batched store method")
+	}
+}
+
+func TestGitHubOAuthOnlyFetchesEmailsWhenProfileEmailMissing(t *testing.T) {
+	source, err := os.ReadFile("router.go")
+	if err != nil {
+		t.Fatalf("read router.go: %v", err)
+	}
+	body := functionSource(string(source), "githubCallback")
+	if !strings.Contains(body, `if strings.TrimSpace(gh.Email) == "" {`) {
+		t.Fatal("githubCallback should skip /user/emails when /user already returned an email")
+	}
+}
+
+func TestHeartbeatDumpDownloadDoesNotStreamAfterHeaders(t *testing.T) {
+	source, err := os.ReadFile("router.go")
+	if err != nil {
+		t.Fatalf("read router.go: %v", err)
+	}
+	text := string(source)
+	if strings.Contains(text, "WriteHeader(http.StatusOK)") && strings.Contains(text, "ForEachHeartbeatForExport") {
+		t.Fatal("heartbeat dump fallback should materialize before writing headers to avoid truncated 200 responses")
 	}
 }
 
@@ -83,11 +118,14 @@ func assertContains(t *testing.T, text, needle string) {
 func functionSource(source, name string) string {
 	start := strings.Index(source, "func "+name)
 	if start == -1 {
+		start = strings.Index(source, "func (s *Server) "+name)
+	}
+	if start == -1 {
 		return ""
 	}
-	next := strings.Index(source[start+len("func "+name):], "\nfunc ")
+	next := strings.Index(source[start+1:], "\nfunc ")
 	if next == -1 {
 		return source[start:]
 	}
-	return source[start : start+len("func "+name)+next]
+	return source[start : start+1+next]
 }

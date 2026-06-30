@@ -1,6 +1,8 @@
 package services
 
 import (
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -68,6 +70,20 @@ func TestComputeGoalProgressFiltersByEditor(t *testing.T) {
 	}
 	if !got.IsComplete {
 		t.Fatal("expected editor-filtered goal to be complete")
+	}
+}
+
+func TestGoalProgressBuildsFilterSetsOnce(t *testing.T) {
+	source, err := os.ReadFile("goals.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := functionSource(string(source), "ComputeGoalProgressForWindowWithExternalDurations")
+	if !strings.Contains(body, "newGoalMatcher(goal)") {
+		t.Fatal("goal progress should precompute goal filter sets once per evaluation")
+	}
+	if strings.Contains(body, "matchesAny(") {
+		t.Fatal("goal progress should not run repeated linear matches in the hot path")
 	}
 }
 
@@ -258,4 +274,16 @@ func TestComputeAllTimeStatsIncludesEveryHeartbeat(t *testing.T) {
 	if got.Range != "all_time" {
 		t.Fatalf("expected all_time range, got %q", got.Range)
 	}
+}
+
+func functionSource(source, name string) string {
+	start := strings.Index(source, "func "+name)
+	if start == -1 {
+		return ""
+	}
+	next := strings.Index(source[start+1:], "\nfunc ")
+	if next == -1 {
+		return source[start:]
+	}
+	return source[start : start+1+next]
 }
