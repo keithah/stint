@@ -356,11 +356,15 @@ func parseCommonWithFlagSet(fs *flag.FlagSet, args []string) (Options, error) {
 	if err != nil {
 		return o, err
 	}
+	nativeCfg := loadNativeConfig()
 	o.Config = cfg
 	internalCfg, _ := LoadConfig(o.InternalConfigPath)
 	o.InternalConfig = internalCfg
-	o.APIURL = first(o.APIURL, configFirst(cfg, "api_url", "api-url", "apiurl"), os.Getenv("STINT_API_URL"), defaultAPIURL)
-	apiKey, err := resolveAPIKey(o.Key, cfg, os.Getenv("STINT_API_KEY"), os.Getenv("WAKATIME_API_KEY"))
+	o.APIURL = first(o.APIURL, os.Getenv("STINT_API_URL"), configFirst(nativeCfg, "api_url", "api-url", "apiurl"), configFirst(cfg, "api_url", "api-url", "apiurl"), defaultAPIURL)
+	apiKey := first(o.Key, os.Getenv("STINT_API_KEY"))
+	if apiKey == "" {
+		apiKey, err = resolveAPIKeyFromConfigs("", []Config{nativeCfg, cfg}, os.Getenv("WAKATIME_API_KEY"))
+	}
 	if err != nil {
 		return o, err
 	}
@@ -714,6 +718,22 @@ func resolveAPIKey(key string, cfg Config, fallbacks ...string) (string, error) 
 		return key, nil
 	}
 	return resolveAPIKeyFromConfig(cfg, fallbacks...)
+}
+
+func resolveAPIKeyFromConfigs(key string, configs []Config, fallbacks ...string) (string, error) {
+	if key != "" {
+		return key, nil
+	}
+	for _, cfg := range configs {
+		apiKey, err := resolveAPIKeyFromConfig(cfg)
+		if err != nil {
+			return "", err
+		}
+		if apiKey != "" {
+			return apiKey, nil
+		}
+	}
+	return first(fallbacks...), nil
 }
 
 func resolveAPIKeyFromConfig(cfg Config, fallbacks ...string) (string, error) {
