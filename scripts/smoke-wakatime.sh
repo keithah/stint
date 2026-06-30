@@ -341,6 +341,30 @@ printf '%s' "${user_agent_heartbeats_json}" | grep -q '"plugin_version":"v1.102.
 printf '%s' "${user_agent_heartbeats_json}" | grep -q '"editor_version":"1.89.0"'
 printf '%s' "${user_agent_heartbeats_json}" | grep -q '"architecture":"amd64"'
 
+editor_smoke_entity="/tmp/stint-smoke/editor-${now}.go"
+ai_smoke_entity="/tmp/stint-smoke/ai-${now}.prompt"
+smoke_heartbeat_date="$(node -e 'console.log(new Date(Number(process.argv[1]) * 1000).toISOString().slice(0, 10))' "${now}")"
+curl -fsS \
+  -H "Authorization: Bearer ${api_key}" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: wakatime/v1.102.1 (linux-amd64) go1.23.0 zed/0.191.0 zed-wakatime/0.5.0" \
+  -d "[{\"entity\":\"${editor_smoke_entity}\",\"type\":\"file\",\"category\":\"coding\",\"time\":$((now + 600)),\"project\":\"stint-editor-smoke\",\"branch\":\"main\",\"language\":\"Go\",\"machine_name\":\"local\"}]" \
+  "${api_base}/api/v1/users/current/heartbeats.bulk" >/dev/null
+
+curl -fsS \
+  -H "Authorization: Bearer ${api_key}" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: wakatime/v1.102.1 (linux-amd64) go1.23.0 codex-cli-wakatime/0.1.0" \
+  -d "[{\"entity\":\"${ai_smoke_entity}\",\"type\":\"app\",\"category\":\"ai coding\",\"time\":$((now + 900)),\"project\":\"stint-ai-smoke\",\"language\":\"Text\",\"machine_name\":\"local\",\"ai_line_changes\":7,\"human_line_changes\":0,\"ai_session\":\"smoke-ai-session\",\"ai_input_tokens\":321,\"ai_output_tokens\":123,\"ai_prompt_length\":77,\"ai_subscription_plan\":\"Codex\",\"ai_model\":\"gpt-5-codex\",\"ai_provider\":\"openai\"}]" \
+  "${api_base}/api/v1/users/current/heartbeats.bulk" >/dev/null
+
+representative_heartbeats_json="$(curl -fsS \
+  -H "Authorization: Bearer ${api_key}" \
+  "${api_base}/api/v1/users/current/heartbeats?date=${smoke_heartbeat_date}")"
+printf '%s' "${representative_heartbeats_json}" | grep -q "${editor_smoke_entity}"
+printf '%s' "${representative_heartbeats_json}" | grep -q "${ai_smoke_entity}"
+current_stats_until_contains "stint-ai-smoke" >/dev/null
+
 curl -fsS \
   -H "Authorization: Bearer ${summary_language_key}" \
   "${api_base}/api/v1/users/current/durations?date=$(date -u +%F)&slice_by=language" | grep -q '"language":"Go"'

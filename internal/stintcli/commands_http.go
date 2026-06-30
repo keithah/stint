@@ -3,7 +3,6 @@ package stintcli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -267,48 +266,4 @@ func runDeleteNoBody(args []string, stdout io.Writer, path string) error {
 		return nil
 	}
 	return writeOutput(stdout, opts.Output, response)
-}
-
-func runDoctor(args []string, stdout io.Writer) error {
-	opts, err := parseCommon(args)
-	if err != nil {
-		return err
-	}
-	opts.LogWriter = stdout
-	client, err := NewClient(opts)
-	if err != nil {
-		return err
-	}
-	body, err := client.Get(context.Background(), "/meta")
-	if err != nil {
-		return err
-	}
-	count, err := CountQueue(opts.QueuePath)
-	return writeDoctorOutput(stdout, opts.Output, body, count, err)
-}
-
-func writeDoctorOutput(stdout io.Writer, format string, body []byte, offlineCount int, countErr error) error {
-	format = strings.TrimSpace(format)
-	if format == "json" || format == "raw-json" {
-		var payload map[string]any
-		if err := json.Unmarshal(body, &payload); err != nil {
-			return err
-		}
-		if countErr == nil {
-			payload["offline_queue_count"] = offlineCount
-		}
-		encoded, err := marshalJSONNoHTMLEscape(payload)
-		if err != nil {
-			return err
-		}
-		_, err = fmt.Fprintln(stdout, string(encoded))
-		return err
-	}
-	if err := writeOutput(stdout, format, body); err != nil {
-		return err
-	}
-	if countErr == nil {
-		fmt.Fprintf(stdout, "\noffline_queue_count=%d\n", offlineCount)
-	}
-	return nil
 }
