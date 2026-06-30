@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" role="img" aria-label="Stint Codex telemetry screenshot">
+  <rect width="960" height="600" fill="#070b10"/>
+  <rect x="70" y="58" width="820" height="484" rx="16" fill="#101820" stroke="#26364a"/>
+  <text x="108" y="128" fill="#f4f4f5" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">Codex activity</text>
+  <rect x="108" y="168" width="744" height="86" rx="10" fill="#0b1118" stroke="#26364a"/>
+  <text x="132" y="220" fill="#38bdf8" font-family="Inter, Arial, sans-serif" font-size="24">Agent</text><text x="286" y="220" fill="#f4f4f5" font-family="Inter, Arial, sans-serif" font-size="24">codex</text>
+  <rect x="108" y="276" width="744" height="86" rx="10" fill="#0b1118" stroke="#26364a"/>
+  <text x="132" y="328" fill="#38bdf8" font-family="Inter, Arial, sans-serif" font-size="24">Model</text><text x="286" y="328" fill="#f4f4f5" font-family="Inter, Arial, sans-serif" font-size="24">gpt-5-codex</text>
+  <rect x="108" y="384" width="744" height="86" rx="10" fill="#0b1118" stroke="#26364a"/>
+  <text x="132" y="436" fill="#38bdf8" font-family="Inter, Arial, sans-serif" font-size="24">Tokens</text><text x="286" y="436" fill="#f4f4f5" font-family="Inter, Arial, sans-serif" font-size="24">input and output tracked</text>
+</svg>

@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 const recipes = [
-  { name: "Stint CLI", expected: "bin/stint config init" },
+  { name: "Stint CLI", expected: "curl -fsSL https://stint.fyi/install.sh | sh" },
   { name: "WakaTime CLI", expected: "wakatime-cli --entity" },
-  { name: "Codex", expected: "bin/stint --sync-ai-activity --agent codex" },
-  { name: "VS Code", expected: "Install the WakaTime extension from the VS Code Marketplace." },
-  { name: "JetBrains", expected: "Install the WakaTime plugin from JetBrains Marketplace." },
-  { name: "Vim/Neovim", expected: "Install vim-wakatime for Vim or Neovim." },
+  { name: "Codex", expected: "stint --sync-ai-activity --ai-agent codex" },
+  { name: "VS Code", expected: "Install from the VS Code Marketplace" },
+  { name: "JetBrains", expected: "Install from JetBrains Marketplace" },
+  { name: "Vim/Neovim", expected: "Install vim-wakatime" },
   { name: "Shell CLI", expected: "curl -X POST" }
 ];
 
@@ -38,6 +38,9 @@ test("integration names reveal full setup instructions", async ({ page }) => {
   for (const recipe of recipes) {
     await page.getByRole("button", { name: `Show ${recipe.name} integration instructions` }).click();
     await expect(page.locator("#integration-instructions")).toContainText(recipe.expected);
+    await expect(page.locator("#integration-instructions")).toContainText("Install with one command");
+    await expect(page.locator("#integration-instructions")).toContainText("Manual setup");
+    await expect(page.locator("#integration-instructions img")).toHaveCount(1);
   }
 
   await expect(page.getByText("Stint client roadmap")).toHaveCount(0);

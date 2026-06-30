@@ -46,110 +46,35 @@ scripts/generate-sqlc.sh
 
 ## Editor Config
 
-Build the native CLI:
+Install the native CLI from the latest release:
 
 ```bash
-make stint
-bin/stint config init --api-url http://localhost:8080/api/v1 --api-key waka_00000000-0000-4000-8000-000000000000
-bin/stint api-keys
-bin/stint api-keys create "Editor key" --scope write_heartbeats --scope read_stats
-bin/stint api-keys delete API_KEY_ID
-bin/stint oauth-apps
-bin/stint oauth-apps create "Local OAuth app" --redirect-uri http://localhost:3000/callback --scope read_stats
-bin/stint oauth-apps delete OAUTH_APP_ID
-bin/stint oauth token --client-id OAUTH_CLIENT_ID --client-secret OAUTH_CLIENT_SECRET --code AUTH_CODE --redirect-uri http://localhost:3000/callback
-bin/stint oauth token --client-id OAUTH_CLIENT_ID --client-secret OAUTH_CLIENT_SECRET --refresh-token REFRESH_TOKEN
-bin/stint oauth revoke ACCESS_OR_REFRESH_TOKEN --client-id OAUTH_CLIENT_ID --client-secret OAUTH_CLIENT_SECRET
-bin/stint account
-bin/stint account update account.json
-bin/stint account delete --confirm
-bin/stint meta
-bin/stint api-docs
-bin/stint leaders
-bin/stint leaders --language Go --country US
-bin/stint editors
-bin/stint program-languages
-bin/stint users public-username
-bin/stint users public-username stats last_7_days
-bin/stint users public-username stats --range last_30_days
-bin/stint users public-username summaries
-bin/stint users public-username summaries --start 2026-06-01 --end 2026-06-30
-bin/stint share SHARE_TOKEN stats
-bin/stint share SHARE_TOKEN stats --range last_7_days
-bin/stint share SHARE_TOKEN summaries
-bin/stint share SHARE_TOKEN summaries --start 2026-06-01 --end 2026-06-30
-bin/stint health
-bin/stint health ingestion
-bin/stint dev seed-key --github-id 4001 --username local-dev
-bin/stint dev heartbeats-purge --retention-days 0
-bin/stint dev leaderboard-update --range last_7_days
-bin/stint dev goals-evaluate
-bin/stint heartbeat --entity "$PWD/main.go" --write --project stint
-bin/stint heartbeat --entity "$PWD/main.go" --category "ai coding" --ai-model gpt-5-codex --ai-provider openai --ai-agent codex --metadata '{"source":"manual"}'
-bin/stint heartbeats "$(date +%F)"
-bin/stint durations "$(date +%F)" --slice-by language
-bin/stint summaries "$(date -u -v-6d +%F 2>/dev/null || date -u -d '6 days ago' +%F)" "$(date +%F)"
-bin/stint projects stint
-bin/stint projects stint commits --branch main
-bin/stint projects stint commits COMMIT_HASH
-bin/stint all-time
-bin/stint machine-names
-bin/stint user-agents
-bin/stint goals
-bin/stint goals create goal.json
-bin/stint goals update GOAL_ID goal.json
-bin/stint goals delete GOAL_ID
-bin/stint insights languages last_7_days
-bin/stint external-durations
-bin/stint external-durations create external-duration.json
-bin/stint external-durations bulk external-durations.json
-bin/stint external-durations delete 00000000-0000-4000-8000-000000000000
-bin/stint external-durations delete --ids id-1,id-2
-bin/stint custom-pricing
-bin/stint custom-pricing upsert custom-pricing.json
-bin/stint custom-pricing delete gpt-5-codex
-bin/stint pricing-sources
-bin/stint pricing-models
-bin/stint billing-prefs
-bin/stint billing-prefs upsert billing-pref.json
-bin/stint billing-prefs delete codex
-bin/stint ai-costs
-bin/stint ai-costs replace ai-costs.json
-bin/stint leaderboards
-bin/stint leaderboards create leaderboard.json
-bin/stint leaderboards update BOARD_ID leaderboard.json
-bin/stint leaderboards add-member BOARD_ID github-username
-bin/stint leaderboards remove-member BOARD_ID USER_ID
-bin/stint leaderboards delete BOARD_ID
-bin/stint share-tokens
-bin/stint share-tokens create "Public read"
-bin/stint share-tokens delete SHARE_TOKEN_ID
-bin/stint events
-bin/stint usage-events --start "$(date +%F)" --end "$(date +%F)"
-bin/stint usage-events summary --range last_30_days --cost-mode calculate
-bin/stint usage-events blocks --range last_7_days
-bin/stint data-dumps create heartbeats
-bin/stint data-dumps create daily
-bin/stint data-dumps
-bin/stint data-dumps download DUMP_ID
-bin/stint custom-rules
-bin/stint custom-rules replace custom-rules.json
-bin/stint custom-rules delete RULE_ID
-bin/stint custom-rules progress
-bin/stint custom-rules abort
-bin/stint import wakatime ~/Downloads/wakatime-dump.json
-gzip -dc ~/Downloads/wakatime-dump.json.gz | bin/stint import wakatime --stdin
-bin/stint doctor
-bin/stint collect
-bin/stint offline count
-bin/stint offline print
-bin/stint offline sync
-bin/stint --sync-ai-activity
+curl -fsSL https://stint.fyi/install.sh | sh
+stint config init --api-url http://localhost:8080/api/v1 --api-key waka_00000000-0000-4000-8000-000000000000
+stint doctor
+stint heartbeat --entity "$PWD/main.go" --write --project stint
 ```
 
-Package builds can stamp version metadata with `make stint VERSION=1.2.3 COMMIT="$(git rev-parse --short HEAD)" BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"`; verify it with `bin/stint --version --verbose`.
+For editor-only tracking, install the WakaTime plugin from your editor's marketplace and use this shared config:
 
-Use `make stint-install` to install both `stint` and the `stint-collect` helper used by `stint collect`.
+```ini
+[settings]
+api_url = http://localhost:8080/api/v1
+api_key = waka_00000000-0000-4000-8000-000000000000
+heartbeat_rate_limit_seconds = 30
+offline = true
+```
+
+Common CLI checks:
+
+```bash
+stint today
+stint user-agents
+stint data-dumps download DUMP_ID
+stint offline sync
+stint --sync-ai-activity --ai-agent codex
+```
+
 The CLI uses WakaTime-compatible resource paths: `~/.wakatime.cfg` for config,
 `~/.wakatime/offline_heartbeats.bdb` for queued heartbeats, and
 `~/.wakatime/wakatime.log` for request logs. When `WAKATIME_HOME` is set,
@@ -232,7 +157,7 @@ alias for API credentials.
 Normal heartbeat sends also scan supported local AI transcript sources unless
 `--sync-ai-disabled` is set or `settings.sync_ai_disabled = true` is configured,
 matching `wakatime-cli`'s default AI sync behavior.
-Use `bin/stint --sync-ai-activity` when you want to sync AI activity without
+Use `stint --sync-ai-activity` when you want to sync AI activity without
 sending a file heartbeat. AI file heartbeats respect the same include/exclude
 filters as normal file heartbeats. Supported sources include Codex, Claude,
 Continue dev data with session workspace mapping, Amp, Copilot CLI and VS Code workspace storage, Gemini, Antigravity

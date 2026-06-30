@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clipboard,
   Code2,
+  ExternalLink,
   KeyRound,
   PlugZap,
   Plus,
@@ -27,7 +28,12 @@ import {
   serverMeta,
   type UserAgent,
 } from "@/lib/api";
-import { clients, compatibilityNote, integrationConfigs } from "./recipes";
+import {
+  clients,
+  compatibilityNote,
+  integrationConfigs,
+  type IntegrationConfig,
+} from "./recipes";
 
 export default function IntegrationsPage() {
   return <IntegrationsContent />;
@@ -215,7 +221,7 @@ function IntegrationsContent() {
               config={selectedConfig}
               copied={copied === selectedConfig.id}
               onCopy={() =>
-                copyText(selectedConfig.id, selectedConfig.lines.join("\n"))
+                copyText(selectedConfig.id, recipeCopyText(selectedConfig))
               }
             />
           </Panel>
@@ -460,6 +466,7 @@ function ClientCard({
     <a
       className={`rounded border p-4 text-left transition hover:border-accent/60 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/60 ${selected ? "border-accent/60 bg-accent/10" : "border-line bg-ink"}`}
       href={href}
+      role="button"
       onClick={() => onSelect(recipeId)}
       aria-label={`Show ${name} integration instructions`}
       aria-pressed={selected}
@@ -493,16 +500,19 @@ function IntegrationRecipe({
   copied,
   onCopy,
 }: {
-  config: ReturnType<typeof integrationConfigs>[number];
+  config: IntegrationConfig;
   copied: boolean;
   onCopy: () => void;
 }) {
   return (
     <div
-      id={config.id}
-      className="rounded border border-line bg-ink p-4"
+      id="integration-instructions"
+      className="space-y-5"
       aria-label="integration-instructions"
     >
+      <span id={config.id} className="sr-only">
+        {config.name}
+      </span>
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-medium text-zinc-100">{config.name}</h3>
@@ -517,9 +527,89 @@ function IntegrationRecipe({
           onCopy={onCopy}
         />
       </div>
-      <CodeBlock lines={config.lines} />
+      <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
+        <figure className="overflow-hidden rounded border border-line bg-[#070b10]">
+          <img
+            className="block aspect-[16/10] w-full object-cover"
+            src={config.screenshot.src}
+            alt={config.screenshot.alt}
+          />
+          <figcaption className="border-t border-line px-3 py-2 text-xs leading-5 text-zinc-500">
+            {config.screenshot.caption}
+          </figcaption>
+        </figure>
+        <div className="grid gap-3">
+          {config.options.map((option) => (
+            <SetupOptionCard key={option.title} option={option} />
+          ))}
+        </div>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {config.steps.map((step) => (
+          <div key={step.title} className="rounded border border-line bg-panel p-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">
+              {step.title}
+            </div>
+            <p className="mt-2 text-sm leading-5 text-zinc-400">{step.body}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-5">
+        <div className="mb-2 text-sm font-medium text-zinc-100">
+          Check that it works
+        </div>
+        <CodeBlock lines={config.verify} />
+      </div>
+      {config.notes?.length ? (
+        <div className="mt-4 rounded border border-line bg-panel p-3 text-sm leading-6 text-zinc-400">
+          {config.notes.map((note) => (
+            <p key={note} className="mb-2 last:mb-0">
+              {note}
+            </p>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function SetupOptionCard({
+  option,
+}: {
+  option: IntegrationConfig["options"][number];
+}) {
+  return (
+    <div className="rounded border border-line bg-panel p-3">
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <h4 className="text-sm font-medium text-zinc-100">{option.title}</h4>
+        <span className="shrink-0 rounded border border-line px-2 py-1 text-[11px] uppercase tracking-[0.12em] text-zinc-500">
+          {option.badge}
+        </span>
+      </div>
+      <p className="text-sm leading-5 text-zinc-500">{option.description}</p>
+      {option.commands?.length ? (
+        <div className="mt-3">
+          <CodeBlock lines={option.commands} />
+        </div>
+      ) : null}
+      {option.link ? (
+        <a
+          className="mt-3 inline-flex items-center gap-2 text-sm text-accent hover:text-sky-300"
+          href={option.link.href}
+        >
+          {option.link.label} <ExternalLink size={14} />
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+function recipeCopyText(config: IntegrationConfig) {
+  const commands = [
+    ...config.options.flatMap((option) => option.commands ?? []),
+    ...config.verify,
+  ];
+  return [...new Set(commands)].join("\n");
 }
 
 function CopyableCodeBlock({

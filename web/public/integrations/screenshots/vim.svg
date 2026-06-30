@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" role="img" aria-label="Vim setup with WakaTime config">
+  <rect width="960" height="600" fill="#070b10"/>
+  <rect x="80" y="72" width="800" height="456" rx="18" fill="#101820" stroke="#26364a"/>
+  <text x="122" y="144" fill="#86efac" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="26">:PluginInstall vim-wakatime</text>
+  <text x="122" y="216" fill="#d4d4d8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24">~/.wakatime.cfg</text>
+  <text x="122" y="268" fill="#38bdf8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24">api_url = https://stint.fyi/api/v1</text>
+  <text x="122" y="312" fill="#38bdf8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24">api_key = waka_••••••••</text>
+  <text x="122" y="404" fill="#86efac" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24">Edit a file and Stint records activity</text>
+</svg>

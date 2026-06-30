@@ -48,3 +48,30 @@ func TestWebDockerfileHealthcheckUsesReachableNextBinding(t *testing.T) {
 		t.Fatal("web image should healthcheck the lightweight /healthz route")
 	}
 }
+
+func TestGitHubReleaseWorkflowPublishesStintBinaries(t *testing.T) {
+	sourceBytes, err := os.ReadFile(".github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(sourceBytes)
+	for _, want := range []string{
+		"on:",
+		"tags:",
+		"v*",
+		"cmd/stint",
+		"goos: darwin",
+		"goos: linux",
+		"goarch: amd64",
+		"goarch: arm64",
+		"stint_${VERSION}_${GOOS}_${GOARCH}.tar.gz",
+		"softprops/action-gh-release",
+	} {
+		if !strings.Contains(source, want) {
+			t.Fatalf("release workflow missing %q", want)
+		}
+	}
+	if strings.Contains(source, "go test ./...") {
+		t.Fatal("release workflow should not run the full testcontainers test suite just to package binaries")
+	}
+}

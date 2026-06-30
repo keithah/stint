@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" role="img" aria-label="JetBrains Marketplace WakaTime plugin setup">
+  <rect width="960" height="600" fill="#070b10"/>
+  <rect x="76" y="66" width="808" height="468" rx="18" fill="#111827" stroke="#26364a"/>
+  <text x="116" y="136" fill="#f4f4f5" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">Plugins</text>
+  <rect x="116" y="180" width="728" height="104" rx="12" fill="#0b1118" stroke="#38bdf8"/>
+  <text x="150" y="236" fill="#f4f4f5" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="700">WakaTime</text>
+  <text x="150" y="352" fill="#9ca3af" font-family="Inter, Arial, sans-serif" font-size="24">Install from JetBrains Marketplace</text>
+  <text x="150" y="404" fill="#38bdf8" font-family="Inter, Arial, sans-serif" font-size="24">Restart IDE, then edit a file</text>
+</svg>

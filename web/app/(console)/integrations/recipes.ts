@@ -1,305 +1,535 @@
+export const stintInstallCommand = "curl -fsSL https://stint.fyi/install.sh | sh";
+
 export const clients = [
   {
     recipeId: "stint-cli-config",
     name: "Stint CLI",
     status: "live",
     description:
-      "Use the native CLI for WakaTime-style heartbeats, status checks, projects, goals, file experts, and offline sync.",
-    bullets: [
-      "Drop-in root flags",
-      "Git/Hg/SVN detection",
-      "BoltDB offline queue",
-    ],
+      "Install the prebuilt Stint app for terminal, AI agent, and editor activity.",
+    bullets: ["One command install", "Works offline", "Adds AI model details"],
   },
   {
     recipeId: "wakatime-cli-config",
     name: "WakaTime CLI",
     status: "supported",
     description:
-      "Use the official CLI and existing editor plugins by changing the API URL and key.",
-    bullets: [
-      "Heartbeat ingestion",
-      "Durations and summaries",
-      "User-Agent editor parsing",
-    ],
+      "Keep using the official WakaTime CLI and point it at your Stint account.",
+    bullets: ["Existing CLI works", "No editor changes", "Offline sync"],
   },
   {
     recipeId: "codex-config",
     name: "Codex",
     status: "supported",
     description:
-      "Codex heartbeats are parsed for editor, OS, agent, and version labels when available.",
-    bullets: [
-      "Agent attribution",
-      "Token cost metrics",
-      "Project and branch detection",
-    ],
+      "Sync Codex sessions so Stint can show agent, model, project, and cost context.",
+    bullets: ["Codex attribution", "Token metadata", "Project detection"],
   },
   {
     recipeId: "vscode-config",
     name: "VS Code",
     status: "compatible",
     description:
-      "Use the existing extension, then point the shared config file at Stint.",
-    bullets: [
-      "Extension marketplace",
-      "Project/language charts",
-      "Machine and OS breakdowns",
-    ],
+      "Install the editor extension from the Marketplace, then paste your Stint key.",
+    bullets: ["Marketplace install", "Status bar activity", "Language charts"],
   },
   {
     recipeId: "jetbrains-config",
     name: "JetBrains",
     status: "compatible",
     description:
-      "JetBrains IDEs work through the existing plugin and the same config file.",
-    bullets: [
-      "Basic and Bearer auth",
-      "Project/language charts",
-      "Machine and OS breakdowns",
-    ],
+      "Use the JetBrains Marketplace plugin with your Stint endpoint and API key.",
+    bullets: ["Marketplace install", "Project charts", "Language charts"],
   },
   {
     recipeId: "vim-config",
     name: "Vim/Neovim",
     status: "compatible",
     description:
-      "Terminal editors can send standard activity check-ins to Stint.",
-    bullets: [
-      "Shared ~/.wakatime.cfg",
-      "Project .wakatime overrides",
-      "Branch and language inference",
-    ],
+      "Install the Vim plugin once, then keep Stint settings in your home folder.",
+    bullets: ["Vim plugin", "Neovim support", "Shared config"],
   },
   {
     recipeId: "shell-cli-config",
     name: "Shell CLI",
     status: "compatible",
     description:
-      "Use curl or any HTTP client to send WakaTime-shaped heartbeats directly.",
-    bullets: ["Bearer auth", "JSON payloads", "Smoke-test friendly"],
+      "Send a test heartbeat from any terminal when you want to verify ingestion.",
+    bullets: ["No plugin required", "Smoke tests", "Bearer auth"],
   },
 ] as const;
 
+type SetupOption = {
+  title: string;
+  badge: string;
+  description: string;
+  commands?: readonly string[];
+  link?: {
+    label: string;
+    href: string;
+  };
+};
+
+type SetupStep = {
+  title: string;
+  body: string;
+};
+
+type SetupScreenshot = {
+  src: string;
+  alt: string;
+  caption: string;
+};
+
+export type IntegrationConfig = {
+  id: string;
+  name: string;
+  description: string;
+  options: readonly SetupOption[];
+  steps: readonly SetupStep[];
+  verify: readonly string[];
+  screenshot: SetupScreenshot;
+  notes?: readonly string[];
+};
+
 export function integrationConfigs(apiURL: string, apiKey: string) {
+  const configBlock = [
+    "mkdir -p ~/.wakatime",
+    "cat > ~/.wakatime.cfg <<'EOF'",
+    "[settings]",
+    `api_url = ${apiURL}`,
+    `api_key = ${apiKey}`,
+    "heartbeat_rate_limit_seconds = 30",
+    "offline = true",
+    "EOF",
+  ];
+
   return [
     {
       id: "stint-cli-config",
       name: "Stint CLI",
       description:
-        "Build the native client, initialize config, then send a compatibility heartbeat.",
-      lines: [
-        "make stint",
-        `bin/stint config init --api-url ${apiURL} --api-key ${apiKey}`,
-        "bin/stint api-keys",
-        'bin/stint api-keys create "Editor key" --scope write_heartbeats --scope read_stats',
-        "bin/stint api-keys delete API_KEY_ID",
-        "bin/stint oauth-apps",
-        'bin/stint oauth-apps create "Local OAuth app" --redirect-uri http://localhost:3000/callback --scope read_stats',
-        "bin/stint oauth-apps delete OAUTH_APP_ID",
-        "bin/stint oauth token --client-id OAUTH_CLIENT_ID --client-secret OAUTH_CLIENT_SECRET --code AUTH_CODE --redirect-uri http://localhost:3000/callback",
-        "bin/stint oauth token --client-id OAUTH_CLIENT_ID --client-secret OAUTH_CLIENT_SECRET --refresh-token REFRESH_TOKEN",
-        "bin/stint oauth revoke ACCESS_OR_REFRESH_TOKEN --client-id OAUTH_CLIENT_ID --client-secret OAUTH_CLIENT_SECRET",
-        "bin/stint account",
-        "bin/stint account update account.json",
-        "bin/stint account delete --confirm",
-        "bin/stint meta",
-        "bin/stint api-docs",
-        "bin/stint leaders",
-        "bin/stint leaders --language Go --country US",
-        "bin/stint editors",
-        "bin/stint program-languages",
-        "bin/stint users public-username",
-        "bin/stint users public-username stats last_7_days",
-        "bin/stint users public-username stats --range last_30_days",
-        "bin/stint users public-username summaries",
-        "bin/stint users public-username summaries --start 2026-06-01 --end 2026-06-30",
-        "bin/stint share SHARE_TOKEN stats",
-        "bin/stint share SHARE_TOKEN stats --range last_7_days",
-        "bin/stint share SHARE_TOKEN summaries",
-        "bin/stint share SHARE_TOKEN summaries --start 2026-06-01 --end 2026-06-30",
-        "bin/stint health",
-        "bin/stint health ingestion",
-        "bin/stint dev seed-key --github-id 4001 --username local-dev",
-        "bin/stint dev heartbeats-purge --retention-days 0",
-        "bin/stint dev leaderboard-update --range last_7_days",
-        "bin/stint dev goals-evaluate",
-        'bin/stint heartbeat --entity "$PWD/main.go" --write --project stint',
-        'bin/stint heartbeat --entity "$PWD/main.go" --category "ai coding" --ai-model gpt-5-codex --ai-provider openai --ai-agent codex --metadata \'{"source":"manual"}\'',
-        'bin/stint heartbeats "$(date +%F)"',
-        "bin/stint today",
-        "bin/stint today --output json",
-        "bin/stint today-goal 00000000-0000-4000-8000-000000000000",
-        "bin/stint stats last_7_days",
-        'bin/stint durations "$(date +%F)" --slice-by language',
-        "bin/stint summaries 2026-06-01 2026-06-30",
-        "bin/stint projects stint",
-        "bin/stint projects stint commits --branch main",
-        "bin/stint projects stint commits COMMIT_HASH",
-        "bin/stint all-time",
-        "bin/stint machine-names",
-        "bin/stint user-agents",
-        "bin/stint goals",
-        "bin/stint goals create goal.json",
-        "bin/stint goals update GOAL_ID goal.json",
-        "bin/stint goals delete GOAL_ID",
-        "bin/stint insights languages last_7_days",
-        "bin/stint external-durations",
-        "bin/stint external-durations create external-duration.json",
-        "bin/stint external-durations bulk external-durations.json",
-        "bin/stint external-durations delete 00000000-0000-4000-8000-000000000000",
-        "bin/stint external-durations delete --ids id-1,id-2",
-        "bin/stint custom-pricing",
-        "bin/stint custom-pricing upsert custom-pricing.json",
-        "bin/stint custom-pricing delete gpt-5-codex",
-        "bin/stint pricing-sources",
-        "bin/stint pricing-models",
-        "bin/stint billing-prefs",
-        "bin/stint billing-prefs upsert billing-pref.json",
-        "bin/stint billing-prefs delete codex",
-        "bin/stint ai-costs",
-        "bin/stint ai-costs replace ai-costs.json",
-        "bin/stint leaderboards",
-        "bin/stint leaderboards create leaderboard.json",
-        "bin/stint leaderboards update BOARD_ID leaderboard.json",
-        "bin/stint leaderboards add-member BOARD_ID github-username",
-        "bin/stint leaderboards remove-member BOARD_ID USER_ID",
-        "bin/stint leaderboards delete BOARD_ID",
-        "bin/stint share-tokens",
-        'bin/stint share-tokens create "Public read"',
-        "bin/stint share-tokens delete SHARE_TOKEN_ID",
-        "bin/stint events",
-        'bin/stint usage-events --start "$(date +%F)" --end "$(date +%F)"',
-        "bin/stint usage-events summary --range last_30_days --cost-mode calculate",
-        "bin/stint usage-events blocks --range last_7_days",
-        "bin/stint data-dumps create heartbeats",
-        "bin/stint data-dumps create daily",
-        "bin/stint data-dumps",
-        "bin/stint data-dumps download DUMP_ID",
-        "bin/stint custom-rules",
-        "bin/stint custom-rules replace custom-rules.json",
-        "bin/stint custom-rules delete RULE_ID",
-        "bin/stint custom-rules progress",
-        "bin/stint custom-rules abort",
-        "bin/stint import wakatime ~/Downloads/wakatime-dump.json",
-        "gzip -dc ~/Downloads/wakatime-dump.json.gz | bin/stint import wakatime --stdin",
-        'bin/stint file-experts "$PWD/main.go"',
-        "bin/stint doctor",
-        "bin/stint collect",
-        'bin/stint --file-experts --entity "$PWD/main.go"',
-        "bin/stint --offline-count",
-        "bin/stint --print-offline-heartbeats 10",
-        "bin/stint --sync-ai-activity",
-        "bin/stint --sync-ai-heartbeats",
-        "bin/stint offline count",
-        "bin/stint offline print",
-        "bin/stint offline sync",
+        "Best choice if you want Stint's native agent support, offline queue, and WakaTime-compatible heartbeats without building anything.",
+      options: [
+        {
+          title: "Install with one command",
+          badge: "Recommended",
+          description:
+            "Open Terminal, paste this command, and Stint installs the right prebuilt binary for your Mac or Linux machine.",
+          commands: [stintInstallCommand, "stint --version"],
+        },
+        {
+          title: "Use a marketplace plugin",
+          badge: "Editors",
+          description:
+            "If you only want editor tracking, install the WakaTime plugin for your editor and use the config below.",
+          link: {
+            label: "Choose an editor plugin",
+            href: "#vscode-config",
+          },
+        },
+        {
+          title: "Manual setup",
+          badge: "Fallback",
+          description:
+            "If your shell blocks install scripts, download the matching release asset from GitHub and put the `stint` binary on your PATH.",
+          link: {
+            label: "Open Stint releases",
+            href: "https://github.com/keithah/stint/releases/latest",
+          },
+        },
+      ],
+      steps: [
+        {
+          title: "Step 1",
+          body: "Create an integration key on this page. Stint will show the key once, so copy it before leaving.",
+        },
+        {
+          title: "Step 2",
+          body: "Run the install command in Terminal. You do not need Go, Git, or this source repository.",
+        },
+        {
+          title: "Step 3",
+          body: "Paste your Stint endpoint and key into the config command below. After that, keep working normally.",
+        },
+      ],
+      verify: [
+        `stint config init --api-url ${apiURL} --api-key ${apiKey}`,
+        "stint doctor",
+        'stint heartbeat --entity "$PWD/README.md" --write --project my-project',
+        "stint today",
+      ],
+      screenshot: {
+        src: "/integrations/screenshots/stint-cli.svg",
+        alt: "Terminal showing the Stint CLI install command and a successful doctor check",
+        caption: "After install, `stint doctor` confirms your key and endpoint.",
+      },
+      notes: [
+        "Use `stint --sync-ai-activity --ai-agent codex` when you want Stint to import local AI coding sessions.",
+        "Advanced commands such as `stint api-keys`, `stint data-dumps download DUMP_ID`, `stint custom-rules progress`, and `stint offline sync` remain available from the CLI help.",
       ],
     },
     {
       id: "wakatime-cli-config",
       name: "WakaTime CLI",
       description:
-        "Install or keep the upstream CLI, then point its shared WakaTime config at Stint.",
-      lines: [
-        "pipx install wakatime",
-        "mkdir -p ~/.wakatime",
-        "cat > ~/.wakatime.cfg <<'EOF'",
-        "[settings]",
-        `api_url = ${apiURL}`,
-        `api_key = ${apiKey}`,
-        "heartbeat_rate_limit_seconds = 30",
-        "offline = true",
-        "EOF",
-        'wakatime-cli --entity "$PWD/main.go" --write --plugin shell/1.0.0',
+        "Best choice if you already have WakaTime CLI installed and just want it to send activity to Stint.",
+      options: [
+        {
+          title: "Install with one command",
+          badge: "CLI",
+          description:
+            "Install or update the official CLI, then use the Stint config below.",
+          commands: [
+            "curl -fsSL https://raw.githubusercontent.com/wakatime/wakatime-cli/master/install.sh | sh",
+            "wakatime-cli --version",
+          ],
+        },
+        {
+          title: "Use a marketplace plugin",
+          badge: "Editors",
+          description:
+            "Most WakaTime editor plugins install the CLI for you. Install the plugin first, then paste the Stint settings.",
+          link: {
+            label: "Use VS Code instructions",
+            href: "#vscode-config",
+          },
+        },
+        {
+          title: "Manual setup",
+          badge: "Config file",
+          description:
+            "Create `~/.wakatime.cfg` yourself. This works for WakaTime CLI and most existing plugins.",
+          commands: configBlock,
+        },
+      ],
+      steps: [
+        {
+          title: "Step 1",
+          body: "Create or copy a Stint integration key.",
+        },
+        {
+          title: "Step 2",
+          body: "Save the settings file exactly as shown. The API URL tells WakaTime CLI to send activity to Stint.",
+        },
+        {
+          title: "Step 3",
+          body: "Edit a file or run the test command. New activity appears in Stint after the first heartbeat.",
+        },
+      ],
+      verify: [
+        ...configBlock,
+        'wakatime-cli --entity "$PWD/README.md" --write --plugin shell/1.0.0',
         "wakatime-cli --today",
         "wakatime-cli --offline-count",
         "wakatime-cli --sync-offline-activity",
       ],
+      screenshot: {
+        src: "/integrations/screenshots/wakatime-cli.svg",
+        alt: "Terminal showing a WakaTime CLI heartbeat sent to Stint",
+        caption: "The WakaTime CLI can keep its normal command names.",
+      },
     },
     {
       id: "codex-config",
       name: "Codex",
       description:
-        "Use the native Stint CLI to sync local Codex sessions and emit model-aware AI activity.",
-      lines: [
-        "make stint",
-        `bin/stint config init --api-url ${apiURL} --api-key ${apiKey}`,
-        "bin/stint --sync-ai-activity --agent codex",
-        "bin/stint --sync-ai-heartbeats --agent codex",
-        'bin/stint heartbeat --entity "$PWD/main.go" --category "ai coding" --ai-agent codex --ai-provider openai --ai-model gpt-5-codex --write',
-        "bin/stint today --output json",
-        "bin/stint user-agents",
+        "Best choice if you use Codex and want Stint to show AI coding activity with model and token context.",
+      options: [
+        {
+          title: "Install with one command",
+          badge: "Recommended",
+          description:
+            "Install Stint CLI once. It can read local Codex activity and send model-aware heartbeats.",
+          commands: [stintInstallCommand],
+        },
+        {
+          title: "Use a marketplace plugin",
+          badge: "Editor",
+          description:
+            "If you use Codex inside an editor, install that editor's WakaTime plugin too so normal coding time is tracked.",
+          link: {
+            label: "Use VS Code instructions",
+            href: "#vscode-config",
+          },
+        },
+        {
+          title: "Manual setup",
+          badge: "Advanced",
+          description:
+            "Send one model-aware heartbeat yourself when you want to test AI telemetry.",
+          commands: [
+            'stint heartbeat --entity "$PWD/README.md" --category "ai coding" --ai-agent codex --ai-provider openai --ai-model gpt-5-codex --write',
+          ],
+        },
+      ],
+      steps: [
+        {
+          title: "Step 1",
+          body: "Install Stint CLI and save your integration key.",
+        },
+        {
+          title: "Step 2",
+          body: "Run the Codex sync command after a session. Stint reads local session details and attaches agent metadata.",
+        },
+        {
+          title: "Step 3",
+          body: "Open AI Costs or Dashboard to confirm the Codex model, provider, and token fields are visible.",
+        },
+      ],
+      verify: [
+        `stint config init --api-url ${apiURL} --api-key ${apiKey}`,
+        "stint --sync-ai-activity --ai-agent codex",
+        'stint heartbeat --entity "$PWD/README.md" --category "ai coding" --ai-agent codex --ai-provider openai --ai-model gpt-5-codex --metadata \'{"source":"manual"}\'',
+        "stint user-agents",
+      ],
+      screenshot: {
+        src: "/integrations/screenshots/codex.svg",
+        alt: "Stint integration guide showing Codex model telemetry",
+        caption: "Codex activity shows up with agent, provider, and model fields.",
+      },
+      notes: [
+        "Model-aware fields include `ai_model`, `llm_model`, `ai_provider`, `ai_input_tokens`, `ai_output_tokens`, and structured metadata.",
       ],
     },
     {
       id: "vscode-config",
       name: "VS Code",
-      description: "Install the editor extension, then use this shared config.",
-      lines: [
-        "Install the WakaTime extension from the VS Code Marketplace.",
-        "mkdir -p ~/.wakatime",
-        "cat > ~/.wakatime.cfg <<'EOF'",
-        "[settings]",
-        `api_url = ${apiURL}`,
-        `api_key = ${apiKey}`,
-        "import_cfg = ~/.wakatime/private.cfg",
-        "heartbeat_rate_limit_seconds = 30",
-        "status_bar_enabled = true",
-        "status_bar_show_categories = true",
-        "status_bar_coding_activity = true",
-        "EOF",
-        "Reload VS Code, edit a file, then check Stint > Integrations for the latest user agent.",
+      description:
+        "Best choice for VS Code users who want a normal Marketplace install and a simple Stint key paste.",
+      options: [
+        {
+          title: "Install with one command",
+          badge: "CLI option",
+          description:
+            "Use Stint CLI if you prefer terminal setup or need AI activity sync alongside VS Code.",
+          commands: [stintInstallCommand],
+        },
+        {
+          title: "Use a marketplace plugin",
+          badge: "Recommended",
+          description:
+            "Install from the VS Code Marketplace, then paste your Stint API key when the extension asks.",
+          link: {
+            label: "Open VS Code Marketplace",
+            href: "https://marketplace.visualstudio.com/items?itemName=WakaTime.vscode-wakatime",
+          },
+        },
+        {
+          title: "Manual setup",
+          badge: "Config file",
+          description:
+            "If the extension does not prompt you, create the shared config file below and reload VS Code.",
+          commands: [
+            ...configBlock,
+            "code --install-extension WakaTime.vscode-wakatime",
+          ],
+        },
       ],
+      steps: [
+        {
+          title: "Step 1",
+          body: "Install the WakaTime extension from the VS Code Marketplace.",
+        },
+        {
+          title: "Step 2",
+          body: "When VS Code asks for an API key, paste your Stint integration key.",
+        },
+        {
+          title: "Step 3",
+          body: "Edit any file for a minute. Stint will show VS Code under Connection health.",
+        },
+      ],
+      verify: [
+        ...configBlock,
+        "Reload VS Code",
+        "Open a project and edit a file",
+        "Check this page for a VS Code user agent",
+      ],
+      screenshot: {
+        src: "/integrations/screenshots/vscode.svg",
+        alt: "VS Code extension setup screen with the Stint API key field highlighted",
+        caption: "Paste the Stint key into the extension prompt or shared config file.",
+      },
     },
     {
       id: "jetbrains-config",
       name: "JetBrains",
       description:
-        "Install the activity plugin from JetBrains Marketplace and reuse the same API URL.",
-      lines: [
-        "Install the WakaTime plugin from JetBrains Marketplace.",
-        "mkdir -p ~/.wakatime",
-        "cat > ~/.wakatime.cfg <<'EOF'",
-        "[settings]",
-        `api_url = ${apiURL}`,
-        `api_key = ${apiKey}`,
-        "heartbeat_rate_limit_seconds = 30",
-        "hide_project_names = false",
-        "EOF",
-        "Restart the IDE, open a project, edit a file, then check Stint > Integrations for the JetBrains user agent.",
+        "Best choice for IntelliJ IDEA, PyCharm, WebStorm, GoLand, and other JetBrains IDEs.",
+      options: [
+        {
+          title: "Install with one command",
+          badge: "CLI option",
+          description:
+            "Use Stint CLI for terminal and AI activity, then add the JetBrains plugin for editor time.",
+          commands: [stintInstallCommand],
+        },
+        {
+          title: "Use a marketplace plugin",
+          badge: "Recommended",
+          description:
+            "Install from JetBrains Marketplace inside your IDE, then use your Stint key.",
+          link: {
+            label: "Open JetBrains Marketplace",
+            href: "https://plugins.jetbrains.com/plugin/7425-wakatime",
+          },
+        },
+        {
+          title: "Manual setup",
+          badge: "Config file",
+          description:
+            "Create the shared config file first, then restart the IDE after installing the plugin.",
+          commands: configBlock,
+        },
       ],
+      steps: [
+        {
+          title: "Step 1",
+          body: "Open Settings, then Plugins, then Marketplace. Search for WakaTime and install it.",
+        },
+        {
+          title: "Step 2",
+          body: "Paste your Stint key when the IDE asks for a WakaTime API key.",
+        },
+        {
+          title: "Step 3",
+          body: "Restart the IDE, open a project, and edit a file.",
+        },
+      ],
+      verify: [
+        ...configBlock,
+        "Restart your JetBrains IDE",
+        "Open a project and edit a file",
+        "Check this page for a JetBrains user agent",
+      ],
+      screenshot: {
+        src: "/integrations/screenshots/jetbrains.svg",
+        alt: "JetBrains Plugins screen with the WakaTime plugin selected",
+        caption: "Install the plugin from inside your JetBrains IDE.",
+      },
     },
     {
       id: "vim-config",
       name: "Vim/Neovim",
-      description: "Keep a single config file for terminal editor plugins.",
-      lines: [
-        "Install vim-wakatime for Vim or Neovim.",
-        "mkdir -p ~/.wakatime",
-        "cat > ~/.wakatime.cfg <<'EOF'",
-        "[settings]",
-        `api_url = ${apiURL}`,
-        `api_key = ${apiKey}`,
-        "heartbeat_rate_limit_seconds = 30",
-        "debug = false",
-        "EOF",
-        "Open Vim or Neovim, edit a tracked file, then run :WakaTimeApiKey if the plugin asks for a key.",
+      description:
+        "Best choice for terminal editor users who want the existing Vim plugin to report to Stint.",
+      options: [
+        {
+          title: "Install with one command",
+          badge: "CLI option",
+          description:
+            "Install Stint CLI for terminal checks, then add the Vim plugin for editor activity.",
+          commands: [stintInstallCommand],
+        },
+        {
+          title: "Use a marketplace plugin",
+          badge: "Plugin",
+          description:
+            "Install vim-wakatime with your normal Vim plugin manager.",
+          link: {
+            label: "Open vim-wakatime",
+            href: "https://github.com/wakatime/vim-wakatime",
+          },
+        },
+        {
+          title: "Manual setup",
+          badge: "Config file",
+          description:
+            "Create the shared config file and restart Vim or Neovim.",
+          commands: configBlock,
+        },
       ],
+      steps: [
+        {
+          title: "Step 1",
+          body: "Install vim-wakatime with your plugin manager.",
+        },
+        {
+          title: "Step 2",
+          body: "Save the Stint config file in your home folder.",
+        },
+        {
+          title: "Step 3",
+          body: "Open Vim or Neovim and edit a project file.",
+        },
+      ],
+      verify: [
+        ...configBlock,
+        "Open Vim or Neovim",
+        "Edit a tracked file",
+        "Run :WakaTimeApiKey if the plugin asks for a key",
+      ],
+      screenshot: {
+        src: "/integrations/screenshots/vim.svg",
+        alt: "Vim editing a file with activity sent to Stint",
+        caption: "Vim and Neovim use the same home-folder config.",
+      },
     },
     {
       id: "shell-cli-config",
       name: "Shell CLI",
-      description: "Send a compatibility heartbeat directly for smoke testing.",
-      lines: [
+      description:
+        "Best choice when you want a quick test heartbeat without installing an editor plugin.",
+      options: [
+        {
+          title: "Install with one command",
+          badge: "Recommended",
+          description:
+            "Install Stint CLI for easier terminal tests and offline queue support.",
+          commands: [stintInstallCommand],
+        },
+        {
+          title: "Use a marketplace plugin",
+          badge: "Optional",
+          description:
+            "Shell scripts do not need a marketplace plugin. Use your editor's plugin when you want automatic tracking.",
+          link: {
+            label: "Choose an editor plugin",
+            href: "#vscode-config",
+          },
+        },
+        {
+          title: "Manual setup",
+          badge: "HTTP",
+          description:
+            "Use curl directly when you only need to confirm that Stint accepts heartbeats.",
+          commands: [
+            `curl -X POST ${apiURL}/users/current/heartbeats \\`,
+            `  -H "Authorization: Bearer ${apiKey}" \\`,
+            '  -H "Content-Type: application/json" \\',
+            '  -d \'{"entity":"~/src/project/README.md","type":"file","time":1781887600,"project":"project","language":"Markdown"}\'',
+          ],
+        },
+      ],
+      steps: [
+        {
+          title: "Step 1",
+          body: "Create or copy an integration key.",
+        },
+        {
+          title: "Step 2",
+          body: "Run the curl command from any terminal.",
+        },
+        {
+          title: "Step 3",
+          body: "Refresh Stint and look for the new Shell client in Connection health.",
+        },
+      ],
+      verify: [
         `curl -X POST ${apiURL}/users/current/heartbeats \\`,
         `  -H "Authorization: Bearer ${apiKey}" \\`,
         '  -H "Content-Type: application/json" \\',
-        '  -d \'{"entity":"~/src/stint/main.go","type":"file","time":1781887600,"project":"stint","language":"Go"}\'',
+        '  -d \'{"entity":"~/src/project/README.md","type":"file","time":1781887600,"project":"project","language":"Markdown"}\'',
       ],
+      screenshot: {
+        src: "/integrations/screenshots/shell.svg",
+        alt: "Terminal curl command returning a successful heartbeat response",
+        caption: "Use curl when you only need to test the API endpoint.",
+      },
     },
-  ] as const;
+  ] as const satisfies readonly IntegrationConfig[];
 }
 
 export const compatibilityNote =
-  'For multi-endpoint configs, use{" "} [api_urls] and add{" "} .* = {apiURL}|waka_your_stint_key . The native CLI also reads{" "} [DEFAULT] top-level values, keeps runtime files directly under{" "} $WAKATIME_HOME/, validates and normalizes api_url, treats timeout = 0 as no HTTP timeout, treats non-integer{" "} heartbeat_rate_limit_seconds {" "} config as the WakaTime default, treats negative{" "} heartbeat_rate_limit_seconds {" "} as disabled, projectmap{" "} with capture placeholders,{" "} .wakatime-project{" "} {project} interpolation from Git remotes, Git submodule maps,{" "} project_api_key,{" "} api_key_vault_cmd, WakaTime legacy aliases like apikey,{" "} --api-key, and{" "} settings.ignore, case-insensitive scalar setting keys, quoted scalar values, ordered first-match project and API-key maps, all-match ordered api_urls fanout, and regex config, comma-separated include/exclude flags, newline-separated regex lists with commas preserved inside patterns, Perl-style lookahead regex fallback, HTTP/HTTPS/SOCKS/NTLM proxy settings, SSL options, machine/timezone request headers, dependency detection with WakaTime order and caps using the resolved or explicit language, WakaTime language aliases like{" "} CSharp,{" "} CPP,{" "} ObjectiveC, and{" "} Visual Basic .NET, and including side-effect and multi-line JavaScript/TypeScript imports, Scala grouped imports, multiline HTML script sources, Rust extern crate{" "} declarations, and Gruntfile{" "} as grunt, WakaTime-style 5 MiB automatic local file-stat reads for language, dependency, and line metadata with unsaved file entities skipping automatic line and dependency detection, Vim modelines for{" "} --guess-language, C-family, Objective-C, Matlab, Delphi, and F#/Forth language disambiguation, WakaTime top-language aliases such as{" "} crontab,{" "} .ruby-version,{" "} .Rprofile,{" "} .sublime-settings,{" "} .vue,{" "} .svh,{" "} .xaml,{" "} .xpl,{" "} .inc,{" "} .i,{" "} .j,{" "} .mo,{" "} .re,{" "} .swg, and{" "} .vm, dependency hiding,{" "} hide_project_names{" "} .wakatime-project aliases,{" "} hide_project_folder{" "} filename fallback, automatic SSH/SFTP remote stats with credential stripping and WakaTime-style remote filter skipping,{" "} --local-file overrides, and SSH config options such as{" "} HostName,{" "} User,{" "} Port,{" "} IdentityFile,{" "} UserKnownHostsFile,{" "} HostKeyAlias, and{" "} StrictHostKeyChecking.';
+  "Stint accepts WakaTime-style API keys in Basic auth, Bearer auth, and compatible config files. Existing editor plugins can keep their normal WakaTime names while sending activity to Stint.";
