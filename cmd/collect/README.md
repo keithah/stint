@@ -42,10 +42,14 @@ stint connect
 # 5. Optional: install supported editor extensions too
 stint connect --deep
 
-# 6. Dry-run to see what would be sent (no POST, no API key needed)
+# 6. Optional: install AI hook plugins for agent CLIs
+stint plugin install claude-code
+stint plugin install codex
+
+# 7. Dry-run to see what would be sent (no POST, no API key needed)
 stint collect --dry-run
 
-# 7. Real run
+# 8. Real run
 stint collect
 
 # Inspect the effective config (api_key is redacted)
@@ -68,6 +72,12 @@ VS Code, Cursor, Windsurf, VSCodium, JetBrains IDEs, Vim, Neovim, and Zed.
 `--deep` additionally asks VS Code-family launchers to install
 `WakaTime.vscode-wakatime` and JetBrains launchers to install
 `com.wakatime.intellij.plugin`.
+
+`stint plugin install <agent>` automates AI hook plugin installation and writes
+the same `~/.wakatime.cfg` bridge after the host install succeeds. Supported
+agents are `claude-code`, `codex`, `antigravity`, `amp`, and `copilot`. Missing
+host CLIs fail with a direct install-the-host-first message rather than a raw
+subprocess error.
 
 ## Configuration
 
