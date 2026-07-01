@@ -32,18 +32,6 @@ var (
 	downloadFile          = defaultDownloadFile
 )
 
-func runCLICommand(args []string, stdout io.Writer) error {
-	if len(args) == 0 {
-		return fmt.Errorf("usage: stint cli install")
-	}
-	switch args[0] {
-	case "install":
-		return runWakaTimeCLIInstall(args[1:], stdout)
-	default:
-		return fmt.Errorf("unknown cli command %q", args[0])
-	}
-}
-
 func runWakaTimeCLIInstall(args []string, stdout io.Writer) error {
 	fs := newFlagSet("stint cli install")
 	if err := fs.Parse(args); err != nil {
