@@ -130,7 +130,7 @@ func (p preparedSetupConfig) restore() error {
 	return nil
 }
 
-func (p preparedSetupConfig) cleanup() {
+func (p *preparedSetupConfig) cleanup() {
 	if !p.committed && p.tmpPath != "" {
 		_ = os.Remove(p.tmpPath)
 	}
