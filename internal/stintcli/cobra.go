@@ -28,7 +28,10 @@ func newCobraRoot(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		Use:   "setup",
 		Short: "Write Stint and WakaTime-compatible config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSetup(append(cobraFlags(cmd), args...), stdout)
+			if commandWantsHelp(args) {
+				return cmd.Help()
+			}
+			return runSetup(args, stdout)
 		},
 		DisableFlagParsing: true,
 	})
@@ -36,6 +39,9 @@ func newCobraRoot(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		Use:   "collect",
 		Short: "Scan local AI agent data and post usage events",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if commandWantsHelp(args) {
+				return cmd.Help()
+			}
 			return runCollect(args, stdin, stdout, stderr)
 		},
 		DisableFlagParsing: true,
@@ -45,6 +51,9 @@ func newCobraRoot(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		Use:   "install",
 		Short: "Install the pinned upstream wakatime-cli",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if commandWantsHelp(args) {
+				return cmd.Help()
+			}
 			return runWakaTimeCLIInstall(args, stdout)
 		},
 		DisableFlagParsing: true,
@@ -62,9 +71,11 @@ func cobraManagedCommand(command string) bool {
 	}
 }
 
-func cobraFlags(cmd *cobra.Command) []string {
-	if cmd == nil {
-		return nil
+func commandWantsHelp(args []string) bool {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			return true
+		}
 	}
-	return cmd.Flags().Args()
+	return false
 }

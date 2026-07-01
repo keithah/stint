@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,13 +17,25 @@ import (
 )
 
 func TestWakaTimeCLIInstallRespectsOverride(t *testing.T) {
-	t.Setenv("STINT_WAKATIME_CLI", filepath.Join(t.TempDir(), "custom-wakatime-cli"))
+	override := filepath.Join(t.TempDir(), executableName("custom-wakatime-cli"))
+	if err := os.WriteFile(override, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("STINT_WAKATIME_CLI", override)
 	var out bytes.Buffer
 	if err := Run([]string{"cli", "install"}, nil, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "using STINT_WAKATIME_CLI") {
 		t.Fatalf("expected override summary, got %q", out.String())
+	}
+}
+
+func TestWakaTimeCLIInstallRejectsMissingOverride(t *testing.T) {
+	t.Setenv("STINT_WAKATIME_CLI", filepath.Join(t.TempDir(), executableName("missing-wakatime-cli")))
+	err := Run([]string{"cli", "install"}, nil, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "STINT_WAKATIME_CLI") {
+		t.Fatalf("expected missing override error, got %v", err)
 	}
 }
 
@@ -58,7 +72,7 @@ func TestWakaTimeCLIInstallVerifiesChecksumAndIsIdempotent(t *testing.T) {
 	if err := Run([]string{"cli", "install"}, nil, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	installed := filepath.Join(wakaResourcesDir(), "wakatime-cli")
+	installed := filepath.Join(wakaResourcesDir(), executableName("wakatime-cli"))
 	if info, err := os.Stat(installed); err != nil {
 		t.Fatal(err)
 	} else if info.Mode()&0o111 == 0 {
@@ -81,6 +95,18 @@ func TestWakaTimeCLIInstallVerifiesChecksumAndIsIdempotent(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "already installed") {
 		t.Fatalf("expected idempotent summary, got %q", out.String())
+	}
+}
+
+func TestDefaultDownloadFileRejectsOversizedResponses(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(bytes.Repeat([]byte("x"), int(maxWakaTimeCLIDownloadBytes+1)))
+	}))
+	defer server.Close()
+
+	_, err := defaultDownloadFile(server.URL)
+	if err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("expected oversized download error, got %v", err)
 	}
 }
 

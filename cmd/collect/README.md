@@ -51,6 +51,11 @@ only `api_url` + `api_key` into `~/.wakatime.cfg`, preserving existing plugin
 settings such as `debug`, `include`, and `exclude`. It also honors
 `STINT_API_URL` and `STINT_API_KEY` for scripted installs.
 
+For WakaTime-compatible `stint` commands such as heartbeats, stats, and editor
+plugin calls, credentials are resolved as: explicit flags, `STINT_*` env,
+`~/.stint.cfg`, `~/.wakatime.cfg`, then built-in defaults. `WAKATIME_API_KEY`
+is accepted as a later API-key fallback for compatibility.
+
 ## Configuration
 
 Collector settings are resolved from these layers, **highest precedence first**:
@@ -58,8 +63,7 @@ Collector settings are resolved from these layers, **highest precedence first**:
 1. **Explicit command-line flags** (e.g. `--api-url`)
 2. **Environment variables** (`STINT_API_URL`, ...)
 3. **Collector config file** (`~/.stint/collect.json`, override with `--config PATH`)
-4. **Native Stint config** (`~/.stint.cfg`) and WakaTime plugin config (`~/.wakatime.cfg`) for API credentials
-5. **Built-in defaults**
+4. **Built-in defaults**
 
 A flag only overrides lower layers when you actually pass it; a flag left at its
 default does not clobber an env var or config file value.

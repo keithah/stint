@@ -356,7 +356,10 @@ func parseCommonWithFlagSet(fs *flag.FlagSet, args []string) (Options, error) {
 	if err != nil {
 		return o, err
 	}
-	nativeCfg := loadNativeConfig()
+	nativeCfg, err := loadNativeConfig()
+	if err != nil {
+		return o, fmt.Errorf("load native config: %w", err)
+	}
 	o.Config = cfg
 	internalCfg, _ := LoadConfig(o.InternalConfigPath)
 	o.InternalConfig = internalCfg
@@ -724,16 +727,24 @@ func resolveAPIKeyFromConfigs(key string, configs []Config, fallbacks ...string)
 	if key != "" {
 		return key, nil
 	}
+	var vaultErr error
 	for _, cfg := range configs {
 		apiKey, err := resolveAPIKeyFromConfig(cfg)
 		if err != nil {
-			return "", err
+			vaultErr = err
+			continue
 		}
 		if apiKey != "" {
 			return apiKey, nil
 		}
 	}
-	return first(fallbacks...), nil
+	if fallback := first(fallbacks...); fallback != "" {
+		return fallback, nil
+	}
+	if vaultErr != nil {
+		return "", vaultErr
+	}
+	return "", nil
 }
 
 func resolveAPIKeyFromConfig(cfg Config, fallbacks ...string) (string, error) {

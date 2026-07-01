@@ -12,9 +12,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 const pinnedWakaTimeCLIVersion = "v2.9.3"
+const maxWakaTimeCLIDownloadBytes int64 = 50 << 20
 
 type WakaTimeCLISpec struct {
 	Version  string
@@ -48,7 +50,11 @@ func runWakaTimeCLIInstall(args []string, stdout io.Writer) error {
 		return err
 	}
 	if override := strings.TrimSpace(os.Getenv("STINT_WAKATIME_CLI")); override != "" {
-		fmt.Fprintf(stdout, "using STINT_WAKATIME_CLI=%s\n", expandHome(override))
+		path := expandHome(override)
+		if !fileExists(path) {
+			return fmt.Errorf("STINT_WAKATIME_CLI points to missing binary: %s", path)
+		}
+		fmt.Fprintf(stdout, "using STINT_WAKATIME_CLI=%s\n", path)
 		return nil
 	}
 	spec, err := pinnedWakaTimeCLISpec()
@@ -112,7 +118,8 @@ func defaultPinnedWakaTimeCLISpec() (WakaTimeCLISpec, error) {
 }
 
 func defaultDownloadFile(url string) ([]byte, error) {
-	resp, err := http.Get(url) //nolint:gosec // URL is a pinned release asset or test-injected value.
+	client := http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Get(url) //nolint:gosec // URL is a pinned release asset.
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +127,15 @@ func defaultDownloadFile(url string) ([]byte, error) {
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return nil, fmt.Errorf("download %s: %s", url, resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	limited := io.LimitReader(resp.Body, maxWakaTimeCLIDownloadBytes+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxWakaTimeCLIDownloadBytes {
+		return nil, fmt.Errorf("download %s too large: exceeds %d bytes", url, maxWakaTimeCLIDownloadBytes)
+	}
+	return data, nil
 }
 
 func extractWakaTimeCLI(data []byte, target string) error {

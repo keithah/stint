@@ -57,10 +57,6 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return runHeartbeatsList(args[1:], stdout)
 		case "config":
 			return runConfig(args[1:], stdout)
-		case "setup":
-			return runSetup(args[1:], stdout)
-		case "cli":
-			return runCLICommand(args[1:], stdout)
 		case "today":
 			return runToday(args[1:], stdout)
 		case "today-goal":
