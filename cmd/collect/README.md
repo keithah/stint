@@ -1,9 +1,12 @@
-# stint-collect
+# Stint collect
 
-`stint-collect` scans the local data files written by your AI coding agents,
+`stint collect` scans the local data files written by your AI coding agents,
 normalizes them into canonical usage events, and posts them to a Stint server,
 which prices them and serves a unified cross-agent cost dashboard. See
 [`AI_COST.md`](../../AI_COST.md) for the architecture and event schema.
+
+`stint-collect` is still shipped as a compatibility alias for existing cron,
+Docker, and install scripts. New installs should use the unified `stint` CLI.
 
 The collector is **local-file → events → POST**. It never streams in real time;
 it scans, posts, optionally sleeps, and repeats.
@@ -11,11 +14,11 @@ it scans, posts, optionally sleeps, and repeats.
 ## Build
 
 ```sh
-make collect            # builds ./bin/stint-collect
-make collect-install    # builds + installs to $GOBIN (or $GOPATH/bin, or ~/.local/bin)
+make stint              # builds ./bin/stint
+make stint-install      # builds + installs stint and stint-collect to $GOBIN (or $GOPATH/bin, or ~/.local/bin)
 ```
 
-Or directly:
+Compatibility helper only:
 
 ```sh
 go build -o bin/stint-collect ./cmd/collect/
@@ -24,28 +27,42 @@ go build -o bin/stint-collect ./cmd/collect/
 ## Quick start
 
 ```sh
-# 1. Write a starter config to ~/.stint/collect.json
-stint-collect config init
+# 1. Write Stint-native config and WakaTime-compatible plugin config.
+stint setup --server https://stint.example.com/api/v1 --key waka_xxxxxxxx
 
-# 2. Edit it: set api_url and api_key (see collect.example.json for all fields)
+# 2. Install the pinned upstream wakatime-cli used by editor plugins.
+stint cli install
 
-# 3. Dry-run to see what would be sent (no POST, no API key needed)
-stint-collect --dry-run
+# 3. Optional: write collector-specific defaults to ~/.stint/collect.json
+stint collect config init
 
-# 4. Real run
-stint-collect
+# 4. Dry-run to see what would be sent (no POST, no API key needed)
+stint collect --dry-run
+
+# 5. Real run
+stint collect
 
 # Inspect the effective config (api_key is redacted)
-stint-collect --print-config
+stint collect --print-config
 ```
+
+`stint setup` is idempotent. It writes native keys to `~/.stint.cfg` and writes
+only `api_url` + `api_key` into `~/.wakatime.cfg`, preserving existing plugin
+settings such as `debug`, `include`, and `exclude`. It also honors
+`STINT_API_URL` and `STINT_API_KEY` for scripted installs.
+
+For WakaTime-compatible `stint` commands such as heartbeats, stats, and editor
+plugin calls, credentials are resolved as: explicit flags, `STINT_*` env,
+`~/.stint.cfg`, `~/.wakatime.cfg`, then built-in defaults. `WAKATIME_API_KEY`
+is accepted as a later API-key fallback for compatibility.
 
 ## Configuration
 
-Settings are resolved from these layers, **highest precedence first**:
+Collector settings are resolved from these layers, **highest precedence first**:
 
 1. **Explicit command-line flags** (e.g. `--api-url`)
 2. **Environment variables** (`STINT_API_URL`, ...)
-3. **Config file** (`~/.stint/collect.json`, override with `--config PATH`)
+3. **Collector config file** (`~/.stint/collect.json`, override with `--config PATH`)
 4. **Built-in defaults**
 
 A flag only overrides lower layers when you actually pass it; a flag left at its
@@ -103,7 +120,8 @@ entry for that agent.
 | `--print-config` | print the resolved config (api key redacted) and exit |
 | `--init-config` | write a starter config to `--config` if absent, then exit |
 
-`config init` is also available as a subcommand: `stint-collect config init [--config PATH]`.
+`config init` is also available through the compatibility helper:
+`stint-collect config init [--config PATH]`.
 
 ## Watch / cron usage
 
@@ -113,7 +131,7 @@ The collector does not stream. Pick one of two scheduling models:
 new events, prints a per-cycle summary, then sleeps:
 
 ```sh
-stint-collect --watch --interval 5m
+stint collect --watch --interval 5m
 # or set "watch": true, "interval": "5m" in the config file
 ```
 
@@ -121,7 +139,7 @@ stint-collect --watch --interval 5m
 false). Incremental state means each run only reads new file content:
 
 ```cron
-*/5 * * * * /home/you/.local/bin/stint-collect >> ~/.stint/collect.log 2>&1
+*/5 * * * * /home/you/.local/bin/stint collect >> ~/.stint/collect.log 2>&1
 ```
 
 Either way is safe to run repeatedly: posts are deduped server-side by
@@ -185,5 +203,5 @@ Registered stubs (discoverable, no events yet): `cursor`, `copilot`, `amp`,
 `qwen`, `kimi`, `kiro`, `kilo`, `roo`, `cline`, `hermes`, `pi-agent`,
 `openclaw`, `factory-droid`, `crush`, `octofriend`.
 
-Run `stint-collect --dry-run` to see each agent's default scan paths and counts.
+Run `stint collect --dry-run` to see each agent's default scan paths and counts.
 See [`AI_COST.md`](../../AI_COST.md) for per-agent details.

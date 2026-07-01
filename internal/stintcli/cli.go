@@ -40,6 +40,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	if handled, err := runCobraCommand(args, stdin, stdout, stderr); handled {
+		return err
+	}
 	if len(args) > 0 {
 		switch args[0] {
 		case "help", "--help", "-h":
@@ -188,7 +191,7 @@ func diagnosticOptions(args []string) (Options, error) {
 
 func diagnosticCommand(command string) bool {
 	switch command {
-	case "heartbeat", "heartbeats", "today", "today-goal", "file-experts", "stats", "projects",
+	case "heartbeat", "heartbeats", "setup", "cli", "today", "today-goal", "file-experts", "stats", "projects",
 		"goals", "account", "me", "health", "dev", "meta", "api-docs", "openapi", "leaders",
 		"editors", "program-languages", "program_languages", "users", "share", "all-time",
 		"all-time-since-today", "machine-names", "machine_names", "user-agents", "user_agents",
