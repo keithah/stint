@@ -46,6 +46,13 @@ func TestSetupWritesStintAndWakaTimeConfigsPreservingExistingKeys(t *testing.T) 
 	if settings["debug"] != "true" || settings["exclude"] != "vendor" {
 		t.Fatalf("setup did not preserve existing keys: %#v", settings)
 	}
+	backups, err := filepath.Glob(filepath.Join(home, ".wakatime.cfg.bak-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 0 {
+		t.Fatalf("setup left backup files behind: %#v", backups)
+	}
 	if !strings.Contains(out.String(), "wrote") {
 		t.Fatalf("expected setup summary, got %q", out.String())
 	}

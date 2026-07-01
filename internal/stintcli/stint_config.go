@@ -54,11 +54,12 @@ func writeSetupConfig(path, apiURL, apiKey string, native bool) error {
 }
 
 type preparedSetupConfig struct {
-	path      string
-	tmpPath   string
-	oldBytes  []byte
-	hadOld    bool
-	committed bool
+	path       string
+	tmpPath    string
+	backupPath string
+	oldBytes   []byte
+	hadOld     bool
+	committed  bool
 }
 
 func prepareSetupConfig(path, apiURL, apiKey string, native bool) (preparedSetupConfig, error) {
@@ -113,6 +114,28 @@ func commitSetupConfigs(configs ...*preparedSetupConfig) error {
 }
 
 func (p *preparedSetupConfig) commit() error {
+	if p.hadOld {
+		backup, err := os.CreateTemp(filepath.Dir(p.path), filepath.Base(p.path)+".bak-*")
+		if err != nil {
+			return err
+		}
+		p.backupPath = backup.Name()
+		if err := backup.Close(); err != nil {
+			return err
+		}
+		if err := os.Remove(p.backupPath); err != nil {
+			return err
+		}
+		if err := os.Rename(p.path, p.backupPath); err != nil {
+			return err
+		}
+		if err := os.Rename(p.tmpPath, p.path); err != nil {
+			_ = os.Rename(p.backupPath, p.path)
+			return err
+		}
+		p.committed = true
+		return nil
+	}
 	if err := os.Rename(p.tmpPath, p.path); err != nil {
 		return err
 	}
@@ -122,6 +145,12 @@ func (p *preparedSetupConfig) commit() error {
 
 func (p preparedSetupConfig) restore() error {
 	if p.hadOld {
+		if p.backupPath != "" && fileExists(p.backupPath) {
+			if err := os.Remove(p.path); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			return os.Rename(p.backupPath, p.path)
+		}
 		return os.WriteFile(p.path, p.oldBytes, 0o600)
 	}
 	if err := os.Remove(p.path); err != nil && !os.IsNotExist(err) {
@@ -133,6 +162,9 @@ func (p preparedSetupConfig) restore() error {
 func (p *preparedSetupConfig) cleanup() {
 	if !p.committed && p.tmpPath != "" {
 		_ = os.Remove(p.tmpPath)
+	}
+	if p.committed && p.backupPath != "" {
+		_ = os.Remove(p.backupPath)
 	}
 }
 
