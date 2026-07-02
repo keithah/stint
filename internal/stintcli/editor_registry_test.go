@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
-
-	_ "modernc.org/sqlite"
 )
 
 func TestEditorRegistryDetectsInstalledEditorsFromPath(t *testing.T) {
@@ -72,6 +71,48 @@ func TestConnectConfiguresDetectedEditorsByWritingWakaTimeConfig(t *testing.T) {
 	}
 }
 
+func TestConnectReadsCredentialsFromImportedWakaTimeConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("WAKATIME_HOME", home)
+
+	oldLookPath := editorLookPath
+	editorLookPath = func(name string) (string, error) {
+		if name == "code" {
+			return "/usr/bin/code", nil
+		}
+		return "", os.ErrNotExist
+	}
+	t.Cleanup(func() { editorLookPath = oldLookPath })
+
+	importedPath := filepath.Join(home, "imported.cfg")
+	imported := Config{Sections: map[string]map[string]string{}}
+	imported.Set("settings", "api_url", "https://imported.example.com/api/v1")
+	imported.Set("settings", "api_key", "waka_imported")
+	if err := imported.Write(importedPath); err != nil {
+		t.Fatal(err)
+	}
+	main := Config{Sections: map[string]map[string]string{}}
+	main.Set("settings", "import_cfg", importedPath)
+	if err := main.Write(DefaultWakaTimeConfigPath()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run([]string{"connect"}, nil, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(DefaultWakaTimeConfigPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Get("settings", "api_url") != "https://imported.example.com/api/v1" || cfg.Get("settings", "api_key") != "waka_imported" {
+		t.Fatalf("unexpected wakatime config after connect: %#v", cfg.Section("settings"))
+	}
+	if cfg.Get("settings", "import_cfg") != importedPath {
+		t.Fatalf("connect should preserve import_cfg, got %#v", cfg.Section("settings"))
+	}
+}
+
 func TestConnectFailsClearlyWhenNoCredentialsAreAvailable(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -87,7 +128,7 @@ func TestConnectFailsClearlyWhenNoCredentialsAreAvailable(t *testing.T) {
 	t.Cleanup(func() { editorLookPath = oldLookPath })
 
 	err := Run([]string{"connect"}, nil, &bytes.Buffer{}, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "run `stint setup` first") {
+	if err == nil || !strings.Contains(err.Error(), "STINT_API_URL and STINT_API_KEY") {
 		t.Fatalf("expected setup guidance, got %v", err)
 	}
 }
@@ -257,10 +298,25 @@ func TestInstallJetBrainsWakaTimeAttemptsEveryDetectedLauncher(t *testing.T) {
 }
 
 func TestEditorRunCommandIncludesStderrOnFailure(t *testing.T) {
-	err := editorRunCommand("sh", "-c", "printf 'extension not found' >&2; exit 42")
+	name := "sh"
+	args := []string{"-c", "printf 'extension not found' >&2; exit 42"}
+	if runtime.GOOS == "windows" {
+		name = "cmd"
+		args = []string{"/C", "echo extension not found 1>&2 && exit /b 42"}
+	}
+	err := editorRunCommand(name, args...)
 	if err == nil || !strings.Contains(err.Error(), "extension not found") {
 		t.Fatalf("expected stderr in command failure, got %v", err)
 	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestConnectAllHandlesNoDetectedEditors(t *testing.T) {

@@ -146,7 +146,7 @@ func connectCredentials(server, key string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	wakaCfg, err := LoadConfig(DefaultWakaTimeConfigPath())
+	wakaCfg, err := LoadConfigStack(DefaultWakaTimeConfigPath())
 	if err != nil {
 		return "", "", err
 	}
@@ -159,7 +159,7 @@ func connectCredentials(server, key string) (string, string, error) {
 		}
 	}
 	if apiURL == "" || apiKey == "" {
-		return "", "", fmt.Errorf("missing Stint credentials; run `stint setup` first or pass --server and --key")
+		return "", "", fmt.Errorf("missing Stint credentials; run `stint setup` first, pass --server and --key, or set STINT_API_URL and STINT_API_KEY")
 	}
 	return apiURL, apiKey, nil
 }
@@ -200,13 +200,4 @@ func installJetBrainsWakaTime(spec EditorSpec) error {
 		return nil
 	}
 	return fmt.Errorf("all JetBrains plugin installs failed: %s", strings.Join(failures, "; "))
-}
-
-func containsString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
 }
