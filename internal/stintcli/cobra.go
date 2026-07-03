@@ -57,6 +57,19 @@ func newCobraRoot(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	addConnectHelpFlags(connect)
 	root.AddCommand(connect)
 
+	plugin := &cobra.Command{Use: "plugin", Short: "Manage AI hook plugins"}
+	pluginInstall := &cobra.Command{
+		Use:   "install <agent>",
+		Short: "Install an AI hook plugin",
+		RunE: withHelp(func(args []string) error {
+			return runPluginInstall(args, stdout)
+		}),
+		DisableFlagParsing: true,
+	}
+	addPluginInstallHelpFlags(pluginInstall)
+	plugin.AddCommand(pluginInstall)
+	root.AddCommand(plugin)
+
 	cli := &cobra.Command{Use: "cli", Short: "Manage companion CLIs"}
 	install := &cobra.Command{
 		Use:   "install",
@@ -73,7 +86,7 @@ func newCobraRoot(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 
 func cobraManagedCommand(command string) bool {
 	switch command {
-	case "setup", "connect", "cli", "collect":
+	case "setup", "connect", "plugin", "cli", "collect":
 		return true
 	default:
 		return false
@@ -125,6 +138,12 @@ func addCollectHelpFlags(cmd *cobra.Command) {
 func addConnectHelpFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.Bool("deep", false, "install editor extensions when supported")
+	flags.String("server", "", "Stint API URL")
+	flags.String("key", "", "Stint API key")
+}
+
+func addPluginInstallHelpFlags(cmd *cobra.Command) {
+	flags := cmd.Flags()
 	flags.String("server", "", "Stint API URL")
 	flags.String("key", "", "Stint API key")
 }

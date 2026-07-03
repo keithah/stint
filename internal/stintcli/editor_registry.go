@@ -1,7 +1,6 @@
 package stintcli
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -26,18 +25,7 @@ type EditorRegistry map[string]EditorEntry
 
 var (
 	editorLookPath   = exec.LookPath
-	editorRunCommand = func(name string, args ...string) error {
-		cmd := exec.Command(name, args...) //nolint:gosec // Editor command is selected from a fixed registry row.
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			if message := strings.TrimSpace(stderr.String()); message != "" {
-				return fmt.Errorf("%s: %w", message, err)
-			}
-			return err
-		}
-		return nil
-	}
+	editorRunCommand = runCommandDiscardingOutput
 )
 
 func DefaultEditorRegistry() EditorRegistry {
