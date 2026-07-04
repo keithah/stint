@@ -79,6 +79,11 @@ agents are `claude-code`, `codex`, `antigravity`, `amp`, and `copilot`. Missing
 host CLIs fail with a direct install-the-host-first message rather than a raw
 subprocess error.
 
+`stint doctor` checks the local integration state: config presence and
+precedence, API reachability, `wakatime-cli` install status, offline queue
+count, last heartbeat status, detected editors, and detected AI agent hosts. It
+exits non-zero when required setup is missing.
+
 ## Configuration
 
 Collector settings are resolved from these layers, **highest precedence first**:

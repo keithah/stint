@@ -695,15 +695,25 @@ func TestRunUsageEventsUsesExpectedEndpointsAndQueries(t *testing.T) {
 func TestRunDoctorJSONOutputStaysValidJSON(t *testing.T) {
 	body := `{"data":{"api_url":"http://example.test/api/v1","version":"dev"}}`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/meta" {
+		switch r.URL.Path {
+		case "/api/v1/meta":
+			_, _ = w.Write([]byte(body))
+		case "/api/v1/users/current/heartbeats":
+			_, _ = w.Write([]byte(`[]`))
+		default:
 			t.Fatalf("unexpected doctor endpoint path: %s", r.URL.Path)
 		}
-		_, _ = w.Write([]byte(body))
 	}))
 	defer server.Close()
 
 	var out bytes.Buffer
-	queuePath := filepath.Join(t.TempDir(), "offline_heartbeats.bdb")
+	dir := t.TempDir()
+	queuePath := filepath.Join(dir, "offline_heartbeats.bdb")
+	wakaCLI := filepath.Join(dir, "wakatime-cli")
+	if err := os.WriteFile(wakaCLI, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("STINT_WAKATIME_CLI", wakaCLI)
 	if err := Run([]string{
 		"doctor",
 		"--api-url", server.URL + "/api/v1",
