@@ -191,7 +191,7 @@ func diagnosticOptions(args []string) (Options, error) {
 
 func diagnosticCommand(command string) bool {
 	switch command {
-	case "heartbeat", "heartbeats", "setup", "cli", "today", "today-goal", "file-experts", "stats", "projects",
+	case "heartbeat", "heartbeats", "setup", "connect", "plugin", "cli", "today", "today-goal", "file-experts", "stats", "projects",
 		"goals", "account", "me", "health", "dev", "meta", "api-docs", "openapi", "leaders",
 		"editors", "program-languages", "program_languages", "users", "share", "all-time",
 		"all-time-since-today", "machine-names", "machine_names", "user-agents", "user_agents",

@@ -36,10 +36,20 @@ stint cli install
 # 3. Optional: write collector-specific defaults to ~/.stint/collect.json
 stint collect config init
 
-# 4. Dry-run to see what would be sent (no POST, no API key needed)
+# 4. Configure detected editors to send WakaTime-compatible heartbeats to Stint
+stint connect
+
+# 5. Optional: install supported editor extensions too
+stint connect --deep
+
+# 6. Optional: install AI hook plugins for agent CLIs
+stint plugin install claude-code
+stint plugin install codex
+
+# 7. Dry-run to see what would be sent (no POST, no API key needed)
 stint collect --dry-run
 
-# 5. Real run
+# 8. Real run
 stint collect
 
 # Inspect the effective config (api_key is redacted)
@@ -55,6 +65,19 @@ For WakaTime-compatible `stint` commands such as heartbeats, stats, and editor
 plugin calls, credentials are resolved as: explicit flags, `STINT_*` env,
 `~/.stint.cfg`, `~/.wakatime.cfg`, then built-in defaults. `WAKATIME_API_KEY`
 is accepted as a later API-key fallback for compatibility.
+
+`stint connect` detects Tier-1 editors and repairs the shared
+`~/.wakatime.cfg` bridge they already understand. Current registry rows cover
+VS Code, Cursor, Windsurf, VSCodium, JetBrains IDEs, Vim, Neovim, and Zed.
+`--deep` additionally asks VS Code-family launchers to install
+`WakaTime.vscode-wakatime` and JetBrains launchers to install
+`com.wakatime.intellij.plugin`.
+
+`stint plugin install <agent>` automates AI hook plugin installation and writes
+the same `~/.wakatime.cfg` bridge after the host install succeeds. Supported
+agents are `claude-code`, `codex`, `antigravity`, `amp`, and `copilot`. Missing
+host CLIs fail with a direct install-the-host-first message rather than a raw
+subprocess error.
 
 ## Configuration
 
