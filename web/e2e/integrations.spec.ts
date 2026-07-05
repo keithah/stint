@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test";
 const recipes = [
   { name: "Stint CLI", expected: "curl -fsSL https://stint.fyi/install.sh | sh", stintOwned: false, compatibility: true },
   { name: "WakaTime CLI", expected: "wakatime-cli --entity", stintOwned: false, compatibility: true },
-  { name: "Codex", expected: "Codex Desktop", stintOwned: true, compatibility: true },
-  { name: "Claude Code", expected: "Claude Desktop", stintOwned: true, compatibility: true },
+  { name: "Codex", expected: "codex plugin add codex-cli-stint@stint", stintOwned: true, compatibility: true },
+  { name: "Claude Code", expected: "claude plugin i claude-code-stint@stint", stintOwned: true, compatibility: true },
   { name: "VS Code", expected: "Stint for VS Code", stintOwned: true, compatibility: true },
   { name: "JetBrains", expected: "Stint for JetBrains", stintOwned: true, compatibility: true },
   { name: "Vim/Neovim", expected: "Install vim-wakatime", stintOwned: false, compatibility: false },
@@ -39,8 +39,13 @@ test("integration names reveal full setup instructions", async ({ page }) => {
   for (const recipe of recipes) {
     await page.getByRole("button", { name: `Show ${recipe.name} integration instructions` }).click();
     await expect(page.locator("#integration-instructions")).toContainText(recipe.expected);
+    if (recipe.name === "Codex" || recipe.name === "Claude Code") {
+      await expect(page.locator("#integration-instructions")).toContainText("Choose Stint marketplace plugin");
+      await expect(page.locator("#integration-instructions")).toContainText("Install Stint CLI");
+      await expect(page.locator("#integration-instructions")).not.toContainText("Install Stint for VS Code");
+    }
     if (recipe.stintOwned) {
-      await expect(page.locator("#integration-instructions")).toContainText("Install Stint-owned plugin");
+      await expect(page.locator("#integration-instructions")).toContainText("Install Stint marketplace plugin");
     }
     if (recipe.compatibility) {
       await expect(page.locator("#integration-instructions")).toContainText("Use WakaTime-compatible plugin");

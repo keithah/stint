@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+set -eu
+
+ROOT="${PLUGIN_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}"
+SHARED_ROOT="$(CDPATH= cd -- "$ROOT/.." && pwd)"
+export STINT_PLUGIN_NAME=codex-cli-stint
+export STINT_PLUGIN_AGENT=codex
+export STINT_PLUGIN_HOST=codex-cli
+export STINT_PLUGIN_HOST_VERSION_ENV=CODEX_CLI_VERSION
+exec node "$SHARED_ROOT/shared/stint-plugin-runner.js" --background "$@"

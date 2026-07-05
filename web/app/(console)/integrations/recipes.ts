@@ -1,5 +1,21 @@
 export const stintInstallCommand = "curl -fsSL https://stint.fyi/install.sh | sh";
 
+const codexMarketplacePlugin = {
+  name: "codex-cli-stint",
+  commands: [
+    "codex plugin marketplace add https://github.com/keithah/stint.git",
+    "codex plugin add codex-cli-stint@stint",
+  ],
+} as const;
+
+const claudeMarketplacePlugin = {
+  name: "claude-code-stint",
+  commands: [
+    "claude plugin marketplace add https://github.com/keithah/stint.git",
+    "claude plugin i claude-code-stint@stint",
+  ],
+} as const;
+
 export const clients = [
   {
     recipeId: "stint-cli-config",
@@ -93,6 +109,10 @@ export type IntegrationConfig = {
   id: string;
   name: string;
   description: string;
+  marketplacePlugin?: {
+    name: string;
+    commands: readonly string[];
+  };
   options: readonly SetupOption[];
   steps: readonly SetupStep[];
   verify: readonly string[];
@@ -243,16 +263,14 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
       name: "Codex",
       description:
         "Best choice if you use Codex CLI or Codex Desktop and want Stint to show AI coding activity with model and token context.",
+      marketplacePlugin: codexMarketplacePlugin,
       options: [
         {
-          title: "Install Stint-owned plugin",
+          title: "Install Stint marketplace plugin",
           badge: "Recommended",
           description:
-            "Use Stint for VS Code or Stint for JetBrains when Codex runs inside your editor. The Stint-owned plugin path is the primary setup.",
-          link: {
-            label: "Install Stint for VS Code",
-            href: "https://github.com/keithah/stint/releases/latest",
-          },
+            "Choose Stint marketplace plugin, save your key, then use Codex normally.",
+          commands: codexMarketplacePlugin.commands,
         },
         {
           title: "Install Stint CLI",
@@ -275,15 +293,15 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
       steps: [
         {
           title: "Step 1",
-          body: "Install a Stint-owned editor plugin when Codex runs inside your editor, or install Stint CLI for Codex CLI and Codex Desktop sessions.",
+          body: "Install the Stint marketplace plugin for Codex CLI.",
         },
         {
           title: "Step 2",
-          body: "Run the Codex sync command after a Codex CLI or Codex Desktop session. Stint reads local session details and attaches agent metadata.",
+          body: "Save your Stint endpoint and API key to the WakaTime config file.",
         },
         {
           title: "Step 3",
-          body: "Open AI Costs or Dashboard to confirm the Codex model, provider, and token fields are visible.",
+          body: "Use Codex normally, then open AI Costs or Dashboard to confirm activity.",
         },
       ],
       verify: [
@@ -306,16 +324,14 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
       name: "Claude Code",
       description:
         "Best choice if you use Claude Code CLI or Claude Desktop and want Stint to show AI coding sessions with agent, model, token, and project context.",
+      marketplacePlugin: claudeMarketplacePlugin,
       options: [
         {
-          title: "Install Stint-owned plugin",
+          title: "Install Stint marketplace plugin",
           badge: "Recommended",
           description:
-            "Use Stint for VS Code or Stint for JetBrains when Claude runs inside your editor. The Stint-owned plugin path is the primary setup.",
-          link: {
-            label: "Install Stint for VS Code",
-            href: "https://github.com/keithah/stint/releases/latest",
-          },
+            "Choose Stint marketplace plugin, save your key, then use Claude normally.",
+          commands: claudeMarketplacePlugin.commands,
         },
         {
           title: "Install Stint CLI",
@@ -338,15 +354,15 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
       steps: [
         {
           title: "Step 1",
-          body: "Install a Stint-owned editor plugin when Claude runs inside your editor, or install Stint CLI for Claude Code CLI and Claude Desktop sessions.",
+          body: "Install the Stint marketplace plugin for Claude Code.",
         },
         {
           title: "Step 2",
-          body: "Run the Claude sync command after a Claude Code CLI or Claude Desktop session. Stint reads local session details and attaches agent metadata.",
+          body: "Save your Stint endpoint and API key to the WakaTime config file.",
         },
         {
           title: "Step 3",
-          body: "Open AI Costs or Dashboard to confirm the Claude model, provider, and token fields are visible.",
+          body: "Use Claude Code normally, then open AI Costs or Dashboard to confirm activity.",
         },
       ],
       verify: [
@@ -372,7 +388,7 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
         "Best choice for VS Code users who want Stint-owned setup first, with WakaTime compatibility available.",
       options: [
         {
-          title: "Install Stint-owned plugin",
+          title: "Install Stint marketplace plugin",
           badge: "Recommended",
           description:
             "Install Stint for VS Code from the Stint release package while the marketplace listing is being prepared.",
@@ -434,7 +450,7 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
         "Best choice for IntelliJ IDEA, PyCharm, WebStorm, GoLand, and other JetBrains IDEs with Stint-owned setup first.",
       options: [
         {
-          title: "Install Stint-owned plugin",
+          title: "Install Stint marketplace plugin",
           badge: "Recommended",
           description:
             "Install Stint for JetBrains from the Stint release package while the marketplace listing is being prepared.",

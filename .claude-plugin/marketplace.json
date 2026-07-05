@@ -1,0 +1,34 @@
+{
+  "name": "stint",
+  "metadata": {
+    "description": "Stint plugins for Claude Code - Track AI coding activity, models, tokens, and project context in Stint"
+  },
+  "owner": {
+    "name": "Stint"
+  },
+  "plugins": [
+    {
+      "name": "claude-code-stint",
+      "source": "./plugins/claude-code-stint",
+      "description": "Stint plugin for Claude Code - Track Claude Code CLI and Desktop coding activity in Stint",
+      "version": "0.1.0",
+      "homepage": "https://github.com/keithah/stint",
+      "repository": "https://github.com/keithah/stint",
+      "license": "MIT",
+      "keywords": [
+        "stint",
+        "claude",
+        "claude-code",
+        "time-tracking",
+        "ai",
+        "productivity"
+      ],
+      "category": "productivity",
+      "tags": [
+        "productivity",
+        "metrics",
+        "ai"
+      ]
+    }
+  ]
+}

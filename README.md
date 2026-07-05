@@ -44,9 +44,10 @@ Regenerate the sqlc model package after changing migrations or query files:
 scripts/generate-sqlc.sh
 ```
 
-## Editor Config
+## Plugin Setup
 
-Install the native CLI from the latest release:
+Install the Stint CLI, save your endpoint and key, then use your editor or agent
+normally:
 
 ```bash
 curl -fsSL https://stint.fyi/install.sh | sh
@@ -55,7 +56,22 @@ stint doctor
 stint heartbeat --entity "$PWD/main.go" --write --project stint
 ```
 
-For editor-only tracking, install the WakaTime plugin from your editor's marketplace and use this shared config:
+For Codex CLI:
+
+```bash
+codex plugin marketplace add https://github.com/keithah/stint.git
+codex plugin add codex-cli-stint@stint
+```
+
+For Claude Code:
+
+```bash
+claude plugin marketplace add https://github.com/keithah/stint.git
+claude plugin i claude-code-stint@stint
+```
+
+For editor-only tracking, install the WakaTime plugin from your editor's
+marketplace and use this shared config:
 
 ```ini
 [settings]
@@ -65,7 +81,7 @@ heartbeat_rate_limit_seconds = 30
 offline = true
 ```
 
-Common CLI checks:
+Common checks:
 
 ```bash
 stint today
@@ -74,6 +90,10 @@ stint data-dumps download DUMP_ID
 stint offline sync
 stint --sync-ai-activity --ai-agent codex
 ```
+
+The Codex and Claude plugins run Stint from hooks. If `stint` is not on your
+`PATH`, set `STINT_BIN` to its absolute path. Hook-time install is opt-in only:
+`STINT_PLUGIN_AUTO_INSTALL=1`.
 
 The CLI uses WakaTime-compatible resource paths: `~/.wakatime.cfg` for config,
 `~/.wakatime/offline_heartbeats.bdb` for queued heartbeats, and

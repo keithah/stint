@@ -1,0 +1,19 @@
+{
+  "name": "claude-code-stint",
+  "description": "Stint plugin for Claude Code - Track Claude Code CLI and Desktop coding activity in Stint",
+  "version": "0.1.0",
+  "author": {
+    "name": "Stint"
+  },
+  "homepage": "https://github.com/keithah/stint",
+  "repository": "https://github.com/keithah/stint",
+  "license": "MIT",
+  "keywords": [
+    "stint",
+    "claude",
+    "claude-code",
+    "time-tracking",
+    "ai",
+    "productivity"
+  ]
+}

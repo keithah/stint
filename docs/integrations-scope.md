@@ -5,13 +5,14 @@ while maintaining the **fewest moving parts**.
 
 Locked decisions (full log in [§8](#8-decision-log)):
 
-- **Posture:** reuse the existing plugin ecosystem + own one cohesive setup
-  layer. No plugin forks.
+- **Posture:** reuse the existing WakaTime-compatible plugin ecosystem for
+  editor coverage, and maintain small first-party hook plugins for agents whose
+  local transcript sync benefits from Stint-owned hooks.
 - **Config:** `~/.stint.cfg` is Stint's native config; `~/.wakatime.cfg` is read
   with the same parser as a compatibility fallback, and is written to so
   upstream plugins reach Stint.
-- **AI data:** hybrid — `stint-collect` (file scan) for token/cost, upstream AI
-  hook plugins (heartbeats) for in-editor AI lines/prompts/sessions.
+- **AI data:** hybrid — Stint CLI local transcript sync for token/cost plus
+  first-party Codex and Claude hook plugins that trigger that sync.
 - **Surface:** first-class for the full WakaTime integration list (minus a few
   scope cuts in §8).
 - **Shape:** extend the existing **stint CLI** (`cmd/collect` → a unified
@@ -35,8 +36,8 @@ ingestion patterns**, and almost all funnel through one chokepoint: the
 What Stint owns is small and high-leverage:
 
 1. **`stint` CLI** (extend `cmd/collect`) — detect editors, write/repair config,
-   manage the `wakatime-cli` binary, install AI hook plugins, run the collector,
-   and (later) print stats.
+   manage the `wakatime-cli` binary, install Stint AI hook plugins, run the
+   collector, and (later) print stats.
 2. **stint-desktop** — one cross-platform app that wraps the CLI: GUI onboarding
    + system app-usage tracking + scheduled collection. Replaces the *two*
    separate apps WakaTime maintains (Electron `desktop-wakatime` + Swift
@@ -94,7 +95,7 @@ api_key = waka_xxxxxxxx
 | Pattern | How it sends data | Stint compat requirement | Stint maintenance |
 |---|---|---|---|
 | **A. Editor/IDE plugins** | shell out to `wakatime-cli`, read `~/.wakatime.cfg` | accept heartbeats (✅); CLI sets `api_url` | none (config only) |
-| **B. AI agent hook plugins** | install `wakatime-cli`, send **AI heartbeats** on prompt/file-edit hooks | accept AI heartbeat fields (✅, see compat doc); CLI automates install | none (config only) |
+| **B. AI agent hook plugins** | trigger `stint --sync-ai-activity` from agent hooks | accept AI heartbeat fields (✅, see compat doc); marketplace install docs | two small Stint-owned hook plugins |
 | **C. Direct-POST extensions** | POST heartbeats straight to the API (sandboxed, no subprocess) | accept heartbeats (✅); **needs a custom `api_url` field in the extension's own settings** | doc + verify |
 | **D. Desktop system trackers** | watch active-app usage, shell to `wakatime-cli` | accept heartbeats (✅) | **unify into stint-desktop** |
 | **E. Core CLI** | `wakatime-cli` itself + pip wrapper | reuse upstream binary | vendor/download only |
@@ -125,14 +126,14 @@ editor-level settings via `--deep`), + a verified heartbeat in CI's smoke test,
 
 ### Pattern B — AI agent hook plugins (the new AI stats)
 
-`claude-code-wakatime` · `codex-cli-wakatime` · `codex-wakatime` ·
-`antigravity-wakatime` · `amp-cli-wakatime` · `copilot-cli-wakatime`.
+`claude-code-stint` · `codex-cli-stint` first, with possible later plugins for
+Antigravity, Amp, and Copilot if local transcript sync needs hooks there.
 
-**Status:** ✅ server accepts the AI heartbeat fields (per compat doc). These
-install via each agent's own plugin marketplace and read `~/.wakatime.cfg`.
-First-class = `stint plugin install claude-code|codex|antigravity|amp|copilot`
-automates the marketplace-add + writes the api key. This is the hybrid's "AI
-heartbeat" half; the collector covers token/cost in parallel.
+**Status:** ✅ server accepts the AI heartbeat fields (per compat doc), and the
+repo ships first-party Codex and Claude marketplace plugins. They run only on
+`SessionEnd` and `UserPromptSubmit`, debounce repeated hook calls, and call the
+installed Stint CLI. They do not run hook-time install unless
+`STINT_PLUGIN_AUTO_INSTALL=1` is explicitly set.
 
 ### Pattern C — Direct-POST extensions (need a custom API URL)
 
@@ -220,10 +221,12 @@ Ship order: macOS → Windows → Linux.
 | stint-desktop | medium | thin Tauri GUI over the CLI; only app-focus watching is OS-specific |
 | `wakatime-cli` | ~zero | reused upstream, never forked |
 | Editor plugins (~50) | **zero** | reused upstream via `api_url` |
+| Agent hook plugins | small | first-party Codex and Claude wrappers share one runner |
 
-The number that matters: **plugins maintained = 0.** New editor support is a
-config registry row + a smoke-test heartbeat — bounded, testable, decoupled from
-each editor's release cycle.
+The editor-plugin number still matters: **editor plugins maintained = 0.** Agent
+hook plugins are now a deliberate exception for Stint-owned AI sync ergonomics.
+The maintained surface is bounded by a shared runner plus thin marketplace
+manifests for each agent.
 
 ---
 
@@ -251,6 +254,11 @@ Resolved decisions driving this scope. (AI-side items also annotated in
 - **B4 — wakatime-cli.** Download upstream release into `~/.wakatime/`, pin a
   known-good version, verify checksum, allow `STINT_WAKATIME_CLI` override.
   **Never fork.**
+- **B5 — first-party agent hooks.** Maintain Stint-owned Codex and Claude
+  marketplace plugins that call the installed `stint --sync-ai-activity` command
+  from `SessionEnd` and `UserPromptSubmit` hooks. The shared runner debounces
+  syncs and requires an installed Stint binary unless
+  `STINT_PLUGIN_AUTO_INSTALL=1` is explicitly set.
 
 ### Desktop
 - **D1 — Toolkit: Tauri.**
@@ -294,8 +302,9 @@ Resolved decisions driving this scope. (AI-side items also annotated in
 2. **`stint connect` + editor registry.** Tier-1 first (VS Code family,
    JetBrains, Vim/Neovim, Zed), then fan out the registry to the full Pattern-A
    list.
-3. **`stint plugin install`** for the AI hook plugins (claude-code, codex,
-   antigravity, amp, copilot) — completes the hybrid AI story.
+3. **Agent marketplace plugins** for Codex and Claude — ship first-party hook
+   plugins with shared runner logic, then add `stint plugin install` automation
+   only after the agent marketplace contracts are verified on clean machines.
 4. **`stint doctor`** + extend `scripts/smoke-wakatime.sh` to assert a real
    heartbeat per representative plugin (one per pattern).
 5. **stint-desktop** (Tauri): onboarding GUI → app-focus tracking → tray

@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+set -eu
+
+ROOT="${CLAUDE_PLUGIN_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}"
+SHARED_ROOT="$(CDPATH= cd -- "$ROOT/.." && pwd)"
+export STINT_PLUGIN_NAME=claude-code-stint
+export STINT_PLUGIN_AGENT=claude
+export STINT_PLUGIN_HOST=claude-code
+export STINT_PLUGIN_HOST_VERSION_ENV=CLAUDE_CODE_VERSION
+
+if [ -n "${NODE_OPTIONS:-}" ]; then
+  unset NODE_OPTIONS
+fi
+
+if [ -n "${NODE_BIN:-}" ] && [ -x "${NODE_BIN}" ]; then
+  exec "${NODE_BIN}" "$SHARED_ROOT/shared/stint-plugin-runner.js" --background "$@"
+fi
+
+if command -v node >/dev/null 2>&1; then
+  exec node "$SHARED_ROOT/shared/stint-plugin-runner.js" --background "$@"
+fi
+
+echo "Error: Node.js not found. Set NODE_BIN=/absolute/path/to/node or add node to PATH." >&2
+exit 127

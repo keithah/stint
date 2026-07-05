@@ -1,0 +1,25 @@
+{
+  "name": "claude-code-stint",
+  "version": "0.1.0",
+  "description": "Stint plugin for Claude Code",
+  "bin": {
+    "claude-code-stint": "scripts/run"
+  },
+  "scripts": {
+    "test": "node --check ../shared/stint-plugin-runner.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keithah/stint.git"
+  },
+  "keywords": [
+    "stint",
+    "claude",
+    "claude-code",
+    "time-tracking",
+    "ai"
+  ],
+  "author": "Stint",
+  "license": "MIT",
+  "homepage": "https://github.com/keithah/stint#readme"
+}

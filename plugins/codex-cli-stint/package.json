@@ -1,0 +1,25 @@
+{
+  "name": "codex-cli-stint",
+  "version": "0.1.0",
+  "description": "Stint plugin for Codex CLI",
+  "bin": {
+    "codex-cli-stint": "scripts/run"
+  },
+  "scripts": {
+    "test": "node --check ../shared/stint-plugin-runner.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keithah/stint.git"
+  },
+  "keywords": [
+    "stint",
+    "codex",
+    "codex-cli",
+    "time-tracking",
+    "ai"
+  ],
+  "author": "Stint",
+  "license": "MIT",
+  "homepage": "https://github.com/keithah/stint#readme"
+}

@@ -1,16 +1,18 @@
-# Editor Client Setup
+# Plugin Setup
 
-Stint collects editor and agent activity through `/api/v1`. Existing WakaTime-compatible plugins can point at Stint by changing `api_url` and `api_key`, while native Stint clients can add richer model, provider, token, and cost metadata.
+Stint works with WakaTime-style plugins. Install a plugin, save your Stint API
+URL and API key in `~/.wakatime.cfg`, then use your editor or agent normally.
 
-## 1. Create an API Key
+## Get Your API Key
 
-For local development, open `http://localhost:3000/login` when running `npm run dev`, or `http://localhost:3001/login` when using Docker Compose. Choose **Create local dev key**, then open Settings and create/copy the generated Stint API key.
+For local development, open `http://localhost:3000/login` when running
+`npm run dev`, or `http://localhost:3001/login` when using Docker Compose.
+Choose **Create local dev key**, then copy the API key from Settings.
 
-For a deployed instance, sign in through GitHub, open Settings, and create an API key.
+For a deployed instance, sign in through GitHub, open Settings, and create an
+API key.
 
-## 2. Configure an Existing Editor Client
-
-### Native Stint CLI
+## Install Stint CLI
 
 Install the latest prebuilt CLI:
 
@@ -18,7 +20,7 @@ Install the latest prebuilt CLI:
 curl -fsSL https://stint.fyi/install.sh | sh
 ```
 
-Initialize a WakaTime-compatible config file:
+Save your Stint endpoint and API key:
 
 ```bash
 stint config init \
@@ -26,7 +28,7 @@ stint config init \
   --api-key waka_00000000-0000-4000-8000-000000000000
 ```
 
-Send a smoke-test heartbeat:
+Check the setup:
 
 ```bash
 stint doctor
@@ -37,7 +39,46 @@ stint heartbeat \
   --plugin stint-cli/release
 ```
 
-Send an AI-enriched heartbeat directly:
+## Install Agent Plugins
+
+### Codex CLI
+
+```bash
+codex plugin marketplace add https://github.com/keithah/stint.git
+codex plugin add codex-cli-stint@stint
+```
+
+### Claude Code
+
+```bash
+claude plugin marketplace add https://github.com/keithah/stint.git
+claude plugin i claude-code-stint@stint
+```
+
+Then use Codex or Claude Code normally. The plugins read `~/.wakatime.cfg`,
+run Stint in the background, and log to `~/.wakatime/`.
+
+If `stint` is not on your `PATH`, set `STINT_BIN` to the absolute path of the
+binary. Hook-time install is opt-in only: `STINT_PLUGIN_AUTO_INSTALL=1`.
+
+## Use Existing WakaTime-Compatible Plugins
+
+For editor-only tracking, install the WakaTime plugin from your editor's
+marketplace and save this config:
+
+```ini
+[settings]
+api_url = https://stint.fyi/api/v1
+api_key = waka_00000000-0000-4000-8000-000000000000
+heartbeat_rate_limit_seconds = 30
+offline = true
+```
+
+For local Compose, use `http://localhost:8080/api/v1` as the `api_url`.
+
+## Verify Activity
+
+Run one direct heartbeat:
 
 ```bash
 stint heartbeat \
@@ -50,15 +91,23 @@ stint heartbeat \
   --metadata '{"source":"manual"}'
 ```
 
-Common follow-up commands:
+Then check:
 
 ```bash
 stint today
 stint user-agents
 stint data-dumps download DUMP_ID
 stint offline sync
-stint --sync-ai-activity --ai-agent codex
 ```
+
+For agent activity, you can also run a manual sync:
+
+```bash
+stint --sync-ai-activity --ai-agent codex
+stint --sync-ai-activity --ai-agent claude
+```
+
+## Advanced CLI Compatibility
 
 The CLI also accepts WakaTime-style root flags, so editor integrations that shell
 out to `wakatime-cli --entity ...` can use `stint --entity ...` with the same

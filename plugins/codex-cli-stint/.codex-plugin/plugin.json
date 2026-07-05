@@ -1,0 +1,37 @@
+{
+  "name": "codex-cli-stint",
+  "version": "0.1.0",
+  "description": "Stint plugin for Codex CLI",
+  "author": {
+    "name": "Stint",
+    "url": "https://stint.fyi"
+  },
+  "homepage": "https://github.com/keithah/stint",
+  "repository": "https://github.com/keithah/stint",
+  "license": "MIT",
+  "keywords": [
+    "stint",
+    "codex",
+    "codex-cli",
+    "time-tracking",
+    "ai"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Codex CLI Stint",
+    "shortDescription": "Track Codex CLI AI activity with Stint.",
+    "longDescription": "Stint plugin for Codex CLI that syncs AI heartbeats after user prompts and file-edit tool completions.",
+    "developerName": "Stint",
+    "category": "Productivity",
+    "capabilities": [
+      "Write"
+    ],
+    "websiteURL": "https://stint.fyi",
+    "privacyPolicyURL": "https://stint.fyi",
+    "termsOfServiceURL": "https://stint.fyi",
+    "defaultPrompt": [
+      "Track my Codex CLI work with Stint"
+    ],
+    "brandColor": "#38BDF8"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "stint",
+  "interface": {
+    "displayName": "Stint"
+  },
+  "plugins": [
+    {
+      "name": "codex-cli-stint",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex-cli-stint"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
