@@ -15,6 +15,7 @@ import {
   PlugZap,
   Plus,
   Radar,
+  RefreshCw,
   ShieldCheck,
   TerminalSquare,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import {
   clients,
   compatibilityNote,
   integrationConfigs,
+  stintConfiguredInstallCommand,
   type IntegrationConfig,
 } from "./recipes";
 
@@ -42,7 +44,10 @@ export default function IntegrationsPage() {
 function IntegrationsContent() {
   const queryClient = useQueryClient();
   const [latestKey, setLatestKey] = useState("");
+  const [latestKeyId, setLatestKeyId] = useState("");
   const [copied, setCopied] = useState("");
+  const [setupMessage, setSetupMessage] = useState("");
+  const [validateMessage, setValidateMessage] = useState("");
   const [selectedIntegration, setSelectedIntegration] =
     useState("stint-cli-config");
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,6 +83,10 @@ function IntegrationsContent() {
     () => integrationConfigs(apiURL, displayKey),
     [apiURL, displayKey],
   );
+  const generatedSetupCommand = stintConfiguredInstallCommand(
+    apiURL,
+    displayKey,
+  );
   const selectedConfig =
     configs.find((config) => config.id === selectedIntegration) ?? configs[0];
   const createIntegrationKey = useMutation({
@@ -89,6 +98,7 @@ function IntegrationsContent() {
       ]),
     onSuccess: (result) => {
       setLatestKey(result.data.api_key);
+      setLatestKeyId(result.data.key.id);
       queryClient.invalidateQueries({ queryKey: ["api-keys"] });
     },
   });
@@ -122,6 +132,47 @@ function IntegrationsContent() {
       1600,
     );
   };
+  const copyGeneratedSetup = async () => {
+    setSetupMessage("");
+    setValidateMessage("");
+    const result = latestKey
+      ? { data: { api_key: latestKey, key: { id: latestKeyId } } }
+      : await createIntegrationKey.mutateAsync();
+    const apiKey = result.data.api_key;
+    const apiKeyId = result.data.key.id;
+    setLatestKey(apiKey);
+    setLatestKeyId(apiKeyId);
+    setSelectedIntegration("stint-cli-config");
+    window.history.replaceState(null, "", "#stint-cli-config");
+    await copyText(
+      "generated-setup",
+      stintConfiguredInstallCommand(apiURL, apiKey),
+    );
+    setSetupMessage("Setup command copied with your Stint key.");
+  };
+  const validateConnection = async () => {
+    setValidateMessage("Checking for a Stint CLI check-in...");
+    const [agentsResult, keysResult] = await Promise.all([
+      userAgents.refetch(),
+      keys.refetch(),
+    ]);
+    const rows = agentsResult.data?.data ?? [];
+    const generatedKeyUsed = Boolean(
+      latestKeyId &&
+        keysResult.data?.data.some(
+          (key) => key.id === latestKeyId && key.last_used_at,
+        ),
+    );
+    const connected = rows.some((agent) => {
+      const value = `${agent.editor ?? ""} ${agent.value ?? ""}`.toLowerCase();
+      return value.includes("stint");
+    }) || generatedKeyUsed;
+    setValidateMessage(
+      connected
+        ? "Yes, Stint CLI is connected."
+        : "No Stint CLI check-in yet. Run the copied command, then validate again.",
+    );
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-6 lg:px-8">
@@ -135,13 +186,21 @@ function IntegrationsContent() {
             <button
               className="inline-flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-ink hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
-              onClick={() => createIntegrationKey.mutate()}
+              onClick={() => {
+                void copyGeneratedSetup();
+              }}
               disabled={createIntegrationKey.isPending}
             >
-              <Plus size={16} />{" "}
+              {copied === "generated-setup" ? (
+                <Check size={16} />
+              ) : (
+                <Plus size={16} />
+              )}{" "}
               {createIntegrationKey.isPending
-                ? "Creating..."
-                : "Generate one-command setup"}
+                ? "Creating and copying..."
+                : copied === "generated-setup"
+                  ? "Setup copied"
+                  : "Copy one-command setup"}
             </button>
             <Link
               className="inline-flex w-fit items-center gap-2 rounded-md border border-line bg-panel px-4 py-2 text-sm text-zinc-100 hover:border-accent/50 hover:bg-white/5"
@@ -152,22 +211,37 @@ function IntegrationsContent() {
           </>
         }
       />
-            {latestKey ? (
-        <div className="mb-8 -mt-2 rounded border border-accent/35 bg-accent/10 p-4">
+      <div className="mb-8 -mt-2 rounded border border-accent/35 bg-accent/10 p-4">
+        <div className="mb-2 flex items-center gap-2 text-sm font-medium text-accent">
+          <TerminalSquare size={16} /> One command setup
+        </div>
+        <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+          <code className="overflow-x-auto rounded border border-line bg-ink px-3 py-2 text-xs text-zinc-200">
+            {generatedSetupCommand}
+          </code>
+          <CopyButton
+            id="generated-setup"
+            label="Copy setup"
+            copied={copied === "generated-setup"}
+            onCopy={() => {
+              void copyGeneratedSetup();
+            }}
+          />
+        </div>
+        <p className="mt-3 text-sm text-zinc-400">
+          {setupMessage ||
+            "Click Copy setup. Stint creates a scoped key, inserts it here, and copies the full command."}
+        </p>
+      </div>
+      {latestKey ? (
+        <div className="mb-8 -mt-4 rounded border border-line bg-panel p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium text-accent">
             <CheckCircle2 size={16} /> New key created
           </div>
-          <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
-            <code className="overflow-x-auto rounded border border-line bg-ink px-3 py-2 text-xs text-zinc-200">
-              {latestKey}
-            </code>
-            <CopyButton
-              id="latest-key"
-              label="Copy key"
-              copied={copied === "latest-key"}
-              onCopy={() => copyText("latest-key", latestKey)}
-            />
-          </div>
+          <p className="text-sm text-zinc-400">
+            The copied command already includes this key, so there is no separate
+            key-copy step.
+          </p>
         </div>
       ) : null}
 
@@ -282,9 +356,33 @@ function IntegrationsContent() {
         </div>
 
         <div className="space-y-6">
-          <Panel title="Connection health" icon={Radar}>
-            <div className={`mb-4 rounded border p-3 text-sm ${stintCLIConnected ? "border-accent/40 bg-accent/10 text-accent" : "border-line bg-ink text-zinc-400"}`}>
-              {stintCLIConnected ? "Yes, Stint CLI is connected" : "Stint CLI is not connected yet"}
+          <Panel
+            title="Connection health"
+            icon={Radar}
+            action={
+              <button
+                className="inline-flex h-9 items-center gap-2 rounded border border-line px-3 text-sm text-zinc-200 hover:border-accent/50 hover:bg-white/5 disabled:opacity-60"
+                type="button"
+                onClick={() => {
+                  void validateConnection();
+                }}
+                disabled={userAgents.isFetching}
+              >
+                <RefreshCw
+                  size={15}
+                  className={userAgents.isFetching ? "animate-spin" : ""}
+                />
+                Validate connection
+              </button>
+            }
+          >
+            <div
+              className={`mb-4 rounded border p-3 text-sm ${stintCLIConnected ? "border-accent/40 bg-accent/10 text-accent" : "border-line bg-ink text-zinc-400"}`}
+            >
+              {validateMessage ||
+                (stintCLIConnected
+                  ? "Yes, Stint CLI is connected"
+                  : "Stint CLI is not connected yet")}
             </div>
             <div className="mb-4 grid gap-3 sm:grid-cols-3">
               <HealthMetric
@@ -336,9 +434,8 @@ function IntegrationsContent() {
               </div>
             ) : (
               <div className="rounded border border-dashed border-line bg-ink p-4 text-sm text-zinc-500">
-                  No clients have checked in yet. Send a heartbeat, then this
-                  panel will show last_seen_at, editor, model, and provider
-                  coverage.
+                No clients have checked in yet. Run the copied setup command,
+                then press Validate connection.
               </div>
             )}
           </Panel>

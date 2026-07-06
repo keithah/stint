@@ -187,10 +187,8 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
         },
       ],
       verify: [
-        configuredInstall,
-        "stint doctor",
-        'stint heartbeat --entity "$PWD/README.md" --write --project my-project',
-        "stint today",
+        "Run the copied setup command once.",
+        "Return here and click Validate connection.",
       ],
       screenshot: {
         src: "/integrations/screenshots/stint-cli.svg",
