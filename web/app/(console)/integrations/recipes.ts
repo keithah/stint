@@ -1,5 +1,9 @@
 export const stintInstallCommand = "curl -fsSL https://stint.fyi/install.sh | sh";
 
+export function stintConfiguredInstallCommand(apiURL: string, apiKey: string) {
+  return `curl -fsSL https://stint.fyi/install.sh | STINT_API_URL="${apiURL}" STINT_API_KEY="${apiKey}" sh`;
+}
+
 const codexMarketplacePlugin = {
   name: "codex-cli-stint",
   commands: [
@@ -121,6 +125,7 @@ export type IntegrationConfig = {
 };
 
 export function integrationConfigs(apiURL: string, apiKey: string) {
+  const configuredInstall = stintConfiguredInstallCommand(apiURL, apiKey);
   const configBlock = [
     "mkdir -p ~/.wakatime",
     "cat > ~/.wakatime.cfg <<'EOF'",
@@ -143,8 +148,8 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
           title: "Install with one command",
           badge: "Recommended",
           description:
-            "Open Terminal, paste this command, and Stint installs the right prebuilt binary for your Mac or Linux machine.",
-          commands: [stintInstallCommand, "stint --version"],
+            "Create a Stint key on this page, paste this command in Terminal, and the installer writes ~/.stint.cfg before checking the connection.",
+          commands: [configuredInstall],
         },
         {
           title: "Use WakaTime-compatible plugin",
@@ -170,19 +175,19 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
       steps: [
         {
           title: "Step 1",
-          body: "Create an integration key on this page. Stint will show the key once, so copy it before leaving.",
+          body: "Click the setup button on this page. Stint creates a scoped key and inserts it into the install command.",
         },
         {
           title: "Step 2",
-          body: "Run the install command in Terminal. You do not need Go, Git, or this source repository.",
+          body: "Run the one command in Terminal. You do not need Go, Git, this repository, or a separate config step.",
         },
         {
           title: "Step 3",
-          body: "Paste your Stint endpoint and key into the config command below. After that, keep working normally.",
+          body: "The installer prints the CLI version and runs doctor. When doctor says connected, keep working normally.",
         },
       ],
       verify: [
-        `stint config init --api-url ${apiURL} --api-key ${apiKey}`,
+        configuredInstall,
         "stint doctor",
         'stint heartbeat --entity "$PWD/README.md" --write --project my-project',
         "stint today",

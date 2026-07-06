@@ -4,10 +4,11 @@ Track Claude Code CLI and Claude Desktop activity with Stint.
 
 ## Requirements
 
-Install the Stint CLI first:
+Install and configure the Stint CLI first. Use the generated command from
+Integrations so the installer writes `~/.stint.cfg` and runs `stint doctor`:
 
 ```bash
-curl -fsSL https://stint.fyi/install.sh | sh
+curl -fsSL https://stint.fyi/install.sh | STINT_API_URL="https://stint.fyi/api/v1" STINT_API_KEY="stint_123" sh
 ```
 
 If `stint` is not on your `PATH`, set `STINT_BIN` to the absolute path of the
@@ -28,15 +29,7 @@ claude plugin marketplace add https://github.com/keithah/stint.git
 claude plugin i claude-code-stint@stint
 ```
 
-3. Save your Stint endpoint and API key to `~/.wakatime.cfg`:
-
-```cfg
-[settings]
-api_url = https://stint.fyi/api/v1
-api_key = waka_123
-```
-
-4. Use Claude Code like you normally do. Your AI coding activity will appear in Stint.
+3. Use Claude Code like you normally do. Your AI coding activity will appear in Stint.
 
 ## Upgrading
 
@@ -61,5 +54,5 @@ The plugin runs on Claude `SessionEnd` and `UserPromptSubmit` hooks, then calls
 ## Privacy
 
 Stint reads local Claude activity and sends WakaTime-shaped heartbeats to the
-`api_url` in `~/.wakatime.cfg`. Configure include/exclude and privacy settings
-in the same file.
+`api_url` in `~/.stint.cfg`. Existing `~/.wakatime.cfg` settings still work as a
+compatibility fallback.

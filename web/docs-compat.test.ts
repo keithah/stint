@@ -11,7 +11,8 @@ assertExcludes("AI compatibility doc no longer claims stats aliases are missing"
 assertExcludes("AI compatibility doc no longer claims durations AI fields are absent", aiCompat, "Not exposed at all");
 assertExcludes("AI compatibility doc no longer claims prompt insights are missing", aiCompat, "Not computed");
 
-assertIncludes("plugin setup documents release install", pluginSetup, "curl -fsSL https://stint.fyi/install.sh | sh");
+assertIncludes("plugin setup documents configured release install", pluginSetup, "STINT_API_URL=");
+assertIncludes("plugin setup documents configured API key install", pluginSetup, "STINT_API_KEY=");
 assertIncludes("plugin setup documents setup verification", pluginSetup, "stint doctor");
 assertIncludes("plugin setup documents smoke heartbeat", pluginSetup, "stint heartbeat");
 assertIncludes("plugin setup documents AI sync", pluginSetup, "stint --sync-ai-activity --ai-agent codex");
@@ -23,7 +24,8 @@ assertIncludes("plugin setup documents offline sync", pluginSetup, "stint offlin
 assertIncludes("plugin setup documents ordered project maps", pluginSetup, "first matching entry in file order");
 assertIncludes("plugin setup documents ordered api_urls fanout", pluginSetup, "every matching entry in file order");
 
-assertIncludes("README documents release install", readme, "curl -fsSL https://stint.fyi/install.sh | sh");
+assertIncludes("README documents configured release install", readme, "STINT_API_URL=");
+assertIncludes("README documents configured API key install", readme, "STINT_API_KEY=");
 assertIncludes("README documents doctor command", readme, "stint doctor");
 assertIncludes("README documents data dump downloads", readme, "stint data-dumps download DUMP_ID");
 assertIncludes("README documents offline sync command", readme, "stint offline sync");

@@ -93,13 +93,13 @@ func TestExtractAPIKeyAcceptsOAuthBearerPrefix(t *testing.T) {
 	}
 }
 
-func TestGenerateAPIKeyProducesWakaTimeFanoutCompatibleKey(t *testing.T) {
+func TestGenerateAPIKeyProducesStintKey(t *testing.T) {
 	key, fingerprint, err := GenerateAPIKey()
 	if err != nil {
 		t.Fatalf("GenerateAPIKey returned error: %v", err)
 	}
 	if !strings.HasPrefix(key, APIKeyPrefix) {
-		t.Fatalf("expected generated key to use WakaTime fanout-compatible prefix %q, got %q", APIKeyPrefix, key)
+		t.Fatalf("expected generated key to use Stint prefix %q, got %q", APIKeyPrefix, key)
 	}
 	id := strings.TrimPrefix(key, APIKeyPrefix)
 	if _, err := uuid.Parse(id); err != nil {
@@ -110,6 +110,12 @@ func TestGenerateAPIKeyProducesWakaTimeFanoutCompatibleKey(t *testing.T) {
 	}
 	if fingerprint == "" || fingerprint != KeyFingerprint(key) {
 		t.Fatalf("unexpected fingerprint %q for key %q", fingerprint, key)
+	}
+}
+
+func TestIsAPIKeyAcceptsLegacyWakaPrefix(t *testing.T) {
+	if !IsAPIKey("waka_legacy") {
+		t.Fatal("expected legacy waka_ keys to remain accepted")
 	}
 }
 

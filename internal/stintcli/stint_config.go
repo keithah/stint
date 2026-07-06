@@ -32,15 +32,22 @@ func runSetup(args []string, stdout io.Writer) error {
 		return fmt.Errorf("prepare stint config: %w", err)
 	}
 	defer stintWrite.cleanup()
-	wakaWrite, err := prepareSetupConfig(*wakaConfig, apiURL, apiKey, false)
-	if err != nil {
-		return fmt.Errorf("prepare wakatime config: %w", err)
+	if hasFlag(args, "wakatime-config") {
+		wakaWrite, err := prepareSetupConfig(*wakaConfig, apiURL, apiKey, false)
+		if err != nil {
+			return fmt.Errorf("prepare wakatime config: %w", err)
+		}
+		defer wakaWrite.cleanup()
+		if err := commitSetupConfigs(&stintWrite, &wakaWrite); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "wrote %s and %s\n", expandHome(*stintConfig), expandHome(*wakaConfig))
+		return nil
 	}
-	defer wakaWrite.cleanup()
-	if err := commitSetupConfigs(&stintWrite, &wakaWrite); err != nil {
+	if err := commitSetupConfigs(&stintWrite); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "wrote %s and %s\n", expandHome(*stintConfig), expandHome(*wakaConfig))
+	fmt.Fprintf(stdout, "wrote %s\n", expandHome(*stintConfig))
 	return nil
 }
 

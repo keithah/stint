@@ -31,6 +31,30 @@ func TestConfigReadWriteAndRun(t *testing.T) {
 	}
 }
 
+func TestConfigInitWritesNativeStintConfigByDefault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("WAKATIME_HOME", home)
+
+	var out bytes.Buffer
+	if err := Run([]string{"config", "init", "--api-url", "https://stint.example.com/api/v1", "--api-key", "stint_test"}, nil, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(DefaultStintConfigPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Get("settings", "api_url") != "https://stint.example.com/api/v1" || cfg.Get("settings", "api_key") != "stint_test" {
+		t.Fatalf("unexpected native config: %#v", cfg.Section("settings"))
+	}
+	if _, err := os.Stat(DefaultWakaTimeConfigPath()); !os.IsNotExist(err) {
+		t.Fatalf("config init should not write wakatime config by default, stat err=%v", err)
+	}
+	if !strings.Contains(out.String(), ".stint.cfg") {
+		t.Fatalf("expected native config path in output, got %q", out.String())
+	}
+}
+
 func TestConfigReadErrorsWhenValueIsMissing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".wakatime.cfg")
 	if err := InitConfig(path, "http://stint.local/api/v1", "waka_key"); err != nil {

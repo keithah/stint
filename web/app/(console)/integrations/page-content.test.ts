@@ -6,6 +6,11 @@ const source = [
 ].join("\n");
 
 assertIncludes("integrations page exposes native Stint CLI install", source, "curl -fsSL https://stint.fyi/install.sh | sh");
+assertIncludes("integrations page exposes one-command configured install", source, "STINT_API_URL");
+assertIncludes("integrations page injects the generated key into setup", source, "STINT_API_KEY");
+assertIncludes("integrations page uses Stint key placeholders", source, "stint_your_stint_key");
+assertIncludes("integrations page documents native Stint config", source, "~/.stint.cfg");
+assertIncludes("integrations page shows Stint CLI connected state", source, "Yes, Stint CLI is connected");
 assertIncludes("integrations page makes integration cards selectable", source, "setSelectedIntegration");
 assertIncludes("integrations page links every setup card to a stable hash", source, 'const href = `#${recipeId}`');
 assertIncludes("integrations page exposes selected instructions region", source, "integration-instructions");

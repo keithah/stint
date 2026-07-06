@@ -10,7 +10,34 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func TestSetupWritesStintAndWakaTimeConfigsPreservingExistingKeys(t *testing.T) {
+func TestSetupWritesOnlyStintConfigByDefault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("WAKATIME_HOME", home)
+
+	wakaPath := filepath.Join(home, ".wakatime.cfg")
+
+	var out bytes.Buffer
+	if err := Run([]string{"setup", "--server", "https://stint.example.com/api/v1", "--key", "stint_new"}, nil, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+
+	stintCfg, err := LoadConfig(DefaultStintConfigPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stintCfg.Get("settings", "api_url") != "https://stint.example.com/api/v1" || stintCfg.Get("settings", "api_key") != "stint_new" {
+		t.Fatalf("unexpected stint config: %#v", stintCfg.Section("settings"))
+	}
+	if _, err := os.Stat(wakaPath); !os.IsNotExist(err) {
+		t.Fatalf("setup should not write wakatime config by default, stat err=%v", err)
+	}
+	if !strings.Contains(out.String(), ".stint.cfg") || strings.Contains(out.String(), ".wakatime.cfg") {
+		t.Fatalf("expected native setup summary, got %q", out.String())
+	}
+}
+
+func TestSetupWritesWakaTimeConfigWhenExplicit(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("WAKATIME_HOME", home)
@@ -24,23 +51,15 @@ func TestSetupWritesStintAndWakaTimeConfigsPreservingExistingKeys(t *testing.T) 
 	}
 
 	var out bytes.Buffer
-	if err := Run([]string{"setup", "--server", "https://stint.example.com/api/v1", "--key", "waka_new"}, nil, &out, &bytes.Buffer{}); err != nil {
+	if err := Run([]string{"setup", "--server", "https://stint.example.com/api/v1", "--key", "stint_new", "--wakatime-config", wakaPath}, nil, &out, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
-	}
-
-	stintCfg, err := LoadConfig(DefaultStintConfigPath())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stintCfg.Get("settings", "api_url") != "https://stint.example.com/api/v1" || stintCfg.Get("settings", "api_key") != "waka_new" {
-		t.Fatalf("unexpected stint config: %#v", stintCfg.Section("settings"))
 	}
 	wakaCfg, err := LoadConfig(wakaPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	settings := wakaCfg.Section("settings")
-	if settings["api_url"] != "https://stint.example.com/api/v1" || settings["api_key"] != "waka_new" {
+	if settings["api_url"] != "https://stint.example.com/api/v1" || settings["api_key"] != "stint_new" {
 		t.Fatalf("unexpected wakatime config: %#v", settings)
 	}
 	if settings["debug"] != "true" || settings["exclude"] != "vendor" {
@@ -53,7 +72,7 @@ func TestSetupWritesStintAndWakaTimeConfigsPreservingExistingKeys(t *testing.T) 
 	if len(backups) != 0 {
 		t.Fatalf("setup left backup files behind: %#v", backups)
 	}
-	if !strings.Contains(out.String(), "wrote") {
+	if !strings.Contains(out.String(), ".stint.cfg") || !strings.Contains(out.String(), ".wakatime.cfg") {
 		t.Fatalf("expected setup summary, got %q", out.String())
 	}
 }

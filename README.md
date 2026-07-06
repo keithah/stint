@@ -31,7 +31,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000/login` for local `npm run dev`, or `http://localhost:3001/login` when using Docker Compose. Choose "Create local dev key", then copy the generated editor config from Settings.
+Open `http://localhost:3000/login` for local `npm run dev`, or `http://localhost:3001/login` when using Docker Compose. Choose "Create local dev key", then open Integrations and copy the generated Stint CLI setup command.
 New empty dashboards show a dismissible editor setup modal with a local API URL, a copyable editor config block, and the expected two-minute activity refresh window after opening an editor.
 Settings surfaces the signed-in GitHub account identity and sign-out action alongside profile preferences, API keys, OAuth apps, share tokens, data exports, imports, custom rules, AI costs, and account deletion.
 Settings includes server diagnostics from `/api/v1/meta`, including the configured API URL, base URL, hostname, detected client IP, and build version.
@@ -46,13 +46,12 @@ scripts/generate-sqlc.sh
 
 ## Plugin Setup
 
-Install the Stint CLI, save your endpoint and key, then use your editor or agent
-normally:
+Install the Stint CLI with the generated command from Integrations. It includes
+your scoped API key, writes `~/.stint.cfg`, prints the CLI version, and runs
+`stint doctor` so you can see whether the CLI is connected:
 
 ```bash
-curl -fsSL https://stint.fyi/install.sh | sh
-stint config init --api-url http://localhost:8080/api/v1 --api-key waka_00000000-0000-4000-8000-000000000000
-stint doctor
+curl -fsSL https://stint.fyi/install.sh | STINT_API_URL="https://stint.fyi/api/v1" STINT_API_KEY="stint_00000000-0000-4000-8000-000000000000" sh
 stint heartbeat --entity "$PWD/main.go" --write --project stint
 ```
 
@@ -71,12 +70,12 @@ claude plugin i claude-code-stint@stint
 ```
 
 For editor-only tracking, install the WakaTime plugin from your editor's
-marketplace and use this shared config:
+marketplace and use this compatibility config in `~/.wakatime.cfg`:
 
 ```ini
 [settings]
 api_url = http://localhost:8080/api/v1
-api_key = waka_00000000-0000-4000-8000-000000000000
+api_key = stint_00000000-0000-4000-8000-000000000000
 heartbeat_rate_limit_seconds = 30
 offline = true
 ```
@@ -95,14 +94,16 @@ The Codex and Claude plugins run Stint from hooks. If `stint` is not on your
 `PATH`, set `STINT_BIN` to its absolute path. Hook-time install is opt-in only:
 `STINT_PLUGIN_AUTO_INSTALL=1`.
 
-The CLI uses WakaTime-compatible resource paths: `~/.wakatime.cfg` for config,
-`~/.wakatime/offline_heartbeats.bdb` for queued heartbeats, and
-`~/.wakatime/wakatime.log` for request logs. When `WAKATIME_HOME` is set,
-config lives at `$WAKATIME_HOME/.wakatime.cfg`, while queue, log, internal
-config, and metrics files live directly under `$WAKATIME_HOME/`. Offline sync
-also migrates WakaTime's old `.wakatime.bdb` legacy queue, deduplicates
-near-identical queued heartbeats, drops permanent 400-level heartbeat results,
-and requeues transient failures or missing per-heartbeat results.
+The CLI uses `~/.stint.cfg` as its native config. It still reads
+`~/.wakatime.cfg` as a compatibility fallback for existing WakaTime-style editor
+plugins, and keeps WakaTime-compatible runtime paths for queued heartbeats
+(`~/.wakatime/offline_heartbeats.bdb`) and request logs
+(`~/.wakatime/wakatime.log`). When `WAKATIME_HOME` is set, compatibility config
+lives at `$WAKATIME_HOME/.wakatime.cfg`, while queue, log, internal config, and
+metrics files live directly under `$WAKATIME_HOME/`. Offline sync also migrates
+WakaTime's old `.wakatime.bdb` legacy queue, deduplicates near-identical queued
+heartbeats, drops permanent 400-level heartbeat results, and requeues transient
+failures or missing per-heartbeat results.
 Like `wakatime-cli`, Stint also loads `settings.import_cfg` after the main
 config and applies the nearest project `.wakatime` file for file heartbeats, so
 per-project API keys, filters, privacy settings, and rate limits can override
@@ -199,7 +200,7 @@ Use this in `~/.wakatime.cfg`:
 ```ini
 [settings]
 api_url = http://localhost:8080/api/v1
-api_key = waka_00000000-0000-4000-8000-000000000000
+api_key = stint_00000000-0000-4000-8000-000000000000
 import_cfg = ~/.wakatime/private.cfg
 hide_file_names = false
 timeout = 15
@@ -338,7 +339,7 @@ Data dumps require `STORAGE_TYPE=local` and write completed JSON snapshots under
 Supported stats ranges are `last_7_days`, `last_30_days`, `last_6_months`, `last_year`, `all_time`, calendar years like `2026`, and calendar months like `2026-06`.
 Stats endpoints return cached data. A stale cache row is served with HTTP `202 Accepted` and `is_up_to_date:false` while a refresh job is queued; missing cache rows are computed inline for local-first usability.
 
-Generated API keys use `waka_<uuid>` so existing editor plugins and `api_urls` fanout accept them. Bare UUID keys from older Stint builds are still accepted by the API for self-hosted migrations, but should be replaced before using `api_urls`. API keys are accepted through Basic auth, Bearer auth, and the `api_key` query parameter. `POST /api/v1/api_keys` accepts optional `scopes`; blank scopes create the default full local key, while explicit scopes are validated against the supported OAuth/editor scope list.
+Generated API keys use `stint_<uuid>`. Legacy `waka_<uuid>` and bare UUID keys from older Stint builds are still accepted by the API for self-hosted migrations, but new setup flows should use `stint_` keys. API keys are accepted through Basic auth, Bearer auth, and the `api_key` query parameter. `POST /api/v1/api_keys` accepts optional `scopes`; blank scopes create the default full local key, while explicit scopes are validated against the supported OAuth/editor scope list.
 API key and share token creation require non-empty names; the API and database reject blank names.
 Heartbeat ingestion accepts WakaTime's current `dependencies` array shape and the older string form, normalizing both for local storage and stats.
 Heartbeat ingestion also treats WakaTime's `alternate_project` as a project fallback when `project` is absent.

@@ -257,8 +257,12 @@ func readGitBranch(headPath string) string {
 
 func parentDirs(start string) []string {
 	start = filepath.Clean(start)
+	tempRoot := filepath.Clean(os.TempDir())
 	dirs := []string{}
 	for i := 0; i < 500 && start != "." && start != string(filepath.Separator); i++ {
+		if start == tempRoot {
+			break
+		}
 		dirs = append(dirs, start)
 		parent := filepath.Dir(start)
 		if parent == start {

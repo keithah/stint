@@ -283,11 +283,13 @@ func runDoctor(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	userBody, userErr := client.Get(context.Background(), "/users/current")
 	count, err := CountQueue(opts.QueuePath)
-	return writeDoctorOutput(stdout, opts.Output, body, count, err)
+	return writeDoctorOutput(stdout, opts, body, userBody, count, err, userErr)
 }
 
-func writeDoctorOutput(stdout io.Writer, format string, body []byte, offlineCount int, countErr error) error {
+func writeDoctorOutput(stdout io.Writer, opts Options, body, userBody []byte, offlineCount int, countErr, userErr error) error {
+	format := opts.Output
 	format = strings.TrimSpace(format)
 	if format == "json" || format == "raw-json" {
 		var payload map[string]any
@@ -304,11 +306,56 @@ func writeDoctorOutput(stdout io.Writer, format string, body []byte, offlineCoun
 		_, err = fmt.Fprintln(stdout, string(encoded))
 		return err
 	}
-	if err := writeOutput(stdout, format, body); err != nil {
-		return err
+	meta := doctorMeta{}
+	_ = json.Unmarshal(body, &meta)
+	user := doctorCurrentUser{}
+	if userErr == nil {
+		_ = json.Unmarshal(userBody, &user)
+	}
+	apiURL := first(opts.APIURL, meta.Data.APIURL)
+	username := first(user.Data.GitHubUsername, user.Data.Username, user.Data.Email)
+	fmt.Fprintf(stdout, "Stint CLI %s\n", Version())
+	fmt.Fprintf(stdout, "Config: %s\n", doctorConfigPath(opts))
+	fmt.Fprintf(stdout, "API: %s\n", apiURL)
+	if username != "" {
+		fmt.Fprintf(stdout, "Auth: connected as @%s\n", strings.TrimPrefix(username, "@"))
+		fmt.Fprintln(stdout, "Status: Stint CLI is connected")
+	} else if userErr != nil {
+		fmt.Fprintf(stdout, "Auth: not connected (%v)\n", userErr)
+		fmt.Fprintln(stdout, "Status: Stint CLI is not connected")
+	} else {
+		fmt.Fprintln(stdout, "Auth: not connected")
+		fmt.Fprintln(stdout, "Status: Stint CLI is not connected")
+	}
+	if meta.Data.Version != "" {
+		fmt.Fprintf(stdout, "Server: %s\n", meta.Data.Version)
 	}
 	if countErr == nil {
-		fmt.Fprintf(stdout, "\noffline_queue_count=%d\n", offlineCount)
+		fmt.Fprintf(stdout, "offline_queue_count=%d\n", offlineCount)
 	}
 	return nil
+}
+
+func doctorConfigPath(opts Options) string {
+	nativePath := expandHome(DefaultStintConfigPath())
+	native, err := LoadConfig(nativePath)
+	if err == nil && (native.Get("settings", "api_url") != "" || native.Get("settings", "api_key") != "") {
+		return nativePath
+	}
+	return opts.ConfigPath
+}
+
+type doctorMeta struct {
+	Data struct {
+		APIURL  string `json:"api_url"`
+		Version string `json:"version"`
+	} `json:"data"`
+}
+
+type doctorCurrentUser struct {
+	Data struct {
+		GitHubUsername string `json:"github_username"`
+		Username       string `json:"username"`
+		Email          string `json:"email"`
+	} `json:"data"`
 }

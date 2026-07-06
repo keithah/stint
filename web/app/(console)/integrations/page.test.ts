@@ -15,7 +15,7 @@ assert.match(source, /Model coverage/);
 assert.match(source, /Provider coverage/);
 assert.match(source, /Existing editor clients/);
 assert.match(source, /Extended AI telemetry/);
-assert.match(source, /Create integration key/);
+assert.match(source, /Generate one-command setup/);
 assert.match(source, /setLatestKey/);
 assert.match(source, /copyText/);
 assert.match(source, /Copy config/);

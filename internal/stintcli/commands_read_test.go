@@ -695,6 +695,10 @@ func TestRunUsageEventsUsesExpectedEndpointsAndQueries(t *testing.T) {
 func TestRunDoctorJSONOutputStaysValidJSON(t *testing.T) {
 	body := `{"data":{"api_url":"http://example.test/api/v1","version":"dev"}}`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/users/current" {
+			_, _ = w.Write([]byte(`{"data":{"github_username":"keithah"}}`))
+			return
+		}
 		if r.URL.Path != "/api/v1/meta" {
 			t.Fatalf("unexpected doctor endpoint path: %s", r.URL.Path)
 		}
@@ -723,5 +727,50 @@ func TestRunDoctorJSONOutputStaysValidJSON(t *testing.T) {
 	}
 	if data, ok := got["data"].(map[string]any); !ok || data["version"] != "dev" {
 		t.Fatalf("expected meta data to be preserved, got %#v", got)
+	}
+}
+
+func TestRunDoctorTextOutputShowsConnectedUser(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/meta":
+			_, _ = w.Write([]byte(`{"data":{"api_url":"http://example.test/api/v1","version":"phase1"}}`))
+		case "/api/v1/users/current":
+			_, _ = w.Write([]byte(`{"data":{"github_username":"keithah"}}`))
+		default:
+			t.Fatalf("unexpected doctor endpoint path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("WAKATIME_HOME", home)
+	queuePath := filepath.Join(home, "offline_heartbeats.bdb")
+	configPath := filepath.Join(home, ".stint.cfg")
+	if err := InitConfig(configPath, server.URL+"/api/v1", "stint_test"); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := Run([]string{
+		"doctor",
+		"--config", configPath,
+		"--offline-queue-file", queuePath,
+	}, nil, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{
+		"Stint CLI",
+		"Config: " + configPath,
+		"API: " + server.URL + "/api/v1",
+		"Auth: connected as @keithah",
+		"Status: Stint CLI is connected",
+		"offline_queue_count=0",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("doctor output missing %q: %q", want, out.String())
+		}
 	}
 }

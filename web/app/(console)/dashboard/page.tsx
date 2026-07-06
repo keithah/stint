@@ -48,7 +48,7 @@ function DashboardContent() {
 	const languageColors = useMemo(() => languageColorMap(programLanguages.data?.data ?? []), [programLanguages.data?.data]);
 	const activeRange = rangeOptions.find((item) => item.value === range) ?? rangeOptions[0];
 	const onboardingConfig = useMemo(
-		() => `[settings]\napi_url = ${apiURL}\napi_key = waka_00000000-0000-4000-8000-000000000000\nhide_file_names = false\ntimeout = ${user.data?.data.timeout_minutes ?? 15}`,
+		() => `[settings]\napi_url = ${apiURL}\napi_key = stint_00000000-0000-4000-8000-000000000000\nhide_file_names = false\ntimeout = ${user.data?.data.timeout_minutes ?? 15}`,
 		[apiURL, user.data?.data.timeout_minutes]
 	);
 	const showOnboarding = Boolean(user.data?.data) && stats.isSuccess && shouldShowOnboarding(data?.total_seconds, onboardingDismissed);

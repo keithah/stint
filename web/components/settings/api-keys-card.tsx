@@ -24,11 +24,11 @@ export function ApiKeysCard() {
     }
   });
   const configBlock = useMemo(
-    () => `[settings]\napi_url = ${apiURL}\napi_key = ${latestKey || "waka_00000000-0000-4000-8000-000000000000"}\nhide_file_names = false\ntimeout = ${timeoutMinutes}`,
+    () => `[settings]\napi_url = ${apiURL}\napi_key = ${latestKey || "stint_00000000-0000-4000-8000-000000000000"}\nhide_file_names = false\ntimeout = ${timeoutMinutes}`,
     [apiURL, latestKey, timeoutMinutes]
   );
   const fanoutConfigBlock = useMemo(
-    () => `[api_urls]\n.* = ${apiURL}|${latestKey || "waka_00000000-0000-4000-8000-000000000000"}`,
+    () => `[api_urls]\n.* = ${apiURL}|${latestKey || "stint_00000000-0000-4000-8000-000000000000"}`,
     [apiURL, latestKey]
   );
 

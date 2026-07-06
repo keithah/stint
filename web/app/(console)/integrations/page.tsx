@@ -63,11 +63,15 @@ function IntegrationsContent() {
     staleTime: 60000,
   });
   const apiURL = meta.data?.data.api_url || "https://stint.fyi/api/v1";
-  const displayKey = latestKey || "waka_your_stint_key";
+  const displayKey = latestKey || "stint_your_stint_key";
   const keyCount = keys.data?.data.length ?? 0;
   const editorCount = editors.data?.data.length ?? 0;
   const agentRows = userAgents.data?.data ?? [];
   const latestAgent = agentRows[0];
+  const stintCLIConnected = agentRows.some((agent) => {
+    const value = `${agent.editor ?? ""} ${agent.value ?? ""}`.toLowerCase();
+    return value.includes("stint");
+  });
   const modelCoverage = coverageCount(agentRows, "ai_model");
   const providerCoverage = coverageCount(agentRows, "ai_provider");
   const configs = useMemo(
@@ -137,7 +141,7 @@ function IntegrationsContent() {
               <Plus size={16} />{" "}
               {createIntegrationKey.isPending
                 ? "Creating..."
-                : "Create integration key"}
+                : "Generate one-command setup"}
             </button>
             <Link
               className="inline-flex w-fit items-center gap-2 rounded-md border border-line bg-panel px-4 py-2 text-sm text-zinc-100 hover:border-accent/50 hover:bg-white/5"
@@ -148,7 +152,7 @@ function IntegrationsContent() {
           </>
         }
       />
-      {latestKey ? (
+            {latestKey ? (
         <div className="mb-8 -mt-2 rounded border border-accent/35 bg-accent/10 p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium text-accent">
             <CheckCircle2 size={16} /> New key created
@@ -173,7 +177,7 @@ function IntegrationsContent() {
           icon={KeyRound}
           label="API keys"
           value={
-            keyCount > 0 ? `${keyCount} configured` : "Create one in Settings"
+            keyCount > 0 ? `${keyCount} configured` : "Generate setup command"
           }
         />
         <StatusTile
@@ -279,6 +283,9 @@ function IntegrationsContent() {
 
         <div className="space-y-6">
           <Panel title="Connection health" icon={Radar}>
+            <div className={`mb-4 rounded border p-3 text-sm ${stintCLIConnected ? "border-accent/40 bg-accent/10 text-accent" : "border-line bg-ink text-zinc-400"}`}>
+              {stintCLIConnected ? "Yes, Stint CLI is connected" : "Stint CLI is not connected yet"}
+            </div>
             <div className="mb-4 grid gap-3 sm:grid-cols-3">
               <HealthMetric
                 label="Clients seen"
@@ -329,9 +336,9 @@ function IntegrationsContent() {
               </div>
             ) : (
               <div className="rounded border border-dashed border-line bg-ink p-4 text-sm text-zinc-500">
-                No clients have checked in yet. Send a heartbeat, then this
-                panel will show last_seen_at, editor, model, and provider
-                coverage.
+                  No clients have checked in yet. Send a heartbeat, then this
+                  panel will show last_seen_at, editor, model, and provider
+                  coverage.
               </div>
             )}
           </Panel>

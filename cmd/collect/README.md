@@ -27,8 +27,8 @@ go build -o bin/stint-collect ./cmd/collect/
 ## Quick start
 
 ```sh
-# 1. Write Stint-native config and WakaTime-compatible plugin config.
-stint setup --server https://stint.example.com/api/v1 --key waka_xxxxxxxx
+# 1. Write Stint-native config.
+stint setup --server https://stint.example.com/api/v1 --key stint_xxxxxxxx
 
 # 2. Install the pinned upstream wakatime-cli used by editor plugins.
 stint cli install
@@ -46,10 +46,11 @@ stint collect
 stint collect --print-config
 ```
 
-`stint setup` is idempotent. It writes native keys to `~/.stint.cfg` and writes
-only `api_url` + `api_key` into `~/.wakatime.cfg`, preserving existing plugin
-settings such as `debug`, `include`, and `exclude`. It also honors
-`STINT_API_URL` and `STINT_API_KEY` for scripted installs.
+`stint setup` is idempotent. It writes native keys to `~/.stint.cfg` by
+default. Pass `--wakatime-config PATH` when you also want to write
+WakaTime-compatible `api_url` + `api_key` settings for upstream editor plugins,
+preserving existing plugin settings such as `debug`, `include`, and `exclude`.
+It also honors `STINT_API_URL` and `STINT_API_KEY` for scripted installs.
 
 For WakaTime-compatible `stint` commands such as heartbeats, stats, and editor
 plugin calls, credentials are resolved as: explicit flags, `STINT_*` env,

@@ -91,7 +91,7 @@ func newClient(opts Options, requireAPIKey bool) (*Client, error) {
 		apiURL = defaultAPIURL
 	}
 	if requireAPIKey && opts.APIKey == "" {
-		return nil, fmt.Errorf("api key is required (set --key, STINT_API_KEY, WAKATIME_API_KEY, or api_key in ~/.wakatime.cfg)")
+		return nil, fmt.Errorf("api key is required (set --key, STINT_API_KEY, WAKATIME_API_KEY, or api_key in ~/.stint.cfg or ~/.wakatime.cfg)")
 	}
 	if opts.Proxy == "" {
 		opts.Proxy = proxyFromEnvironment(apiURL)

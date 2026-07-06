@@ -37,13 +37,17 @@ func detectProject(entity string, o Options) (project, branch, root string) {
 		root = findProjectRoot(filepath.Dir(entity))
 	}
 	project, branch = readWakaTimeProjectFile(root)
-	if project == "" && o.ProjectFolder != "" {
+	if o.ProjectFolder != "" {
 		projectRoot := normalizeLocalEntityPath(o.ProjectFolder)
-		if overrideProject, overrideBranch := readWakaTimeProjectFile(projectRoot); overrideProject != "" {
+		projectFolderContainsEntity := entity == "" || pathWithin(projectRoot, entity)
+		projectRootIsMoreSpecific := root == "" || (projectFolderContainsEntity && pathWithin(root, projectRoot) && root != projectRoot)
+		if overrideProject, overrideBranch := readWakaTimeProjectFile(projectRoot); overrideProject != "" && (project == "" || projectRootIsMoreSpecific) {
 			project = overrideProject
 			branch = overrideBranch
 			root = projectRoot
-		} else if root == "" {
+		} else if project == "" || projectRootIsMoreSpecific {
+			project = ""
+			branch = ""
 			root = projectRoot
 		}
 	}
@@ -264,7 +268,11 @@ func expandProjectMap(value, root string, captures []string) string {
 }
 
 func findProjectRoot(dir string) string {
+	tempRoot := filepath.Clean(os.TempDir())
 	for dir != "" && dir != "." && dir != string(filepath.Separator) {
+		if filepath.Clean(dir) == tempRoot {
+			break
+		}
 		if fileExists(filepath.Join(dir, ".wakatime-project")) ||
 			fileExists(filepath.Join(dir, ".git")) ||
 			fileExists(filepath.Join(dir, ".hg")) ||
@@ -278,6 +286,17 @@ func findProjectRoot(dir string) string {
 		dir = next
 	}
 	return ""
+}
+
+func pathWithin(root, path string) bool {
+	if root == "" || path == "" {
+		return false
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 func detectVCS(root string) string {

@@ -13,7 +13,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const APIKeyPrefix = "waka_"
+const APIKeyPrefix = "stint_"
+
+var acceptedAPIKeyPrefixes = []string{APIKeyPrefix, "waka_"}
+
 const tokenHashSHA256Prefix = "sha256$"
 
 func ExtractAPIKey(r *http.Request) (string, bool) {
@@ -60,8 +63,10 @@ func GenerateAPIKey() (string, string, error) {
 }
 
 func IsAPIKey(key string) bool {
-	if strings.HasPrefix(key, APIKeyPrefix) {
-		return true
+	for _, prefix := range acceptedAPIKeyPrefixes {
+		if strings.HasPrefix(key, prefix) {
+			return true
+		}
 	}
 	_, err := uuid.Parse(key)
 	return err == nil

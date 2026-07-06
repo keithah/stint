@@ -45,6 +45,13 @@ esac
 
 "$install_dir/stint" --version
 echo "Stint CLI installed at $install_dir/stint"
+
+if [ -n "\${STINT_API_URL:-}" ] && [ -n "\${STINT_API_KEY:-}" ]; then
+  "$install_dir/stint" setup --server "$STINT_API_URL" --key "$STINT_API_KEY"
+  "$install_dir/stint" doctor
+else
+  echo "Set STINT_API_URL and STINT_API_KEY to configure Stint during install."
+fi
 `.split("\\${").join("${");
 
 export async function GET() {

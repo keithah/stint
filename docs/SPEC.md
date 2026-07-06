@@ -33,7 +33,7 @@ A drop-in replacement for WakaTime's backend + dashboard. Any IDE plugin (wakati
 - **Job queue:** [Asynq](https://github.com/hibiken/asynq) (Redis-backed, simple, battle-tested)
 - **ORM:** [sqlc](https://sqlc.dev/) for type-safe queries, raw migrations via [golang-migrate](https://github.com/golang-migrate/migrate)
 - **Auth:** GitHub OAuth 2.0 only (no password auth, no other providers)
-- **API key:** `waka_<uuid>` token, stored hashed; bare UUID tokens from older Stint builds accepted for self-hosted migrations
+- **API key:** `stint_<uuid>` token, stored hashed; legacy `waka_<uuid>` and bare UUID tokens from older Stint builds accepted for self-hosted migrations
 
 ### Frontend
 - **Framework:** [Next.js 14](https://nextjs.org/) with App Router
@@ -626,7 +626,7 @@ Clone of WakaTime's dashboard:
 - Timeout preference
 - Writes-only toggle
 - Timezone
-- Plugin setup instructions (shows `api_url` and `api_key` for `~/.wakatime.cfg`)
+- Integration setup instructions (generated Stint CLI command first, WakaTime-compatible config for existing editor plugins)
 - GitHub account info
 - Data export (trigger dump, download)
 - Danger zone: delete account + all data
@@ -672,7 +672,7 @@ On first login, show an onboarding modal:
 ```ini
 [settings]
 api_url = https://YOUR_DOMAIN/api/v1
-api_key = waka_00000000-0000-4000-8000-000000000000
+api_key = stint_00000000-0000-4000-8000-000000000000
 ```
 3. "Open your editor and start coding — activity appears within 2 minutes"
 
@@ -840,12 +840,19 @@ Parse this to extract: plugin name, plugin version, editor name, OS, architectur
 ### Heartbeat Fields to Accept
 Accept all current WakaTime heartbeat fields including AI fields (`ai_line_changes`, `ai_session`, `ai_input_tokens`, etc.) — these are already sent by wakatime-cli 1.90+. Stint also accepts model attribution fields (`ai_model`, `ai_model_name`, or `model`) so AI pricing can be calculated against the actual model when clients provide it.
 
-### Wakatime-cli Config
-Document exactly how to configure `~/.wakatime.cfg` in the setup flow:
+### Stint CLI and Wakatime-cli Config
+Document the generated Stint CLI command first:
+
+```bash
+curl -fsSL https://stint.fyi/install.sh | STINT_API_URL="https://YOUR_DOMAIN/api/v1" STINT_API_KEY="stint_00000000-0000-4000-8000-000000000000" sh
+```
+
+For existing WakaTime-compatible editor plugins, document how to configure
+`~/.wakatime.cfg`:
 ```ini
 [settings]
 api_url = https://YOUR_DOMAIN/api/v1
-api_key = waka_00000000-0000-4000-8000-000000000000
+api_key = stint_00000000-0000-4000-8000-000000000000
 hide_file_names = false
 timeout = 15
 ```
@@ -853,7 +860,7 @@ timeout = 15
 For Codex or other WakaTime CLI clients using multi-destination fanout:
 ```ini
 [api_urls]
-.* = https://YOUR_DOMAIN/api/v1|waka_00000000-0000-4000-8000-000000000000
+.* = https://YOUR_DOMAIN/api/v1|stint_00000000-0000-4000-8000-000000000000
 ```
 
 ---

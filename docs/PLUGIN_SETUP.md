@@ -1,34 +1,34 @@
 # Plugin Setup
 
-Stint works with WakaTime-style plugins. Install a plugin, save your Stint API
-URL and API key in `~/.wakatime.cfg`, then use your editor or agent normally.
+Stint works with its own CLI plus WakaTime-style editor plugins. The normal
+Stint path is one generated install command: it installs the CLI, writes
+`~/.stint.cfg`, prints the version, and runs `stint doctor` so you can confirm
+the CLI is connected.
 
 ## Get Your API Key
 
 For local development, open `http://localhost:3000/login` when running
 `npm run dev`, or `http://localhost:3001/login` when using Docker Compose.
-Choose **Create local dev key**, then copy the API key from Settings.
+Choose **Create local dev key**, then open Integrations and use the generated
+Stint CLI setup command.
 
-For a deployed instance, sign in through GitHub, open Settings, and create an
-API key.
+For a deployed instance, sign in through GitHub, open Integrations, and choose
+the generated Stint CLI setup command. It creates a scoped `stint_...` API key
+for the installer.
 
 ## Install Stint CLI
 
-Install the latest prebuilt CLI:
+Install and configure the latest prebuilt CLI with the command shown on
+Integrations:
 
 ```bash
-curl -fsSL https://stint.fyi/install.sh | sh
+curl -fsSL https://stint.fyi/install.sh | STINT_API_URL="https://stint.fyi/api/v1" STINT_API_KEY="stint_00000000-0000-4000-8000-000000000000" sh
 ```
 
-Save your Stint endpoint and API key:
+The installer runs `stint --version`, writes `~/.stint.cfg`, and calls
+`stint doctor`. A connected setup prints `Status: Stint CLI is connected`.
 
-```bash
-stint config init \
-  --api-url http://localhost:8080/api/v1 \
-  --api-key waka_00000000-0000-4000-8000-000000000000
-```
-
-Check the setup:
+You can also check the setup manually:
 
 ```bash
 stint doctor
@@ -55,8 +55,8 @@ claude plugin marketplace add https://github.com/keithah/stint.git
 claude plugin i claude-code-stint@stint
 ```
 
-Then use Codex or Claude Code normally. The plugins read `~/.wakatime.cfg`,
-run Stint in the background, and log to `~/.wakatime/`.
+Then use Codex or Claude Code normally. The plugins call `stint` in the
+background, read the same native config as the CLI, and log to `~/.wakatime/`.
 
 If `stint` is not on your `PATH`, set `STINT_BIN` to the absolute path of the
 binary. Hook-time install is opt-in only: `STINT_PLUGIN_AUTO_INSTALL=1`.
@@ -69,7 +69,7 @@ marketplace and save this config:
 ```ini
 [settings]
 api_url = https://stint.fyi/api/v1
-api_key = waka_00000000-0000-4000-8000-000000000000
+api_key = stint_00000000-0000-4000-8000-000000000000
 heartbeat_rate_limit_seconds = 30
 offline = true
 ```
@@ -214,7 +214,7 @@ The native CLI reads the common WakaTime config sections:
 ```ini
 [settings]
 api_url = https://api.example.com/api/v1
-api_key = waka_00000000-0000-4000-8000-000000000000
+api_key = stint_00000000-0000-4000-8000-000000000000
 api_key_vault_cmd = op read op://Engineering/Stint/api_key
 debug = false
 import_cfg = ~/.wakatime/private.cfg
@@ -241,17 +241,17 @@ submodules_disabled = ^/home/me/work/vendor/
 ^/home/me/work/.git/modules/lib/billing$ = billing-lib
 
 [project_api_key]
-^/home/me/client/ = waka_client_specific_key
+^/home/me/client/ = stint_client_specific_key
 
 [api_urls]
-^/home/me/work/ = https://work.example.com/api/v1|waka_work_key
+^/home/me/work/ = https://work.example.com/api/v1|stint_work_key
 ```
 
 For repo-local overrides, create `.wakatime` inside the project:
 
 ```ini
 [settings]
-api_key = waka_project_specific_key
+api_key = stint_project_specific_key
 include =
     .*\.go$
 exclude =
@@ -311,7 +311,7 @@ Use this in `~/.wakatime.cfg`:
 ```ini
 [settings]
 api_url = https://api.example.com/api/v1
-api_key = waka_00000000-0000-4000-8000-000000000000
+api_key = stint_00000000-0000-4000-8000-000000000000
 hide_file_names = false
 timeout = 15
 ```
@@ -321,7 +321,7 @@ For local Compose, use:
 ```ini
 [settings]
 api_url = http://localhost:8080/api/v1
-api_key = waka_00000000-0000-4000-8000-000000000000
+api_key = stint_00000000-0000-4000-8000-000000000000
 hide_file_names = false
 timeout = 15
 ```
@@ -330,17 +330,19 @@ For Codex or other clients using multi-destination fanout, use an `api_urls` ent
 
 ```ini
 [api_urls]
-.* = https://api.example.com/api/v1|waka_00000000-0000-4000-8000-000000000000
+.* = https://api.example.com/api/v1|stint_00000000-0000-4000-8000-000000000000
 ```
 
-Some existing clients validate `api_urls` keys more strictly than normal `api_key` settings. Stint-generated keys use `waka_<uuid>` so they work there; older bare UUID Stint keys still authenticate with the API but should be replaced for fanout configs.
+Some existing clients validate `api_urls` keys more strictly than normal
+`api_key` settings. Stint-generated keys use `stint_<uuid>`; legacy
+`waka_<uuid>` and older bare UUID Stint keys still authenticate with the API.
 
 ## 3. Verify Ingestion
 
 Send one heartbeat from your editor, then check:
 
 ```bash
-curl -fsS -H "Authorization: Bearer waka_00000000-0000-4000-8000-000000000000" \
+curl -fsS -H "Authorization: Bearer stint_00000000-0000-4000-8000-000000000000" \
   "https://api.example.com/api/v1/users/current/stats/last_7_days"
 ```
 
@@ -355,13 +357,15 @@ The smoke test sends curl-based activity payloads every run. If `wakatime-cli` i
 To verify the native CLI directly:
 
 ```bash
-STINT_API_KEY=waka_00000000-0000-4000-8000-000000000000 \
+STINT_API_KEY=stint_00000000-0000-4000-8000-000000000000 \
   stint --api-url http://localhost:8080/api/v1 --today
 ```
 
 ## Auth Modes
 
-Generated API keys use `waka_<uuid>` so existing editor plugins and fanout configs accept them. Bare UUID keys from older Stint builds are still accepted by the API for self-hosted migrations, but should be replaced before using `api_urls`. Keys can be supplied in all compatibility forms:
+Generated API keys use `stint_<uuid>`. Legacy `waka_<uuid>` and bare UUID keys
+from older Stint builds are still accepted by the API for self-hosted
+migrations. Keys can be supplied in all compatibility forms:
 
 - `Authorization: Basic base64(API_KEY:)`
 - `Authorization: Bearer API_KEY`

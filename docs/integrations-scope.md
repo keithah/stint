@@ -9,8 +9,8 @@ Locked decisions (full log in [§8](#8-decision-log)):
   editor coverage, and maintain small first-party hook plugins for agents whose
   local transcript sync benefits from Stint-owned hooks.
 - **Config:** `~/.stint.cfg` is Stint's native config; `~/.wakatime.cfg` is read
-  with the same parser as a compatibility fallback, and is written to so
-  upstream plugins reach Stint.
+  with the same parser as a compatibility fallback and is written only when a
+  user explicitly configures upstream WakaTime-compatible plugins.
 - **AI data:** hybrid — Stint CLI local transcript sync for token/cost plus
   first-party Codex and Claude hook plugins that trigger that sync.
 - **Surface:** first-class for the full WakaTime integration list (minus a few
@@ -68,25 +68,27 @@ flags → `STINT_*` env → `~/.stint.cfg` → `~/.wakatime.cfg` → built-in de
 So a user who already had WakaTime set up keeps working with no reconfiguration,
 and a Stint-native user's `~/.stint.cfg` always wins.
 
-**Write behavior — `stint setup` writes both:**
+**Write behavior — `stint setup` writes native config by default:**
 
-- `~/.stint.cfg` — native keys (api_url, api_key, collector options, …).
-- `~/.wakatime.cfg` `[settings]` — `api_url` + `api_key` only, **preserving any
-  existing keys**, so upstream plugins/`wakatime-cli` post to Stint.
+- `~/.stint.cfg` — native keys (`api_url`, `api_key`, collector options, …).
+- `~/.wakatime.cfg` `[settings]` — written only when explicitly requested for
+  upstream plugins/`wakatime-cli`, preserving any existing keys.
 
 Both use the same INI `[settings]` format, so one parser serves both; `.stint.cfg`
 may add Stint-only sections (e.g. `[collect]`).
 
 ```ini
-# ~/.wakatime.cfg  (what plugins read)
+# ~/.stint.cfg  (what Stint reads first)
 [settings]
 api_url = https://your-stint/api/v1
-api_key = waka_xxxxxxxx
+api_key = stint_xxxxxxxx
 ```
 
-**Bootstrap UX:** the Settings page shows a copyable
-`stint setup --server <url> --key <key>`; the CLI also honors `STINT_API_URL` /
-`STINT_API_KEY` for scripted installs.
+**Bootstrap UX:** the Integrations page creates a scoped key and shows a
+copyable one-command installer:
+`curl -fsSL https://stint.fyi/install.sh | STINT_API_URL=<url> STINT_API_KEY=<key> sh`.
+The installer prints the CLI version, runs `stint setup`, and runs
+`stint doctor`.
 
 ---
 
@@ -176,7 +178,7 @@ alias/symlink for back-compat.
 | Subcommand | Purpose | Notes |
 |---|---|---|
 | `stint collect` | current collector (file scan → `usage_events`) | `--watch` etc. unchanged |
-| `stint setup` | capture api key + server, write `~/.stint.cfg` **and** `~/.wakatime.cfg` | cohesive onboarding entry point |
+| `stint setup` | capture api key + server, write `~/.stint.cfg` | cohesive onboarding entry point; WakaTime config is explicit compatibility |
 | `stint connect` | **detect installed editors** and configure each; `--deep` for VS Code/JetBrains | data-driven editor registry |
 | `stint plugin install <agent>` | install an AI hook plugin and wire the api key | automates `claude plugin marketplace add …`, etc. |
 | `stint cli install` | download/verify/update upstream `wakatime-cli` into `~/.wakatime/` | pinned version, checksum-verified, `STINT_WAKATIME_CLI` override |
@@ -239,12 +241,12 @@ Resolved decisions driving this scope. (AI-side items also annotated in
 - **C1 — Dual config.** `~/.stint.cfg` primary; `~/.wakatime.cfg` read with the
   same INI parser as a fallback. Precedence: flags → `STINT_*` env →
   `~/.stint.cfg` → `~/.wakatime.cfg` → defaults.
-- **C2 — Write both.** `stint setup` writes native keys to `~/.stint.cfg` and
-  `api_url`+`api_key` into `~/.wakatime.cfg` (preserving existing keys) so
-  upstream plugins reach Stint.
-- **C3 — Bootstrap.** Settings page shows a copyable
-  `stint setup --server <url> --key <key>`; CLI honors `STINT_API_URL` /
-  `STINT_API_KEY`.
+- **C2 — Native write by default.** `stint setup` writes native keys to
+  `~/.stint.cfg`. WakaTime-compatible config is an explicit compatibility step
+  for upstream editor plugins.
+- **C3 — Bootstrap.** Integrations page creates a scoped `stint_...` key and
+  shows a copyable installer command that sets `STINT_API_URL` /
+  `STINT_API_KEY`; the installer runs setup and doctor.
 
 ### CLI
 - **B1 — Toolkit: cobra** (nested subcommands + good `--help`). Swappable.
@@ -297,7 +299,7 @@ Resolved decisions driving this scope. (AI-side items also annotated in
 ## 9. Phased plan
 
 1. **CLI foundation.** Restructure `cmd/collect` into cobra `stint <subcommand>`;
-   `collect` keeps current behavior. Add `stint setup` (dual-config write) +
+   `collect` keeps current behavior. Add `stint setup` (native config write) +
    `stint cli install`.
 2. **`stint connect` + editor registry.** Tier-1 first (VS Code family,
    JetBrains, Vim/Neovim, Zed), then fan out the registry to the full Pattern-A
