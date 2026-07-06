@@ -33,10 +33,24 @@ test("integration names reveal full setup instructions", async ({ page }) => {
 
   await page.goto("/integrations");
 
+  await expect(page.getByRole("heading", { name: "Connect Stint" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Choose where you code" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Terminal/ })).toHaveAttribute("aria-pressed", "true");
+
   const stintCard = page.getByRole("button", { name: "Show Stint CLI integration instructions" });
   await expect(stintCard).toContainText("live");
 
   for (const recipe of recipes) {
+    if (recipe.name === "Codex" || recipe.name === "Claude Code") {
+      await page.getByRole("button", { name: /AI agents/ }).click();
+      await expect(page.getByRole("button", { name: /AI agents/ })).toHaveAttribute("aria-pressed", "true");
+    } else if (recipe.name === "VS Code" || recipe.name === "JetBrains" || recipe.name === "Vim/Neovim") {
+      await page.getByRole("button", { name: /Editors/ }).click();
+      await expect(page.getByRole("button", { name: /Editors/ })).toHaveAttribute("aria-pressed", "true");
+    } else {
+      await page.getByRole("button", { name: /Terminal/ }).click();
+      await expect(page.getByRole("button", { name: /Terminal/ })).toHaveAttribute("aria-pressed", "true");
+    }
     await page.getByRole("button", { name: `Show ${recipe.name} integration instructions` }).click();
     await expect(page.locator("#integration-instructions")).toContainText(recipe.expected);
     if (recipe.name === "Codex" || recipe.name === "Claude Code") {

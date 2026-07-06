@@ -14,11 +14,14 @@ assertIncludes("integrations page refreshes user agents during validation", sour
 assertIncludes("integrations page validates generated key last use", source, "latestKeyId");
 assertIncludes("integrations page checks API key last_used_at", source, "last_used_at");
 assertIncludes("integrations page uses Stint key placeholders", source, "stint_your_stint_key");
-assertIncludes("integrations page has clean setup strip", source, "Set up Stint CLI");
-assertIncludes("integrations page has simple catalog", source, "Integration catalog");
+assertIncludes("integrations page asks where the user codes", source, "Choose where you code");
+assertIncludes("integrations page has terminal category", source, "Terminal");
+assertIncludes("integrations page has AI agents category", source, "AI agents");
+assertIncludes("integrations page has editors category", source, "Editors");
+assertIncludes("integrations page tracks active setup category", source, "activeToolCategory");
 assertIncludes("integrations page shows Stint CLI connected state", source, "Yes, Stint CLI is connected");
 assertIncludes("integrations page makes integration cards selectable", source, "setSelectedIntegration");
-assertIncludes("integrations page links every setup card to a stable hash", source, 'const href = `#${recipeId}`');
+assertIncludes("integrations page updates the hash for selected setup cards", source, 'window.history.replaceState(null, "", `#${recipeId}`)');
 assertIncludes("integrations page exposes selected instructions region", source, "integration-instructions");
 assertIncludes("integrations page offers curl install option", source, "Install with one command");
 assertIncludes("integrations page offers marketplace option", source, "Install Stint marketplace plugin");
@@ -54,6 +57,7 @@ assertExcludes("integrations page removes connection health dashboard", source, 
 assertExcludes("integrations page removes extended telemetry panel", source, "Extended AI telemetry");
 assertExcludes("integrations page removes status tiles", source, "StatusTile");
 assertExcludes("integrations page removes screenshot previews", source, "<img");
+assertExcludes("integrations page does not lead with catalog jargon", source, "Integration catalog");
 
 assertExcludes("integrations page does not ask users to build Stint CLI", source, "make stint");
 assertExcludes("integrations page does not expose bin-prefixed setup commands", source, "bin/stint");
