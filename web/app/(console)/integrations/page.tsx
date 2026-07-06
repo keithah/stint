@@ -23,7 +23,6 @@ import {
 } from "@/lib/api";
 import {
   clients,
-  compatibilityNote,
   integrationConfigs,
   stintConfiguredInstallCommand,
   type IntegrationConfig,
@@ -50,7 +49,7 @@ const toolCategories: {
     setupBody:
       "Copy one command. It creates your key, installs Stint, writes config, and checks the connection.",
     primaryRecipeId: "stint-cli-config",
-    recipeIds: ["stint-cli-config", "wakatime-cli-config", "shell-cli-config"],
+    recipeIds: ["stint-cli-config"],
   },
   {
     id: "agents",
@@ -72,12 +71,7 @@ const toolCategories: {
     setupBody:
       "Choose your editor below. Existing WakaTime-compatible plugins can send activity to Stint.",
     primaryRecipeId: "vscode-config",
-    recipeIds: [
-      "vscode-config",
-      "jetbrains-config",
-      "vim-config",
-      "wakatime-cli-config",
-    ],
+    recipeIds: ["vscode-config", "jetbrains-config", "vim-config"],
   },
 ] as const;
 
@@ -121,8 +115,6 @@ function IntegrationsContent() {
     apiURL,
     displayKey,
   );
-  const selectedConfig =
-    configs.find((config) => config.id === selectedIntegration) ?? configs[0];
   const activeCategory =
     toolCategories.find((category) => category.id === activeToolCategory) ??
     toolCategories[0];
@@ -271,104 +263,109 @@ function IntegrationsContent() {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1fr_380px]">
-        <div className="min-w-0 space-y-6">
-          <div className="rounded border border-accent/35 bg-accent/10 p-4">
-            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-accent">
-              <TerminalSquare size={16} /> {activeCategory.setupTitle}
-            </div>
-            <p className="mb-3 max-w-2xl text-sm leading-6 text-zinc-300">
-              {activeCategory.setupBody}
-            </p>
-            <p className="mt-3 text-sm text-zinc-400">
-              {validateMessage ||
-                setupMessage ||
-                (stintCLIConnected
-                  ? `Yes, Stint CLI is connected${recentStintAgent?.last_seen_at ? ` · ${formatLastSeen(recentStintAgent.last_seen_at)}` : ""}.`
-                  : activeToolCategory === "terminal"
-                    ? "Copy setup, run it once, then verify the connection."
-                    : "Pick a setup option below. Use Verify connection after you run Stint.")}
-            </p>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              {activeToolCategory === "terminal" ? (
-                <button
-                  className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-3 text-sm font-semibold text-ink hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
-                  type="button"
-                  onClick={() => {
-                    void copyGeneratedSetup();
-                  }}
-                  disabled={createIntegrationKey.isPending}
-                >
-                  {copied === "generated-setup" ? (
-                    <Check size={15} />
-                  ) : (
-                    <Clipboard size={15} />
-                  )}
-                  {createIntegrationKey.isPending
-                    ? "Creating..."
-                    : copied === "generated-setup"
-                      ? "Copied"
-                      : "Copy setup"}
-                </button>
-              ) : null}
+      <section className="space-y-6">
+        <div className="rounded border border-accent/35 bg-accent/10 p-4">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-accent">
+            <TerminalSquare size={16} /> {activeCategory.setupTitle}
+          </div>
+          <p className="mb-3 max-w-2xl text-sm leading-6 text-zinc-300">
+            {activeCategory.setupBody}
+          </p>
+          <p className="mt-3 text-sm text-zinc-400">
+            {validateMessage ||
+              setupMessage ||
+              (stintCLIConnected
+                ? `Yes, Stint CLI is connected${recentStintAgent?.last_seen_at ? ` · ${formatLastSeen(recentStintAgent.last_seen_at)}` : ""}.`
+                : activeToolCategory === "terminal"
+                  ? "Copy setup, run it once, then verify the connection."
+                  : "Pick a setup option below. Use Verify connection after you run Stint.")}
+          </p>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            {activeToolCategory === "terminal" ? (
               <button
-                className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-line px-3 text-sm text-zinc-200 hover:border-accent/50 hover:bg-white/5 disabled:opacity-60"
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-3 text-sm font-semibold text-ink hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
                 type="button"
                 onClick={() => {
-                  void validateConnection();
+                  void copyGeneratedSetup();
                 }}
-                disabled={userAgents.isFetching || keys.isFetching}
+                disabled={createIntegrationKey.isPending}
               >
-                <RefreshCw
-                  size={15}
-                  className={
-                    userAgents.isFetching || keys.isFetching
-                      ? "animate-spin"
-                      : ""
-                  }
-                />
-                Verify connection
+                {copied === "generated-setup" ? (
+                  <Check size={15} />
+                ) : (
+                  <Clipboard size={15} />
+                )}
+                {createIntegrationKey.isPending
+                  ? "Creating..."
+                  : copied === "generated-setup"
+                    ? "Copied"
+                    : "Copy setup"}
               </button>
-            </div>
+            ) : null}
+            <button
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-line px-3 text-sm text-zinc-200 hover:border-accent/50 hover:bg-white/5 disabled:opacity-60"
+              type="button"
+              onClick={() => {
+                void validateConnection();
+              }}
+              disabled={userAgents.isFetching || keys.isFetching}
+            >
+              <RefreshCw
+                size={15}
+                className={
+                  userAgents.isFetching || keys.isFetching ? "animate-spin" : ""
+                }
+              />
+              Verify connection
+            </button>
           </div>
+        </div>
 
-          <div>
-            <div>
-              <h2 className="text-lg font-semibold text-zinc-100">
-                More ways to connect
-              </h2>
-              <p className="mt-1 text-sm text-zinc-500">
-                These match your choice. Select one to see the exact setup.
-              </p>
-            </div>
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-100">
+            Choose a setup
+          </h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Open the matching option. Details stay tucked under your selection.
+          </p>
 
-            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {visibleClients.map((client) => (
-                <ClientCard
-                  key={client.name}
-                  {...client}
-                  selected={selectedIntegration === client.recipeId}
-                  onSelect={(recipeId) => {
-                    setSelectedIntegration(recipeId);
-                    const category = categoryForRecipe(recipeId);
-                    if (category) {
-                      setActiveToolCategory(category.id);
-                    }
-                    window.history.replaceState(null, "", `#${recipeId}`);
-                  }}
-                />
-              ))}
-              </div>
-            </div>
+          <div className="mt-3 space-y-3">
+            {visibleClients.map((client) => {
+              const selected = selectedIntegration === client.recipeId;
+              const config =
+                configs.find((item) => item.id === client.recipeId) ??
+                configs[0];
+              return (
+                <div key={client.name} className="rounded border border-line">
+                  <ClientCard
+                    {...client}
+                    selected={selected}
+                    onSelect={(recipeId) => {
+                      setSelectedIntegration(recipeId);
+                      const category = categoryForRecipe(recipeId);
+                      if (category) {
+                        setActiveToolCategory(category.id);
+                      }
+                      window.history.replaceState(null, "", `#${recipeId}`);
+                    }}
+                  />
+                  {selected ? (
+                    <SetupDisclosure
+                      config={config}
+                      copied={copied === config.id}
+                      onCopy={() => copyText(config.id, recipeCopyText(config))}
+                    />
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
-
-        <DetailPanel
-          config={selectedConfig}
-          copied={copied === selectedConfig.id}
-          onCopy={() =>
-            copyText(selectedConfig.id, recipeCopyText(selectedConfig))
-          }
-        />
+          <div className="mt-4 rounded border border-line bg-panel p-3 text-sm leading-6 text-zinc-500">
+            Need WakaTime compatibility? Stint accepts WakaTime-style API keys
+            and config files, so existing editor plugins can still send data to
+            Stint. The Stint CLI is the recommended path for new installs.
+          </div>
+        </div>
       </section>
     </div>
   );
@@ -402,25 +399,30 @@ function ClientCard({
 }) {
   return (
     <button
-      className={`rounded border p-4 text-left transition hover:border-accent/60 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/60 ${selected ? "border-accent/60 bg-accent/10" : "border-line bg-panel"}`}
+      className={`w-full rounded p-4 text-left transition hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/60 ${selected ? "bg-accent/10" : "bg-panel"}`}
       type="button"
       onClick={() => onSelect(recipeId)}
       aria-label={`Show ${name} integration instructions`}
+      aria-expanded={selected}
       aria-pressed={selected}
-      aria-controls="integration-instructions"
+      aria-controls={selected ? "integration-instructions" : undefined}
     >
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <h3 className="font-medium text-zinc-100">{name}</h3>
-        <span className="rounded border border-line px-2 py-1 text-[11px] uppercase tracking-[0.14em] text-zinc-400">
-          {status}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="font-medium text-zinc-100">{name}</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-5 text-zinc-500">
+            {description}
+          </p>
+        </div>
+        <span className="w-fit shrink-0 rounded border border-line px-2 py-1 text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+          {selected ? "Open" : status}
         </span>
       </div>
-      <p className="text-sm leading-5 text-zinc-500">{description}</p>
     </button>
   );
 }
 
-function DetailPanel({
+function SetupDisclosure({
   config,
   copied,
   onCopy,
@@ -430,46 +432,40 @@ function DetailPanel({
   onCopy: () => void;
 }) {
   return (
-    <aside
+    <div
       id="integration-instructions"
-      className="min-w-0 rounded border border-line bg-panel"
+      className="border-t border-line bg-panel p-4"
       aria-label="integration-instructions"
     >
       <span id={config.id} className="sr-only">
         {config.name}
       </span>
-      <div className="border-b border-line p-4">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="font-medium text-zinc-100">{config.name}</h2>
-            <p className="mt-1 text-sm leading-5 text-zinc-500">
-              {config.description}
-            </p>
-          </div>
+      <details>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-zinc-100">
+          Setup details
           <CopyButton
             id={config.id}
             label="Copy"
             copied={copied}
             onCopy={onCopy}
           />
+        </summary>
+        <div className="mt-4 space-y-3">
+          {config.options.map((option) => (
+            <SetupOptionCard key={option.title} option={option} />
+          ))}
+          {config.notes?.length ? (
+            <div className="rounded border border-line bg-ink p-3 text-xs leading-5 text-zinc-500">
+              {config.notes.map((note) => (
+                <p key={note} className="mb-2 last:mb-0">
+                  {note}
+                </p>
+              ))}
+            </div>
+          ) : null}
         </div>
-        <p className="text-xs leading-5 text-zinc-500">{compatibilityNote}</p>
-      </div>
-      <div className="space-y-3 p-4">
-        {config.options.map((option) => (
-          <SetupOptionCard key={option.title} option={option} />
-        ))}
-        {config.notes?.length ? (
-          <div className="rounded border border-line bg-ink p-3 text-xs leading-5 text-zinc-500">
-            {config.notes.map((note) => (
-              <p key={note} className="mb-2 last:mb-0">
-                {note}
-              </p>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </aside>
+      </details>
+    </div>
   );
 }
 

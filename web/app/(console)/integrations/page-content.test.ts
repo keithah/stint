@@ -23,6 +23,7 @@ assertIncludes("integrations page shows Stint CLI connected state", source, "Yes
 assertIncludes("integrations page makes integration cards selectable", source, "setSelectedIntegration");
 assertIncludes("integrations page updates the hash for selected setup cards", source, 'window.history.replaceState(null, "", `#${recipeId}`)');
 assertIncludes("integrations page exposes selected instructions region", source, "integration-instructions");
+assertIncludes("integrations page shows selected setup inline", source, "SetupDisclosure");
 assertIncludes("integrations page offers curl install option", source, "Install with one command");
 assertIncludes("integrations page offers marketplace option", source, "Install Stint marketplace plugin");
 assertIncludes("integrations page offers manual fallback option", source, "Manual setup");
@@ -58,6 +59,7 @@ assertExcludes("integrations page removes extended telemetry panel", source, "Ex
 assertExcludes("integrations page removes status tiles", source, "StatusTile");
 assertExcludes("integrations page removes screenshot previews", source, "<img");
 assertExcludes("integrations page does not lead with catalog jargon", source, "Integration catalog");
+assertExcludes("integrations page removes right-side detail panel", source, "DetailPanel");
 
 assertExcludes("integrations page does not ask users to build Stint CLI", source, "make stint");
 assertExcludes("integrations page does not expose bin-prefixed setup commands", source, "bin/stint");

@@ -2,13 +2,11 @@ import { expect, test } from "@playwright/test";
 
 const recipes = [
   { name: "Stint CLI", expected: "curl -fsSL https://stint.fyi/install.sh | STINT_API_URL", stintOwned: false, compatibility: true },
-  { name: "WakaTime CLI", expected: "wakatime-cli --version", stintOwned: false, compatibility: true },
   { name: "Codex", expected: "codex plugin add codex-cli-stint@stint", stintOwned: true, compatibility: true },
   { name: "Claude Code", expected: "claude plugin i claude-code-stint@stint", stintOwned: true, compatibility: true },
   { name: "VS Code", expected: "Stint for VS Code", stintOwned: true, compatibility: true },
   { name: "JetBrains", expected: "Stint for JetBrains", stintOwned: true, compatibility: true },
-  { name: "Vim/Neovim", expected: "Install vim-wakatime", stintOwned: false, compatibility: false },
-  { name: "Shell CLI", expected: "curl -X POST", stintOwned: false, compatibility: false }
+  { name: "Vim/Neovim", expected: "Install vim-wakatime", stintOwned: false, compatibility: false }
 ];
 
 test("integration names reveal full setup instructions", async ({ page }) => {
@@ -38,7 +36,7 @@ test("integration names reveal full setup instructions", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Terminal/ })).toHaveAttribute("aria-pressed", "true");
 
   const stintCard = page.getByRole("button", { name: "Show Stint CLI integration instructions" });
-  await expect(stintCard).toContainText("live");
+  await expect(stintCard).toContainText("Open");
 
   for (const recipe of recipes) {
     if (recipe.name === "Codex" || recipe.name === "Claude Code") {
@@ -67,6 +65,8 @@ test("integration names reveal full setup instructions", async ({ page }) => {
     await expect(page.locator("#integration-instructions img")).toHaveCount(0);
   }
 
+  await expect(page.getByRole("button", { name: "Show Shell CLI integration instructions" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show WakaTime CLI integration instructions" })).toHaveCount(0);
   await expect(page.getByText("Stint client roadmap")).toHaveCount(0);
   const verifyButton = page.getByRole("button", { name: "Verify connection" });
   await expect(verifyButton).toBeVisible();
