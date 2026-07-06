@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Providers } from "@/components/providers";
 import { ProfileView, type RangeOption } from "@/components/profile-layouts";
 import { listProgramLanguages, publicUserProfile, publicUserStats, type PublicProfilePermissions, type StatsRange } from "@/lib/api";
@@ -41,12 +41,22 @@ export default function PublicUserPage() {
 function PublicUserContent() {
   const params = useParams<{ user: string }>();
   const username = params.user;
-  const [range, setRange] = useState<StatsRange>("last_6_months");
+  const [range, setRangeState] = useState<StatsRange>("last_7_days");
+  const [rangeTouched, setRangeTouched] = useState(false);
   const profile = useQuery({ queryKey: ["public-user", username], queryFn: () => publicUserProfile(username), enabled: Boolean(username) });
   const stats = useQuery({ queryKey: ["public-user-stats", username, range], queryFn: () => publicUserStats(username, range), enabled: Boolean(username) });
   const programLanguages = useQuery({ queryKey: ["program-languages"], queryFn: listProgramLanguages, staleTime: 3600000 });
 
   const publicUser = profile.data?.data ?? stats.data?.user;
+  useEffect(() => {
+    if (!rangeTouched && publicUser?.default_range) {
+      setRangeState(publicUser.default_range);
+    }
+  }, [publicUser?.default_range, rangeTouched]);
+  const setRange = (nextRange: StatsRange) => {
+    setRangeTouched(true);
+    setRangeState(nextRange);
+  };
   const permissions = publicUser?.permissions ?? defaultPermissions;
   const languageColors = useMemo(() => languageColorMap(programLanguages.data?.data ?? []), [programLanguages.data?.data]);
 

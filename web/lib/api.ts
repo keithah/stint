@@ -44,6 +44,7 @@ export type PublicProfileFields = {
   company?: string;
   role?: string;
   layout?: ProfileLayout;
+  default_range?: StatsRange;
   available_for_hire?: boolean;
   email_public?: boolean;
   visibility?: Record<string, ProfileVisibility>;
@@ -79,6 +80,7 @@ export type PublicUser = {
   github_url?: string;
   avatar_url?: string;
   layout?: ProfileLayout;
+  default_range?: StatsRange;
   bio?: string;
   location?: string;
   country?: string;

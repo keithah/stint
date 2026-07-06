@@ -3,7 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Save } from "lucide-react";
 import { useState } from "react";
-import { me, updateUser, type ProfileLayout, type PublicProfileFields, type PublicProjectVisibility } from "@/lib/api";
+import { me, updateUser, type ProfileLayout, type PublicProfileFields, type PublicProjectVisibility, type StatsRange } from "@/lib/api";
+import { rangeOptions } from "@/lib/ranges";
 import { PrivacyToggle, ProfileField, type PublicProfileDraft } from "@/components/settings/shared";
 
 const PROFILE_THEMES: Array<{ value: ProfileLayout; title: string; detail: string; preview: string }> = [
@@ -36,9 +37,9 @@ export function ProfileCard() {
     public_show_categories: user.data?.data.public_show_categories ?? false,
     public_show_ai: user.data?.data.public_show_ai ?? false,
     public_show_summaries: user.data?.data.public_show_summaries ?? true,
-    public_profile: user.data?.data.public_profile ?? { layout: "terminal" }
+    public_profile: user.data?.data.public_profile ?? { layout: "terminal", default_range: "last_7_days" }
   };
-  const pp = profile.public_profile ?? { layout: "terminal" };
+  const pp = profile.public_profile ?? { layout: "terminal", default_range: "last_7_days" };
   const setPP = (patch: Partial<PublicProfileFields>) => setProfileDraft({ ...profile, public_profile: { ...pp, ...patch } });
   const profileFieldPublic = (key: string) => (pp.visibility?.[key] ?? "public") === "public";
   const setProfileFieldPublic = (key: string, isPublic: boolean) => {
@@ -203,6 +204,18 @@ export function ProfileCard() {
               <option value="none">No project names</option>
               <option value="public_repos">Public GitHub repos only</option>
               <option value="all">All project names</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-sm text-zinc-400">Default range</span>
+            <select
+              className="mt-2 w-full rounded border border-line bg-panel px-3 py-2 text-sm outline-none focus:border-accent"
+              value={pp.default_range ?? "last_7_days"}
+              onChange={(event) => setPP({ default_range: event.target.value as StatsRange })}
+            >
+              {rangeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
             </select>
           </label>
         </div>

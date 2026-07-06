@@ -60,6 +60,8 @@ type Server struct {
 	Config           config.Config
 	Store            *db.Store
 	OAuth            *oauth2.Config
+	GitHubHTTPClient *http.Client
+	GitHubAPIBaseURL string
 	Limiter          apimw.RateLimiter
 	FallbackLimiter  apimw.RateLimiter
 	StatusCache      cache.StatusCache
@@ -149,7 +151,7 @@ func NewRouter(cfg config.Config, store *db.Store) *echo.Echo {
 		e.Logger.Errorf("usage pricing engine unavailable, AI usage will be reported as unpriced: %v", err)
 		pricingEngine = nil
 	}
-	server := &Server{Config: cfg, Store: store, OAuth: oauthConfig, Limiter: limiter, FallbackLimiter: apimw.NewMemoryRateLimiter(), StatusCache: statusCache, LeaderboardCache: leaderboardCache, Jobs: jobClient, Pricing: pricingEngine, customRulesCache: map[uuid.UUID]services.PreparedCustomRules{}}
+	server := &Server{Config: cfg, Store: store, OAuth: oauthConfig, GitHubHTTPClient: &http.Client{Timeout: githubOAuthRequestTimeout}, GitHubAPIBaseURL: "https://api.github.com", Limiter: limiter, FallbackLimiter: apimw.NewMemoryRateLimiter(), StatusCache: statusCache, LeaderboardCache: leaderboardCache, Jobs: jobClient, Pricing: pricingEngine, customRulesCache: map[uuid.UUID]services.PreparedCustomRules{}}
 	refresherCtx, cancelRefresher := context.WithCancel(context.Background())
 	e.Server.RegisterOnShutdown(func() {
 		cancelRefresher()
@@ -1017,6 +1019,7 @@ func openAPISchemas() map[string]any {
 				"github_username": stringSchema,
 				"github_url":      stringSchema,
 				"avatar_url":      stringSchema,
+				"default_range":   map[string]any{"type": "string", "enum": []string{"last_7_days", "last_30_days", "last_6_months", "last_year", "all_time"}},
 				"permissions": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -2254,6 +2257,52 @@ type githubEmail struct {
 	Email    string `json:"email"`
 	Primary  bool   `json:"primary"`
 	Verified bool   `json:"verified"`
+}
+
+type githubRepo struct {
+	Name    string `json:"name"`
+	Private bool   `json:"private"`
+}
+
+func githubPublicRepoNames(ctx context.Context, client *http.Client, baseURL, username string) (map[string]bool, error) {
+	username = strings.ToLower(strings.TrimSpace(username))
+	if username == "" {
+		return nil, fmt.Errorf("github username is required")
+	}
+	if client == nil {
+		client = http.DefaultClient
+	}
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		baseURL = "https://api.github.com"
+	}
+	reqURL := baseURL + "/users/" + url.PathEscape(username) + "/repos?per_page=100&type=public"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "stint")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("github public repos request failed with status %d", resp.StatusCode)
+	}
+	var repos []githubRepo
+	if err := json.NewDecoder(resp.Body).Decode(&repos); err != nil {
+		return nil, err
+	}
+	names := map[string]bool{}
+	for _, repo := range repos {
+		name := strings.TrimSpace(repo.Name)
+		if name != "" && !repo.Private {
+			names[name] = true
+		}
+	}
+	return names, nil
 }
 
 func primaryGitHubEmail(profileEmail string, emails []githubEmail) string {
@@ -4453,7 +4502,24 @@ func (s *Server) publicProjectAllowSet(ctx context.Context, user db.User) (map[s
 	if !user.PublicShowProjects || user.PublicProjectVisibility == "none" || user.PublicProjectVisibility == "all" {
 		return nil, nil
 	}
-	return s.Store.PublicProjectNames(ctx, user.ID)
+	allow, err := s.Store.PublicProjectNames(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if s.GitHubHTTPClient == nil && strings.TrimSpace(s.GitHubAPIBaseURL) == "" {
+		return allow, nil
+	}
+	githubNames, err := githubPublicRepoNames(ctx, s.GitHubHTTPClient, s.GitHubAPIBaseURL, user.GitHubUsername)
+	if err != nil {
+		return allow, nil
+	}
+	if allow == nil {
+		allow = map[string]bool{}
+	}
+	for name := range githubNames {
+		allow[name] = true
+	}
+	return allow, nil
 }
 
 func publicSummaryFields(user db.User) summaryFields {
@@ -5779,11 +5845,16 @@ func publicUser(user db.User) map[string]any {
 	if layout == "" {
 		layout = "terminal"
 	}
+	defaultRange := profile.DefaultRange
+	if defaultRange == "" {
+		defaultRange = "last_7_days"
+	}
 	payload := map[string]any{
-		"id":       user.ID.String(),
-		"username": username,
-		"name":     name,
-		"layout":   layout,
+		"id":            user.ID.String(),
+		"username":      username,
+		"name":          name,
+		"layout":        layout,
+		"default_range": defaultRange,
 		"permissions": map[string]any{
 			"total_time":         user.PublicShowTotalTime,
 			"projects":           user.PublicShowProjects,

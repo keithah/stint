@@ -165,6 +165,30 @@ func TestGitHubCallbackCreatesUserAndSession(t *testing.T) {
 	}
 }
 
+func TestGitHubPublicRepoNamesReturnsRepositoryNames(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.String() != "https://github.example.test/users/keith/repos?per_page=100&type=public" {
+			return testHTTPResponse(req, http.StatusNotFound, "text/plain", "not found"), nil
+		}
+		return testHTTPResponse(req, http.StatusOK, "application/json", `[
+			{"name":"stint","private":false},
+			{"name":"secret","private":true},
+			{"name":"agent-tools","private":false}
+		]`), nil
+	})}
+
+	names, err := githubPublicRepoNames(context.Background(), client, "https://github.example.test", "Keith")
+	if err != nil {
+		t.Fatalf("githubPublicRepoNames returned error: %v", err)
+	}
+	if !names["stint"] || !names["agent-tools"] {
+		t.Fatalf("expected public repo names, got %#v", names)
+	}
+	if names["secret"] {
+		t.Fatalf("private repo should not be allowed: %#v", names)
+	}
+}
+
 func TestEnsureGitHubRegistrationAllowedHonorsLimits(t *testing.T) {
 	ctx := context.Background()
 	store := openTestPostgresStore(t, ctx)

@@ -99,6 +99,7 @@ type PublicProfile struct {
 	Company          string            `json:"company,omitempty"`
 	Role             string            `json:"role,omitempty"`
 	Layout           string            `json:"layout,omitempty"`
+	DefaultRange     string            `json:"default_range,omitempty"`
 	AvailableForHire bool              `json:"available_for_hire,omitempty"`
 	EmailPublic      bool              `json:"email_public,omitempty"`
 	Visibility       map[string]string `json:"visibility,omitempty"`
@@ -3486,6 +3487,10 @@ func NormalizeUserSettings(input UserSettingsInput) UserSettingsInput {
 // ProfileLayouts are the public-page themes a user can choose from.
 var ProfileLayouts = []string{"terminal", "spotlight", "rail"}
 
+// PublicProfileDefaultRanges are the visitor-selectable stats windows that can
+// be saved as a public profile's initial range.
+var PublicProfileDefaultRanges = []string{"last_7_days", "last_30_days", "last_6_months", "last_year", "all_time"}
+
 // ProfileVisibilityFields are the per-field privacy keys. The accepted values
 // are "public" and "private" today; the set is open so org/team scopes can be
 // added later without a migration.
@@ -3504,6 +3509,10 @@ func NormalizePublicProfile(profile PublicProfile) PublicProfile {
 	profile.Layout = strings.ToLower(strings.TrimSpace(profile.Layout))
 	if !containsString(ProfileLayouts, profile.Layout) {
 		profile.Layout = "terminal"
+	}
+	profile.DefaultRange = strings.ToLower(strings.TrimSpace(profile.DefaultRange))
+	if profile.DefaultRange == "" {
+		profile.DefaultRange = "last_7_days"
 	}
 	if len(profile.Visibility) == 0 {
 		profile.Visibility = nil
@@ -3586,6 +3595,9 @@ func ValidatePublicProfile(profile PublicProfile) error {
 	}
 	if !containsString(ProfileLayouts, profile.Layout) {
 		return fmt.Errorf("layout must be one of terminal, spotlight, rail")
+	}
+	if !containsString(PublicProfileDefaultRanges, profile.DefaultRange) {
+		return fmt.Errorf("default_range must be one of last_7_days, last_30_days, last_6_months, last_year, all_time")
 	}
 	for key, value := range profile.Visibility {
 		if value != "private" {

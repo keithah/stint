@@ -22,10 +22,14 @@ assert.match(apiSource, /publicUserSummaries/);
 // The public profile exposes personal-info fields and the owner-selected layout.
 assert.match(apiSource, /layout\?: ProfileLayout/);
 assert.match(apiSource, /available_for_hire\?: boolean/);
+assert.match(apiSource, /default_range\?: StatsRange/);
 
 assert.match(source, /useParams<\{ user: string \}>/);
 assert.match(source, /publicUserProfile\(username\)/);
 assert.match(source, /publicUserStats\(username, range\)/);
+assert.match(source, /useState<StatsRange>\("last_7_days"\)/);
+assert.match(source, /publicUser\?\.default_range/);
+assert.doesNotMatch(source, /useState<StatsRange>\("last_6_months"\)/);
 assert.match(source, /<ProfileView/);
 assert.match(source, /Public profile unavailable/);
 
