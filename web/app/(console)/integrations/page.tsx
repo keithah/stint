@@ -37,6 +37,7 @@ const toolCategories: {
   description: string;
   setupTitle: string;
   setupBody: string;
+  primaryAction: string;
   primaryRecipeId: string;
   recipeIds: readonly string[];
 }[] = [
@@ -44,10 +45,11 @@ const toolCategories: {
     id: "terminal",
     label: "Terminal",
     badge: "Recommended",
-    description: "Install Stint once for terminal, AI agent, and editor activity.",
-    setupTitle: "Terminal setup",
+    description: "Set up terminal, AI agent, and editor activity in one place.",
+    setupTitle: "Install Stint",
     setupBody:
-      "Copy one command. It creates your key, installs Stint, writes config, and checks the connection.",
+      "One command creates your key, installs Stint, writes config, and checks the connection.",
+    primaryAction: "Install Stint",
     primaryRecipeId: "stint-cli-config",
     recipeIds: ["stint-cli-config"],
   },
@@ -56,9 +58,10 @@ const toolCategories: {
     label: "AI agents",
     badge: "Codex and Claude",
     description: "Track coding sessions from Codex or Claude Code.",
-    setupTitle: "AI agent setup",
+    setupTitle: "Install agent plugin",
     setupBody:
-      "Choose your agent below. Stint shows the marketplace plugin first, with CLI setup as the fallback.",
+      "Choose Codex or Claude Code below, then install the Stint marketplace plugin.",
+    primaryAction: "Install agent plugin",
     primaryRecipeId: "codex-config",
     recipeIds: ["codex-config", "claude-code-config", "stint-cli-config"],
   },
@@ -67,9 +70,10 @@ const toolCategories: {
     label: "Editors",
     badge: "VS Code, JetBrains, Vim",
     description: "Use familiar editor plugins with your Stint endpoint and key.",
-    setupTitle: "Editor setup",
+    setupTitle: "Install editor plugin",
     setupBody:
-      "Choose your editor below. Existing WakaTime-compatible plugins can send activity to Stint.",
+      "Choose your editor below, then point the plugin at your Stint endpoint and key.",
+    primaryAction: "Install editor plugin",
     primaryRecipeId: "vscode-config",
     recipeIds: ["vscode-config", "jetbrains-config", "vim-config"],
   },
@@ -107,6 +111,10 @@ function IntegrationsContent() {
   const agentRows = userAgents.data?.data ?? [];
   const recentStintAgent = agentRows.find((agent) => isStintAgent(agent));
   const stintCLIConnected = Boolean(recentStintAgent);
+  const latestGeneratedKeyUsed = Boolean(
+    latestKeyId &&
+      keys.data?.data.some((key) => key.id === latestKeyId && key.last_used_at),
+  );
   const configs = useMemo(
     () => integrationConfigs(apiURL, displayKey),
     [apiURL, displayKey],
@@ -118,6 +126,24 @@ function IntegrationsContent() {
   const activeCategory =
     toolCategories.find((category) => category.id === activeToolCategory) ??
     toolCategories[0];
+  const connectionStatus =
+    stintCLIConnected ||
+    latestGeneratedKeyUsed ||
+    validateMessage === "Stint is connected"
+      ? "Stint is connected"
+      : setupMessage || validateMessage === "Checking connection"
+        ? "Waiting for first check-in"
+        : validateMessage === "No check-in yet"
+          ? "No check-in yet"
+          : "Not connected yet";
+  const connectionDetail =
+    connectionStatus === "Stint is connected"
+      ? `Last Stint check-in${recentStintAgent?.last_seen_at ? `: ${formatLastSeen(recentStintAgent.last_seen_at)}` : " found."}`
+      : connectionStatus === "Waiting for first check-in"
+        ? "Run the copied setup command, then verify the connection."
+        : connectionStatus === "No check-in yet"
+          ? "No Stint check-in has arrived yet. Run setup, then try again."
+          : "Install Stint, then use Verify connection to confirm it is sending activity.";
   const visibleClients = clients.filter((client) =>
     activeCategory.recipeIds.includes(client.recipeId),
   );
@@ -185,10 +211,21 @@ function IntegrationsContent() {
       "generated-setup",
       stintConfiguredInstallCommand(apiURL, apiKey),
     );
-    setSetupMessage("Setup command copied with your Stint key.");
+    setSetupMessage("Waiting for first check-in");
+  };
+  const openPrimarySetup = () => {
+    setSelectedIntegration(activeCategory.primaryRecipeId);
+    window.history.replaceState(null, "", `#${activeCategory.primaryRecipeId}`);
+  };
+  const runPrimaryAction = () => {
+    if (activeToolCategory === "terminal") {
+      void copyGeneratedSetup();
+      return;
+    }
+    openPrimarySetup();
   };
   const validateConnection = async () => {
-    setValidateMessage("Checking for a Stint CLI check-in...");
+    setValidateMessage("Checking connection");
     const [agentsResult, keysResult] = await Promise.all([
       userAgents.refetch(),
       keys.refetch(),
@@ -203,9 +240,7 @@ function IntegrationsContent() {
       (agentsResult.data?.data ?? []).some((agent) => isStintAgent(agent)) ||
       generatedKeyUsed;
     setValidateMessage(
-      connected
-        ? "Yes, Stint CLI is connected."
-        : "No Stint CLI check-in yet. Run the copied command, then verify again.",
+      connected ? "Stint is connected" : "No check-in yet",
     );
   };
 
@@ -271,37 +306,44 @@ function IntegrationsContent() {
           <p className="mb-3 max-w-2xl text-sm leading-6 text-zinc-300">
             {activeCategory.setupBody}
           </p>
-          <p className="mt-3 text-sm text-zinc-400">
-            {validateMessage ||
-              setupMessage ||
-              (stintCLIConnected
-                ? `Yes, Stint CLI is connected${recentStintAgent?.last_seen_at ? ` · ${formatLastSeen(recentStintAgent.last_seen_at)}` : ""}.`
-                : activeToolCategory === "terminal"
-                  ? "Copy setup, run it once, then verify the connection."
-                  : "Pick a setup option below. Use Verify connection after you run Stint.")}
-          </p>
+          <div className="mt-4 rounded border border-line bg-ink p-3">
+            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">
+              Connection status
+            </div>
+            <div className="mt-1 text-sm font-semibold text-zinc-100">
+              {connectionStatus}
+            </div>
+            <p className="mt-1 text-sm leading-5 text-zinc-500">
+              {connectionDetail}
+            </p>
+          </div>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-            {activeToolCategory === "terminal" ? (
-              <button
-                className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-3 text-sm font-semibold text-ink hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
-                type="button"
-                onClick={() => {
-                  void copyGeneratedSetup();
-                }}
-                disabled={createIntegrationKey.isPending}
-              >
-                {copied === "generated-setup" ? (
+            <button
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-3 text-sm font-semibold text-ink hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
+              type="button"
+              onClick={runPrimaryAction}
+              disabled={
+                activeToolCategory === "terminal" &&
+                createIntegrationKey.isPending
+              }
+            >
+              {activeToolCategory === "terminal" ? (
+                copied === "generated-setup" ? (
                   <Check size={15} />
                 ) : (
                   <Clipboard size={15} />
-                )}
-                {createIntegrationKey.isPending
-                  ? "Creating..."
-                  : copied === "generated-setup"
-                    ? "Copied"
-                    : "Copy setup"}
-              </button>
-            ) : null}
+                )
+              ) : (
+                <ArrowRight size={15} />
+              )}
+              {activeToolCategory === "terminal" &&
+              createIntegrationKey.isPending
+                ? "Creating..."
+                : activeToolCategory === "terminal" &&
+                    copied === "generated-setup"
+                  ? "Copied"
+                  : activeCategory.primaryAction}
+            </button>
             <button
               className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-line px-3 text-sm text-zinc-200 hover:border-accent/50 hover:bg-white/5 disabled:opacity-60"
               type="button"
@@ -431,6 +473,10 @@ function SetupDisclosure({
   copied: boolean;
   onCopy: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const disclosureLabel =
+    config.id === "stint-cli-config" ? "Show command" : "Show setup details";
+
   return (
     <div
       id="integration-instructions"
@@ -440,16 +486,23 @@ function SetupDisclosure({
       <span id={config.id} className="sr-only">
         {config.name}
       </span>
-      <details>
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-zinc-100">
-          Setup details
-          <CopyButton
-            id={config.id}
-            label="Copy"
-            copied={copied}
-            onCopy={onCopy}
-          />
-        </summary>
+      <div className="flex items-center justify-between gap-3">
+        <button
+          className="text-left text-sm font-medium text-zinc-100 hover:text-accent focus:outline-none focus:ring-2 focus:ring-accent/60"
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+        >
+          {open ? "Hide setup details" : disclosureLabel}
+        </button>
+        <CopyButton
+          id={config.id}
+          label="Copy"
+          copied={copied}
+          onCopy={onCopy}
+        />
+      </div>
+      {open ? (
         <div className="mt-4 space-y-3">
           {config.options.map((option) => (
             <SetupOptionCard key={option.title} option={option} />
@@ -464,7 +517,7 @@ function SetupDisclosure({
             </div>
           ) : null}
         </div>
-      </details>
+      ) : null}
     </div>
   );
 }

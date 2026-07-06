@@ -34,22 +34,34 @@ test("integration names reveal full setup instructions", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Connect Stint" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Choose where you code" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Terminal/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Install Stint" })).toBeVisible();
+  await expect(page.getByText("Not connected yet")).toBeVisible();
 
   const stintCard = page.getByRole("button", { name: "Show Stint CLI integration instructions" });
   await expect(stintCard).toContainText("Open");
+  await expect(page.locator("#integration-instructions")).not.toContainText("curl -fsSL");
+  await page.getByText("Show command").click();
+  await expect(page.locator("#integration-instructions")).toContainText("curl -fsSL");
 
   for (const recipe of recipes) {
     if (recipe.name === "Codex" || recipe.name === "Claude Code") {
       await page.getByRole("button", { name: /AI agents/ }).click();
       await expect(page.getByRole("button", { name: /AI agents/ })).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByRole("button", { name: "Install agent plugin" })).toBeVisible();
     } else if (recipe.name === "VS Code" || recipe.name === "JetBrains" || recipe.name === "Vim/Neovim") {
       await page.getByRole("button", { name: /Editors/ }).click();
       await expect(page.getByRole("button", { name: /Editors/ })).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByRole("button", { name: "Install editor plugin" })).toBeVisible();
     } else {
       await page.getByRole("button", { name: /Terminal/ }).click();
       await expect(page.getByRole("button", { name: /Terminal/ })).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByRole("button", { name: "Install Stint" })).toBeVisible();
     }
     await page.getByRole("button", { name: `Show ${recipe.name} integration instructions` }).click();
+    const setupToggle = page.locator("#integration-instructions button[aria-expanded]").first();
+    if ((await setupToggle.getAttribute("aria-expanded")) !== "true") {
+      await setupToggle.click();
+    }
     await expect(page.locator("#integration-instructions")).toContainText(recipe.expected);
     if (recipe.name === "Codex" || recipe.name === "Claude Code") {
       await expect(page.locator("#integration-instructions")).toContainText("Choose Stint marketplace plugin");
