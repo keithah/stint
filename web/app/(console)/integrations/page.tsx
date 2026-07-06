@@ -4,26 +4,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   ArrowRight,
-  Bot,
-  Cable,
   Check,
-  CheckCircle2,
   Clipboard,
-  Code2,
   ExternalLink,
   KeyRound,
   PlugZap,
-  Plus,
-  Radar,
   RefreshCw,
-  ShieldCheck,
   TerminalSquare,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/ui";
 import {
   createKey,
-  listEditors,
   listKeys,
   listUserAgents,
   serverMeta,
@@ -36,6 +28,12 @@ import {
   stintConfiguredInstallCommand,
   type IntegrationConfig,
 } from "./recipes";
+
+const catalogGroups = [
+  { label: "Stint", names: ["Stint CLI", "Codex", "Claude Code"] },
+  { label: "Editors", names: ["VS Code", "JetBrains", "Vim/Neovim"] },
+  { label: "Compatibility", names: ["WakaTime CLI", "Shell CLI"] },
+] as const;
 
 export default function IntegrationsPage() {
   return <IntegrationsContent />;
@@ -57,11 +55,6 @@ function IntegrationsContent() {
     staleTime: 60000,
   });
   const keys = useQuery({ queryKey: ["api-keys"], queryFn: listKeys });
-  const editors = useQuery({
-    queryKey: ["editors"],
-    queryFn: listEditors,
-    staleTime: 3600000,
-  });
   const userAgents = useQuery({
     queryKey: ["user-agents"],
     queryFn: listUserAgents,
@@ -69,16 +62,9 @@ function IntegrationsContent() {
   });
   const apiURL = meta.data?.data.api_url || "https://stint.fyi/api/v1";
   const displayKey = latestKey || "stint_your_stint_key";
-  const keyCount = keys.data?.data.length ?? 0;
-  const editorCount = editors.data?.data.length ?? 0;
   const agentRows = userAgents.data?.data ?? [];
-  const latestAgent = agentRows[0];
-  const stintCLIConnected = agentRows.some((agent) => {
-    const value = `${agent.editor ?? ""} ${agent.value ?? ""}`.toLowerCase();
-    return value.includes("stint");
-  });
-  const modelCoverage = coverageCount(agentRows, "ai_model");
-  const providerCoverage = coverageCount(agentRows, "ai_provider");
+  const recentStintAgent = agentRows.find((agent) => isStintAgent(agent));
+  const stintCLIConnected = Boolean(recentStintAgent);
   const configs = useMemo(
     () => integrationConfigs(apiURL, displayKey),
     [apiURL, displayKey],
@@ -89,6 +75,12 @@ function IntegrationsContent() {
   );
   const selectedConfig =
     configs.find((config) => config.id === selectedIntegration) ?? configs[0];
+  const groupedClients = catalogGroups.map((group) => ({
+    ...group,
+    clients: clients.filter((client) =>
+      (group.names as readonly string[]).includes(client.name),
+    ),
+  }));
   const createIntegrationKey = useMutation({
     mutationFn: () =>
       createKey("Integrations page", [
@@ -156,21 +148,19 @@ function IntegrationsContent() {
       userAgents.refetch(),
       keys.refetch(),
     ]);
-    const rows = agentsResult.data?.data ?? [];
     const generatedKeyUsed = Boolean(
       latestKeyId &&
         keysResult.data?.data.some(
           (key) => key.id === latestKeyId && key.last_used_at,
         ),
     );
-    const connected = rows.some((agent) => {
-      const value = `${agent.editor ?? ""} ${agent.value ?? ""}`.toLowerCase();
-      return value.includes("stint");
-    }) || generatedKeyUsed;
+    const connected =
+      (agentsResult.data?.data ?? []).some((agent) => isStintAgent(agent)) ||
+      generatedKeyUsed;
     setValidateMessage(
       connected
         ? "Yes, Stint CLI is connected."
-        : "No Stint CLI check-in yet. Run the copied command, then validate again.",
+        : "No Stint CLI check-in yet. Run the copied command, then verify again.",
     );
   };
 
@@ -180,11 +170,41 @@ function IntegrationsContent() {
         icon={<PlugZap size={14} />}
         caption="Stint integrations"
         title="Integrations"
-        sub="Connect your editor and agents to Stint, then enrich activity with model, provider, token, and cost-aware AI telemetry."
+        sub="Connect Stint to your editors and AI coding agents."
         actions={
-          <>
+          <Link
+            className="inline-flex w-fit items-center gap-2 rounded-md border border-line bg-panel px-4 py-2 text-sm text-zinc-100 hover:border-accent/50 hover:bg-white/5"
+            href="/settings"
+          >
+            <KeyRound size={16} /> Manage keys <ArrowRight size={15} />
+          </Link>
+        }
+      />
+
+      <section className="mb-8 rounded border border-accent/35 bg-accent/10 p-4">
+        <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
+          <div className="min-w-0">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-accent">
+              <TerminalSquare size={16} /> Set up Stint CLI
+            </div>
+            <p className="mb-3 max-w-2xl text-sm leading-6 text-zinc-300">
+              One command creates your key, installs the CLI, writes
+              configuration, and runs doctor.
+            </p>
+            <code className="block overflow-x-auto rounded border border-line bg-ink px-3 py-2 text-xs text-zinc-200">
+              {generatedSetupCommand}
+            </code>
+            <p className="mt-3 text-sm text-zinc-400">
+              {validateMessage ||
+                setupMessage ||
+                (stintCLIConnected
+                  ? `Yes, Stint CLI is connected${recentStintAgent?.last_seen_at ? ` · ${formatLastSeen(recentStintAgent.last_seen_at)}` : ""}.`
+                  : "Copy setup, run it once, then verify the connection.")}
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
             <button
-              className="inline-flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-ink hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-accent px-3 text-sm font-semibold text-ink hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
               onClick={() => {
                 void copyGeneratedSetup();
@@ -192,360 +212,89 @@ function IntegrationsContent() {
               disabled={createIntegrationKey.isPending}
             >
               {copied === "generated-setup" ? (
-                <Check size={16} />
+                <Check size={15} />
               ) : (
-                <Plus size={16} />
-              )}{" "}
+                <Clipboard size={15} />
+              )}
               {createIntegrationKey.isPending
-                ? "Creating and copying..."
+                ? "Creating..."
                 : copied === "generated-setup"
-                  ? "Setup copied"
-                  : "Copy one-command setup"}
+                  ? "Copied"
+                  : "Copy setup"}
             </button>
-            <Link
-              className="inline-flex w-fit items-center gap-2 rounded-md border border-line bg-panel px-4 py-2 text-sm text-zinc-100 hover:border-accent/50 hover:bg-white/5"
-              href="/settings"
+            <button
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-line px-3 text-sm text-zinc-200 hover:border-accent/50 hover:bg-white/5 disabled:opacity-60"
+              type="button"
+              onClick={() => {
+                void validateConnection();
+              }}
+              disabled={userAgents.isFetching || keys.isFetching}
             >
-              <KeyRound size={16} /> Manage keys <ArrowRight size={15} />
-            </Link>
-          </>
-        }
-      />
-      <div className="mb-8 -mt-2 rounded border border-accent/35 bg-accent/10 p-4">
-        <div className="mb-2 flex items-center gap-2 text-sm font-medium text-accent">
-          <TerminalSquare size={16} /> One command setup
-        </div>
-        <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
-          <code className="overflow-x-auto rounded border border-line bg-ink px-3 py-2 text-xs text-zinc-200">
-            {generatedSetupCommand}
-          </code>
-          <CopyButton
-            id="generated-setup"
-            label="Copy setup"
-            copied={copied === "generated-setup"}
-            onCopy={() => {
-              void copyGeneratedSetup();
-            }}
-          />
-        </div>
-        <p className="mt-3 text-sm text-zinc-400">
-          {setupMessage ||
-            "Click Copy setup. Stint creates a scoped key, inserts it here, and copies the full command."}
-        </p>
-      </div>
-      {latestKey ? (
-        <div className="mb-8 -mt-4 rounded border border-line bg-panel p-4">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-accent">
-            <CheckCircle2 size={16} /> New key created
+              <RefreshCw
+                size={15}
+                className={
+                  userAgents.isFetching || keys.isFetching ? "animate-spin" : ""
+                }
+              />
+              Verify connection
+            </button>
           </div>
-          <p className="text-sm text-zinc-400">
-            The copied command already includes this key, so there is no separate
-            key-copy step.
-          </p>
         </div>
-      ) : null}
-
-      <section className="mb-6 grid gap-4 lg:grid-cols-3">
-        <StatusTile icon={Cable} label="Endpoint" value={apiURL} />
-        <StatusTile
-          icon={KeyRound}
-          label="API keys"
-          value={
-            keyCount > 0 ? `${keyCount} configured` : "Generate setup command"
-          }
-        />
-        <StatusTile
-          icon={Code2}
-          label="Known editors"
-          value={
-            editorCount > 0
-              ? `${editorCount} registry entries`
-              : "Registry loading"
-          }
-        />
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="space-y-6">
-          <Panel
-            title="Editor clients"
-            icon={TerminalSquare}
-            action={
-              <Link
-                className="text-sm text-accent hover:text-sky-300"
-                href="/settings"
-              >
-                Create key
-              </Link>
-            }
-          >
-            <div className="grid gap-3 md:grid-cols-2">
-              {clients.map((client) => (
-                <ClientCard
-                  key={client.name}
-                  {...client}
-                  selected={selectedIntegration === client.recipeId}
-                  onSelect={(recipeId) => {
-                    setSelectedIntegration(recipeId);
-                    window.history.replaceState(null, "", `#${recipeId}`);
-                  }}
-                />
-              ))}
+      <section className="grid gap-6 xl:grid-cols-[1fr_360px]">
+        <div className="min-w-0">
+          <div className="mb-4 flex items-end justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-100">
+                Integration catalog
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                Pick the client you use. Most setup details stay out of the way
+                until you need them.
+              </p>
             </div>
-          </Panel>
+          </div>
 
-          <Panel title={`${selectedConfig.name} instructions`} icon={Clipboard}>
-            <IntegrationRecipe
-              config={selectedConfig}
-              copied={copied === selectedConfig.id}
-              onCopy={() =>
-                copyText(selectedConfig.id, recipeCopyText(selectedConfig))
-              }
-            />
-          </Panel>
-
-          <Panel title="Extended AI telemetry" icon={Bot}>
-            <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-              <div>
-                <p className="text-sm leading-6 text-zinc-400">
-                  Existing editor check-ins remain valid. Stint-native clients
-                  can add model-aware fields so dashboards can split GPT,
-                  Claude, Gemini, Codex, and future agent sessions without
-                  guessing from User-Agent strings.
-                </p>
-                <div className="mt-4 grid gap-2 text-sm">
-                  {[
-                    "ai_model or model_name",
-                    "llm_model",
-                    "ai_provider or llm_provider",
-                    "ai_agent and ai_agent_version",
-                    "ai_input_tokens and ai_output_tokens",
-                    "metadata for client-specific context",
-                  ].map((item) => (
-                    <div
-                      key={item}
-                      className="flex items-center gap-2 text-zinc-300"
-                    >
-                      <CheckCircle2
-                        size={15}
-                        className="shrink-0 text-accent"
-                      />{" "}
-                      {item}
-                    </div>
+          <div className="space-y-6">
+            {groupedClients.map((group) => (
+              <div key={group.label}>
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                  {group.label}
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {group.clients.map((client) => (
+                    <ClientCard
+                      key={client.name}
+                      {...client}
+                      selected={selectedIntegration === client.recipeId}
+                      onSelect={(recipeId) => {
+                        setSelectedIntegration(recipeId);
+                        window.history.replaceState(null, "", `#${recipeId}`);
+                      }}
+                    />
                   ))}
                 </div>
               </div>
-              <CodeBlock
-                lines={[
-                  "{",
-                  '  "entity": "/repo/app/page.tsx",',
-                  '  "type": "file",',
-                  '  "time": 1781887600,',
-                  '  "project": "stint",',
-                  '  "ai_model": "gpt-5.5-codex",',
-                  '  "llm_model": "gpt-5.5-codex",',
-                  '  "ai_provider": "openai",',
-                  '  "ai_agent": "codex",',
-                  '  "ai_input_tokens": 1200,',
-                  '  "metadata": { "session_id": "..." }',
-                  "}",
-                ]}
-              />
-            </div>
-          </Panel>
+            ))}
+          </div>
         </div>
 
-        <div className="space-y-6">
-          <Panel
-            title="Connection health"
-            icon={Radar}
-            action={
-              <button
-                className="inline-flex h-9 items-center gap-2 rounded border border-line px-3 text-sm text-zinc-200 hover:border-accent/50 hover:bg-white/5 disabled:opacity-60"
-                type="button"
-                onClick={() => {
-                  void validateConnection();
-                }}
-                disabled={userAgents.isFetching}
-              >
-                <RefreshCw
-                  size={15}
-                  className={userAgents.isFetching ? "animate-spin" : ""}
-                />
-                Validate connection
-              </button>
-            }
-          >
-            <div
-              className={`mb-4 rounded border p-3 text-sm ${stintCLIConnected ? "border-accent/40 bg-accent/10 text-accent" : "border-line bg-ink text-zinc-400"}`}
-            >
-              {validateMessage ||
-                (stintCLIConnected
-                  ? "Yes, Stint CLI is connected"
-                  : "Stint CLI is not connected yet")}
-            </div>
-            <div className="mb-4 grid gap-3 sm:grid-cols-3">
-              <HealthMetric
-                label="Clients seen"
-                value={String(agentRows.length)}
-              />
-              <HealthMetric
-                label="Model coverage"
-                value={`${modelCoverage}/${agentRows.length}`}
-              />
-              <HealthMetric
-                label="Provider coverage"
-                value={`${providerCoverage}/${agentRows.length}`}
-              />
-            </div>
-            {latestAgent ? (
-              <div className="rounded border border-line bg-ink">
-                <div className="grid gap-3 border-b border-line px-4 py-3 text-xs uppercase tracking-[0.16em] text-zinc-500 md:grid-cols-[1fr_1fr_1fr]">
-                  <span>Client</span>
-                  <span>Telemetry</span>
-                  <span>Last seen</span>
-                </div>
-                {agentRows.slice(0, 5).map((agent) => (
-                  <div
-                    key={agent.id}
-                    className="grid gap-3 border-b border-line px-4 py-3 last:border-b-0 md:grid-cols-[1fr_1fr_1fr]"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-zinc-100">
-                        {agent.editor || "Unknown editor"}
-                      </div>
-                      <div className="mt-1 truncate text-xs text-zinc-500">
-                        {agent.value}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      <TelemetryPill label="model" value={agent.ai_model} />
-                      <TelemetryPill
-                        label="provider"
-                        value={agent.ai_provider}
-                      />
-                      <TelemetryPill label="agent" value={agent.ai_agent} />
-                    </div>
-                    <div className="text-sm text-zinc-400">
-                      {formatLastSeen(agent.last_seen_at)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded border border-dashed border-line bg-ink p-4 text-sm text-zinc-500">
-                No clients have checked in yet. Run the copied setup command,
-                then press Validate connection.
-              </div>
-            )}
-          </Panel>
-
-          <Panel title="Existing editor clients" icon={ShieldCheck}>
-            <p className="mb-4 text-sm leading-6 text-zinc-400">
-              Use the clients you already have by pointing them at Stint. Basic
-              auth, Bearer auth, and query-string API keys are accepted for
-              compatibility.
-            </p>
-            <CopyableCodeBlock
-              id="stock-wakatime-config"
-              copied={copied === "stock-wakatime-config"}
-              onCopy={() =>
-                copyText(
-                  "stock-wakatime-config",
-                  [
-                    "[settings]",
-                    `api_url = ${apiURL}`,
-                    `api_key = ${displayKey}`,
-                    "heartbeat_rate_limit_seconds = 30",
-                  ].join("\n"),
-                )
-              }
-              lines={[
-                "[settings]",
-                `api_url = ${apiURL}`,
-                `api_key = ${displayKey}`,
-                "heartbeat_rate_limit_seconds = 30",
-              ]}
-            />
-            <div className="mt-4 rounded border border-line bg-ink p-3 text-xs leading-5 text-zinc-500">
-              {compatibilityNote}
-            </div>
-          </Panel>
-        </div>
+        <DetailPanel
+          config={selectedConfig}
+          copied={copied === selectedConfig.id}
+          onCopy={() =>
+            copyText(selectedConfig.id, recipeCopyText(selectedConfig))
+          }
+        />
       </section>
     </div>
   );
 }
 
-function coverageCount(rows: UserAgent[], field: "ai_model" | "ai_provider") {
-  return rows.reduce((count, row) => count + (row[field]?.trim() ? 1 : 0), 0);
-}
-
-function Panel({
-  title,
-  icon: Icon,
-  action,
-  children,
-}: {
-  title: string;
-  icon: typeof PlugZap;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded border border-line bg-panel">
-      <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-zinc-100">
-          <Icon size={16} className="text-accent" /> {title}
-        </div>
-        {action}
-      </div>
-      <div className="p-4">{children}</div>
-    </section>
-  );
-}
-
-function StatusTile({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof PlugZap;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded border border-line bg-panel p-4">
-      <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-zinc-500">
-        <Icon size={14} className="text-accent" /> {label}
-      </div>
-      <div className="break-words text-sm font-medium text-zinc-100">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function HealthMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded border border-line bg-ink p-3">
-      <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-500">
-        {label}
-      </div>
-      <div className="mt-2 text-2xl font-semibold text-white">{value}</div>
-    </div>
-  );
-}
-
-function TelemetryPill({ label, value }: { label: string; value?: string }) {
-  const present = Boolean(value?.trim());
-  return (
-    <span
-      className={`rounded border px-2 py-1 ${present ? "border-accent/35 bg-accent/10 text-accent" : "border-line text-zinc-600"}`}
-    >
-      {label}: {present ? value : "missing"}
-    </span>
-  );
+function isStintAgent(agent: UserAgent) {
+  const value = `${agent.editor ?? ""} ${agent.value ?? ""}`.toLowerCase();
+  return value.includes("stint");
 }
 
 function ClientCard({
@@ -553,7 +302,6 @@ function ClientCard({
   name,
   status,
   description,
-  bullets,
   selected,
   onSelect,
 }: {
@@ -561,14 +309,13 @@ function ClientCard({
   name: string;
   status: string;
   description: string;
-  bullets: readonly string[];
   selected: boolean;
   onSelect: (recipeId: string) => void;
 }) {
   const href = `#${recipeId}`;
   return (
     <a
-      className={`rounded border p-4 text-left transition hover:border-accent/60 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/60 ${selected ? "border-accent/60 bg-accent/10" : "border-line bg-ink"}`}
+      className={`rounded border p-4 text-left transition hover:border-accent/60 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/60 ${selected ? "border-accent/60 bg-accent/10" : "border-line bg-panel"}`}
       href={href}
       role="button"
       onClick={() => onSelect(recipeId)}
@@ -576,30 +323,18 @@ function ClientCard({
       aria-pressed={selected}
       aria-controls="integration-instructions"
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="mb-3 flex items-start justify-between gap-3">
         <h3 className="font-medium text-zinc-100">{name}</h3>
         <span className="rounded border border-line px-2 py-1 text-[11px] uppercase tracking-[0.14em] text-zinc-400">
           {status}
         </span>
       </div>
-      <p className="mt-3 min-h-[60px] text-sm leading-5 text-zinc-500">
-        {description}
-      </p>
-      <div className="mt-4 space-y-2">
-        {bullets.map((bullet) => (
-          <div
-            key={bullet}
-            className="flex items-center gap-2 text-sm text-zinc-300"
-          >
-            <CheckCircle2 size={14} className="shrink-0 text-accent" /> {bullet}
-          </div>
-        ))}
-      </div>
+      <p className="text-sm leading-5 text-zinc-500">{description}</p>
     </a>
   );
 }
 
-function IntegrationRecipe({
+function DetailPanel({
   config,
   copied,
   onCopy,
@@ -609,71 +344,46 @@ function IntegrationRecipe({
   onCopy: () => void;
 }) {
   return (
-    <div
+    <aside
       id="integration-instructions"
-      className="space-y-5"
+      className="min-w-0 rounded border border-line bg-panel"
       aria-label="integration-instructions"
     >
       <span id={config.id} className="sr-only">
         {config.name}
       </span>
-      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h3 className="font-medium text-zinc-100">{config.name}</h3>
-          <p className="mt-1 text-sm leading-5 text-zinc-500">
-            {config.description}
-          </p>
-        </div>
-        <CopyButton
-          id={config.id}
-          label="Copy config"
-          copied={copied}
-          onCopy={onCopy}
-        />
-      </div>
-      <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
-        <figure className="overflow-hidden rounded border border-line bg-[#070b10]">
-          <img
-            className="block aspect-[16/10] w-full object-cover"
-            src={config.screenshot.src}
-            alt={config.screenshot.alt}
-          />
-          <figcaption className="border-t border-line px-3 py-2 text-xs leading-5 text-zinc-500">
-            {config.screenshot.caption}
-          </figcaption>
-        </figure>
-        <div className="grid gap-3">
-          {config.options.map((option) => (
-            <SetupOptionCard key={option.title} option={option} />
-          ))}
-        </div>
-      </div>
-      <div className="mt-5 grid gap-3 md:grid-cols-3">
-        {config.steps.map((step) => (
-          <div key={step.title} className="rounded border border-line bg-panel p-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">
-              {step.title}
-            </div>
-            <p className="mt-2 text-sm leading-5 text-zinc-400">{step.body}</p>
-          </div>
-        ))}
-      </div>
-      <div className="mt-5">
-        <div className="mb-2 text-sm font-medium text-zinc-100">
-          Check that it works
-        </div>
-        <CodeBlock lines={config.verify} />
-      </div>
-      {config.notes?.length ? (
-        <div className="mt-4 rounded border border-line bg-panel p-3 text-sm leading-6 text-zinc-400">
-          {config.notes.map((note) => (
-            <p key={note} className="mb-2 last:mb-0">
-              {note}
+      <div className="border-b border-line p-4">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="font-medium text-zinc-100">{config.name}</h2>
+            <p className="mt-1 text-sm leading-5 text-zinc-500">
+              {config.description}
             </p>
-          ))}
+          </div>
+          <CopyButton
+            id={config.id}
+            label="Copy"
+            copied={copied}
+            onCopy={onCopy}
+          />
         </div>
-      ) : null}
-    </div>
+        <p className="text-xs leading-5 text-zinc-500">{compatibilityNote}</p>
+      </div>
+      <div className="space-y-3 p-4">
+        {config.options.map((option) => (
+          <SetupOptionCard key={option.title} option={option} />
+        ))}
+        {config.notes?.length ? (
+          <div className="rounded border border-line bg-ink p-3 text-xs leading-5 text-zinc-500">
+            {config.notes.map((note) => (
+              <p key={note} className="mb-2 last:mb-0">
+                {note}
+              </p>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </aside>
   );
 }
 
@@ -683,9 +393,9 @@ function SetupOptionCard({
   option: IntegrationConfig["options"][number];
 }) {
   return (
-    <div className="rounded border border-line bg-panel p-3">
+    <div className="rounded border border-line bg-ink p-3">
       <div className="mb-2 flex items-start justify-between gap-3">
-        <h4 className="text-sm font-medium text-zinc-100">{option.title}</h4>
+        <h3 className="text-sm font-medium text-zinc-100">{option.title}</h3>
         <span className="shrink-0 rounded border border-line px-2 py-1 text-[11px] uppercase tracking-[0.12em] text-zinc-500">
           {option.badge}
         </span>
@@ -709,37 +419,14 @@ function SetupOptionCard({
 }
 
 function recipeCopyText(config: IntegrationConfig) {
-  const commands = [
-    ...config.options.flatMap((option) => option.commands ?? []),
-    ...config.verify,
-  ];
-  return [...new Set(commands)].join("\n");
-}
-
-function CopyableCodeBlock({
-  id,
-  lines,
-  copied,
-  onCopy,
-}: {
-  id: string;
-  lines: readonly string[];
-  copied: boolean;
-  onCopy: () => void;
-}) {
-  return (
-    <div>
-      <div className="mb-2 flex justify-end">
-        <CopyButton
-          id={id}
-          label="Copy config"
-          copied={copied}
-          onCopy={onCopy}
-        />
-      </div>
-      <CodeBlock lines={lines} />
-    </div>
-  );
+  const commands = config.options.flatMap((option) => option.commands ?? []);
+  if (commands.length) {
+    return [...new Set(commands)].join("\n");
+  }
+  return config.options
+    .map((option) => option.link?.href)
+    .filter(Boolean)
+    .join("\n");
 }
 
 function CopyButton({
@@ -785,7 +472,7 @@ function formatLastSeen(value?: string) {
 
 function CodeBlock({ lines }: { lines: readonly string[] }) {
   return (
-    <pre className="overflow-x-auto rounded border border-line bg-[#070b10] p-4 text-xs leading-6 text-zinc-300">
+    <pre className="overflow-x-auto rounded border border-line bg-[#070b10] p-3 text-xs leading-6 text-zinc-300">
       <code>{lines.join("\n")}</code>
     </pre>
   );

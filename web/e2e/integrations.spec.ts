@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 const recipes = [
-  { name: "Stint CLI", expected: "curl -fsSL https://stint.fyi/install.sh | sh", stintOwned: false, compatibility: true },
-  { name: "WakaTime CLI", expected: "wakatime-cli --entity", stintOwned: false, compatibility: true },
+  { name: "Stint CLI", expected: "curl -fsSL https://stint.fyi/install.sh | STINT_API_URL", stintOwned: false, compatibility: true },
+  { name: "WakaTime CLI", expected: "wakatime-cli --version", stintOwned: false, compatibility: true },
   { name: "Codex", expected: "codex plugin add codex-cli-stint@stint", stintOwned: true, compatibility: true },
   { name: "Claude Code", expected: "claude plugin i claude-code-stint@stint", stintOwned: true, compatibility: true },
   { name: "VS Code", expected: "Stint for VS Code", stintOwned: true, compatibility: true },
@@ -50,8 +50,13 @@ test("integration names reveal full setup instructions", async ({ page }) => {
     if (recipe.compatibility) {
       await expect(page.locator("#integration-instructions")).toContainText("Use WakaTime-compatible plugin");
     }
-    await expect(page.locator("#integration-instructions img")).toHaveCount(1);
+    await expect(page.locator("#integration-instructions img")).toHaveCount(0);
   }
 
   await expect(page.getByText("Stint client roadmap")).toHaveCount(0);
+  const verifyButton = page.getByRole("button", { name: "Verify connection" });
+  await expect(verifyButton).toBeVisible();
+  const verifyButtonBox = await verifyButton.boundingBox();
+  expect(verifyButtonBox).not.toBeNull();
+  expect(verifyButtonBox!.x + verifyButtonBox!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
 });

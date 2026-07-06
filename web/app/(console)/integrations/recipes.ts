@@ -188,7 +188,7 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
       ],
       verify: [
         "Run the copied setup command once.",
-        "Return here and click Validate connection.",
+        "Return here and click Verify connection.",
       ],
       screenshot: {
         src: "/integrations/screenshots/stint-cli.svg",
@@ -429,7 +429,7 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
         },
         {
           title: "Step 3",
-          body: "Edit any file for a minute. Stint will show VS Code under Connection health.",
+          body: "Edit any file for a minute. Stint will show VS Code in your recent activity.",
         },
       ],
       verify: [
@@ -612,7 +612,7 @@ export function integrationConfigs(apiURL: string, apiKey: string) {
         },
         {
           title: "Step 3",
-          body: "Refresh Stint and look for the new Shell client in Connection health.",
+          body: "Refresh Stint and look for the new Shell client in your recent activity.",
         },
       ],
       verify: [

@@ -9,12 +9,13 @@ assertIncludes("integrations page exposes native Stint CLI install", source, "cu
 assertIncludes("integrations page exposes one-command configured install", source, "STINT_API_URL");
 assertIncludes("integrations page injects the generated key into setup", source, "STINT_API_KEY");
 assertIncludes("integrations page copies generated setup after key creation", source, "copyGeneratedSetup");
-assertIncludes("integrations page validates connection with one button", source, "Validate connection");
+assertIncludes("integrations page verifies connection with one button", source, "Verify connection");
 assertIncludes("integrations page refreshes user agents during validation", source, "validateConnection");
 assertIncludes("integrations page validates generated key last use", source, "latestKeyId");
 assertIncludes("integrations page checks API key last_used_at", source, "last_used_at");
 assertIncludes("integrations page uses Stint key placeholders", source, "stint_your_stint_key");
-assertIncludes("integrations page documents native Stint config", source, "~/.stint.cfg");
+assertIncludes("integrations page has clean setup strip", source, "Set up Stint CLI");
+assertIncludes("integrations page has simple catalog", source, "Integration catalog");
 assertIncludes("integrations page shows Stint CLI connected state", source, "Yes, Stint CLI is connected");
 assertIncludes("integrations page makes integration cards selectable", source, "setSelectedIntegration");
 assertIncludes("integrations page links every setup card to a stable hash", source, 'const href = `#${recipeId}`');
@@ -49,6 +50,10 @@ assertIncludes("integrations page documents vim plugin", source, "https://github
 assertIncludes("integrations page keeps advanced CLI discoverable", source, "stint data-dumps download DUMP_ID");
 assertIncludes("integrations page keeps compatibility note short", source, "Stint accepts WakaTime-style API keys");
 assertExcludes("integrations page no longer shows multi-step CLI validation block", source, 'stint heartbeat --entity "$PWD/README.md" --write --project my-project');
+assertExcludes("integrations page removes connection health dashboard", source, "Connection health");
+assertExcludes("integrations page removes extended telemetry panel", source, "Extended AI telemetry");
+assertExcludes("integrations page removes status tiles", source, "StatusTile");
+assertExcludes("integrations page removes screenshot previews", source, "<img");
 
 assertExcludes("integrations page does not ask users to build Stint CLI", source, "make stint");
 assertExcludes("integrations page does not expose bin-prefixed setup commands", source, "bin/stint");
